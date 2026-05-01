@@ -73,7 +73,13 @@ class WorkflowRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def create_step(self, workflow_id: str, payload: StepCreate, orden: int) -> StepInstancePublic:
+    def create_step(
+        self,
+        workflow_id: str,
+        payload: StepCreate,
+        orden: int,
+        estado: StepStatus = StepStatus.ACTIVO,
+    ) -> StepInstancePublic:
         raise NotImplementedError
 
     @abstractmethod
@@ -182,10 +188,9 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         now = utc_now()
         trigger = TriggerPublic(
             id=str(uuid4()),
-            titulo=payload.titulo,
+            solicitante=payload.solicitante,
             descripcion=payload.descripcion,
             tipo=payload.tipo,
-            prioridad=payload.prioridad,
             estado_general=TriggerStatus.NUEVO,
             fecha_creacion=now,
             fecha_actualizacion=now,
@@ -225,8 +230,9 @@ class InMemoryWorkflowRepository(WorkflowRepository):
             trigger_id=trigger_id,
             workflow_template_id=template.id,
             workflow_template_nombre=template.nombre,
-            estado=WorkflowStatus.EN_PROCESO if ordered_templates else WorkflowStatus.PENDIENTE,
+            estado=WorkflowStatus.EN_PROCESO if ordered_templates else WorkflowStatus.FINALIZADO,
             paso_actual=ordered_templates[0].orden if ordered_templates else None,
+            total_pasos=1 if ordered_templates else 0,
             fecha_inicio=now,
             fecha_fin=None,
             objetivo_final=payload.objetivo_final,
@@ -236,40 +242,33 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         self._step_ids_by_workflow[workflow.id] = []
         self._workflow_ids_by_trigger.setdefault(trigger_id, []).append(workflow.id)
 
-        for template_step in ordered_templates:
+        if ordered_templates:
             first_step_override = getattr(payload, "primer_paso", None)
-            is_first_step = template_step.orden == workflow.paso_actual
+            first_template_step = ordered_templates[0]
             step = StepInstancePublic(
                 id=str(uuid4()),
                 workflow_id=workflow.id,
-                step_template_id=template_step.id,
+                step_template_id=first_template_step.id,
                 nombre=(
                     first_step_override.nombre
-                    if is_first_step and first_step_override and first_step_override.nombre
-                    else template_step.nombre
+                    if first_step_override and first_step_override.nombre
+                    else first_template_step.nombre
                 ),
                 descripcion=(
                     first_step_override.descripcion
-                    if is_first_step and first_step_override and first_step_override.descripcion is not None
-                    else template_step.descripcion
+                    if first_step_override and first_step_override.descripcion is not None
+                    else first_template_step.descripcion
                 ),
-                orden=template_step.orden,
-                tipo=template_step.tipo,
-                requiere_aprobacion=template_step.requiere_aprobacion,
-                puede_tener_comentarios=template_step.puede_tener_comentarios,
-                estado=StepStatus.ACTIVO if template_step.orden == workflow.paso_actual else StepStatus.PENDIENTE,
-                asignado_a=(
-                    first_step_override.asignado_a
-                    if is_first_step and first_step_override
-                    else None
-                ),
+                orden=first_template_step.orden,
+                tipo=first_template_step.tipo,
+                requiere_aprobacion=first_template_step.requiere_aprobacion,
+                puede_tener_comentarios=first_template_step.puede_tener_comentarios,
+                estado=StepStatus.ACTIVO,
+                fecha_estado_actual=now,
+                asignado_a=first_step_override.asignado_a if first_step_override else None,
                 fecha_creacion=now,
-                fecha_inicio=now if template_step.orden == workflow.paso_actual else None,
-                fecha_vencimiento=(
-                    first_step_override.fecha_vencimiento
-                    if is_first_step and first_step_override
-                    else None
-                ),
+                fecha_inicio=now,
+                fecha_vencimiento=first_step_override.fecha_vencimiento if first_step_override else None,
                 fecha_cierre=None,
                 resultado=None,
                 observaciones=None,
@@ -288,13 +287,22 @@ class InMemoryWorkflowRepository(WorkflowRepository):
 
     def list_workflow_steps(self, workflow_id: str) -> list[StepInstancePublic]:
         step_ids = self._step_ids_by_workflow.get(workflow_id, [])
-        steps = [self._steps[step_id] for step_id in step_ids]
+        steps = [self._enrich_step(self._steps[step_id]) for step_id in step_ids]
         return sorted(steps, key=lambda item: item.orden)
 
     def get_step(self, step_id: str) -> StepInstancePublic | None:
-        return self._steps.get(step_id)
+        step = self._steps.get(step_id)
+        if step is None:
+            return None
+        return self._enrich_step(step)
 
-    def create_step(self, workflow_id: str, payload: StepCreate, orden: int) -> StepInstancePublic:
+    def create_step(
+        self,
+        workflow_id: str,
+        payload: StepCreate,
+        orden: int,
+        estado: StepStatus = StepStatus.ACTIVO,
+    ) -> StepInstancePublic:
         now = utc_now()
         step = StepInstancePublic(
             id=str(uuid4()),
@@ -306,10 +314,11 @@ class InMemoryWorkflowRepository(WorkflowRepository):
             tipo=payload.tipo,
             requiere_aprobacion=payload.requiere_aprobacion,
             puede_tener_comentarios=payload.puede_tener_comentarios,
-            estado=StepStatus.PENDIENTE,
+            estado=estado,
+            fecha_estado_actual=now,
             asignado_a=payload.asignado_a,
             fecha_creacion=now,
-            fecha_inicio=None,
+            fecha_inicio=now if estado == StepStatus.ACTIVO else None,
             fecha_vencimiento=payload.fecha_vencimiento,
             fecha_cierre=None,
             resultado=None,
@@ -348,10 +357,9 @@ class InMemoryWorkflowRepository(WorkflowRepository):
 
     def list_pending_steps(self) -> list[StepInstancePublic]:
         visible_statuses = {
-            StepStatus.PENDIENTE,
             StepStatus.ACTIVO,
-            StepStatus.EN_REVISION,
-            StepStatus.BLOQUEADO,
+            StepStatus.ESPERA,
+            StepStatus.PROBLEMA,
         }
         steps = [step for step in self._steps.values() if step.estado in visible_statuses]
         return sorted(steps, key=lambda item: (item.estado != StepStatus.ACTIVO, item.workflow_id, item.orden))
@@ -371,3 +379,8 @@ class InMemoryWorkflowRepository(WorkflowRepository):
 
     def get_default_workflow_template(self) -> WorkflowTemplatePublic:
         return next(iter(self._workflow_templates.values()))
+
+    def _enrich_step(self, step: StepInstancePublic) -> StepInstancePublic:
+        comments = self._comments_by_step.get(step.id, [])
+        latest_comment = comments[-1].comentario if comments else None
+        return step.model_copy(update={"ultimo_comentario": latest_comment})

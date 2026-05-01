@@ -2,7 +2,7 @@ import { FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
 
 import type { Step } from "../types";
-import { formatDate } from "../utils";
+import { formatDate, DEFAULT_ACTOR } from "../utils";
 import { StatusBadge } from "./StatusBadge";
 
 type WorkflowInspectorProps = {
@@ -17,7 +17,7 @@ type WorkflowInspectorProps = {
 };
 
 export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInspectorProps) {
-  const [usuario, setUsuario] = useState("operador");
+  const [usuario, setUsuario] = useState(DEFAULT_ACTOR);
   const [resultado, setResultado] = useState("");
   const [observaciones, setObservaciones] = useState("");
   const [comentarioFinal, setComentarioFinal] = useState("");
@@ -58,7 +58,7 @@ export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInsp
     );
   }
 
-  const canComplete = step.estado === "activo" || step.estado === "en_revision";
+  const canComplete = step.estado === "activo" || step.estado === "espera" || step.estado === "problema";
 
   return (
     <section className="detail-rail">
@@ -99,15 +99,30 @@ export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInsp
           </label>
           <label>
             Resultado
-            <textarea rows={3} value={resultado} onChange={(event) => setResultado(event.target.value)} />
+            <textarea 
+              rows={3} 
+              value={resultado} 
+              onChange={(event) => setResultado(event.target.value)} 
+              placeholder="¿Qué se obtuvo al finalizar este paso?"
+            />
           </label>
           <label>
             Observaciones
-            <textarea rows={3} value={observaciones} onChange={(event) => setObservaciones(event.target.value)} />
+            <textarea 
+              rows={3} 
+              value={observaciones} 
+              onChange={(event) => setObservaciones(event.target.value)} 
+              placeholder="Detalles técnicos o impedimentos encontrados durante la ejecución..."
+            />
           </label>
           <label>
             Comentario final
-            <textarea rows={3} value={comentarioFinal} onChange={(event) => setComentarioFinal(event.target.value)} />
+            <textarea 
+              rows={3} 
+              value={comentarioFinal} 
+              onChange={(event) => setComentarioFinal(event.target.value)} 
+              placeholder="Nota de cierre para la bitácora general..."
+            />
           </label>
           {error && <p className="inline-error">{error}</p>}
           <button type="submit" className="primary-action" disabled={submitting}>
@@ -128,4 +143,3 @@ export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInsp
     </section>
   );
 }
-

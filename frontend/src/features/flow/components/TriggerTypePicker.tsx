@@ -23,13 +23,15 @@ const triggerOptions = [
 
 export function TriggerTypePicker({ selected, onSelect }: TriggerTypePickerProps) {
   return (
-    <div className="option-stack">
+    <div className="option-stack" role="radiogroup" aria-label="Selecciona el tipo de trigger">
       {triggerOptions.map((option) => (
         <button
           key={option.value}
           type="button"
           className={selected === option.value ? "option-card selected" : "option-card"}
           onClick={() => onSelect(option.value)}
+          role="radio"
+          aria-checked={selected === option.value}
         >
           <div className="option-icon">+</div>
           <div className="option-body">
@@ -42,4 +44,3 @@ export function TriggerTypePicker({ selected, onSelect }: TriggerTypePickerProps
     </div>
   );
 }
-

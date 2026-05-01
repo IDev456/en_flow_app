@@ -20,31 +20,21 @@ class WorkflowStatus(StrEnum):
 
 
 class StepStatus(StrEnum):
-    PENDIENTE = "pendiente"
     ACTIVO = "activo"
-    EN_REVISION = "en_revision"
+    ESPERA = "espera"
+    PROBLEMA = "problema"
     COMPLETADO = "completado"
-    BLOQUEADO = "bloqueado"
-    CANCELADO = "cancelado"
-
-
-class TriggerPriority(StrEnum):
-    BAJA = "baja"
-    MEDIA = "media"
-    ALTA = "alta"
-    CRITICA = "critica"
 
 
 class TriggerBase(BaseModel):
-    titulo: str = Field(min_length=1, max_length=150)
+    solicitante: str | None = Field(default=None, max_length=150)
     descripcion: str | None = Field(default=None, max_length=1000)
-    tipo: str = Field(min_length=1, max_length=80)
-    prioridad: TriggerPriority = TriggerPriority.MEDIA
+    tipo: str = Field(default="requerimiento", min_length=1, max_length=80)
     metadata: dict[str, Any] | None = None
 
 
 class TriggerCreate(TriggerBase):
-    creado_por: str = Field(min_length=1, max_length=120)
+    creado_por: str = Field(default="sistema", min_length=1, max_length=120)
 
 
 class TriggerPublic(TriggerBase):
@@ -88,7 +78,7 @@ class WorkflowInstanceBase(BaseModel):
 
 
 class InitialStepOverride(BaseModel):
-    nombre: str | None = Field(default=None, min_length=1, max_length=120)
+    nombre: str = Field(min_length=1, max_length=120)
     descripcion: str | None = Field(default=None, max_length=1000)
     asignado_a: str | None = Field(default=None, max_length=120)
     fecha_vencimiento: datetime | None = None
@@ -96,7 +86,7 @@ class InitialStepOverride(BaseModel):
 
 class WorkflowStartRequest(WorkflowInstanceBase):
     workflow_template_id: str | None = None
-    primer_paso: InitialStepOverride | None = None
+    primer_paso: InitialStepOverride
 
 
 class WorkflowSummary(WorkflowInstanceBase):
@@ -106,6 +96,7 @@ class WorkflowSummary(WorkflowInstanceBase):
     workflow_template_nombre: str
     estado: WorkflowStatus
     paso_actual: int | None = None
+    total_pasos: int = Field(default=0, ge=0)
     fecha_inicio: datetime
     fecha_fin: datetime | None = None
 
@@ -124,6 +115,7 @@ class StepInstancePublic(StepInstanceBase):
     requiere_aprobacion: bool = False
     puede_tener_comentarios: bool = True
     estado: StepStatus
+    fecha_estado_actual: datetime
     asignado_a: str | None = None
     fecha_creacion: datetime
     fecha_inicio: datetime | None = None
@@ -131,6 +123,7 @@ class StepInstancePublic(StepInstanceBase):
     fecha_cierre: datetime | None = None
     resultado: str | None = None
     observaciones: str | None = None
+    ultimo_comentario: str | None = None
 
 
 class WorkflowDetail(WorkflowSummary):
@@ -150,13 +143,16 @@ class StepCreate(BaseModel):
 class StepStatusUpdate(BaseModel):
     estado: StepStatus
     usuario: str = Field(min_length=1, max_length=120)
+    nota: str | None = Field(default=None, max_length=1000)
 
 
 class StepCompletePayload(BaseModel):
     usuario: str = Field(min_length=1, max_length=120)
+    comentario: str = Field(min_length=3, max_length=1000)
     resultado: str | None = Field(default=None, max_length=1000)
     observaciones: str | None = Field(default=None, max_length=1000)
-    comentario_final: str | None = Field(default=None, max_length=1000)
+    siguiente_paso: StepCreate | None = None
+    finalizar_workflow: bool = False
 
 
 class CommentCreate(BaseModel):
@@ -178,3 +174,4 @@ class StepHistoryPublic(BaseModel):
     valor_nuevo: str | None = None
     usuario: str
     fecha: datetime
+    nota: str | None = None

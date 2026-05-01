@@ -1,112 +1,154 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
-import { getWorkflow, listTriggers, startWorkflow } from "../api";
+import { getWorkflow, listTriggers } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Trigger, WorkflowDetail } from "../types";
-import { formatDate, formatProgress, priorityLabel } from "../utils";
+import { formatDate } from "../utils";
 
 export function TriggerListPage() {
   const [triggers, setTriggers] = useState<Trigger[]>([]);
-  const [workflowDetailsById, setWorkflowDetailsById] = useState<Record<string, WorkflowDetail>>({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "active" | "done">("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const [, setSearchParams] = useSearchParams();
 
   useEffect(() => {
-    void loadTriggers();
+    void loadData();
   }, []);
 
-  async function loadTriggers() {
+  async function loadData() {
     try {
       setLoading(true);
       setError(null);
       const triggerData = await listTriggers();
       setTriggers(triggerData);
+
       const workflowIds = triggerData
         .map((trigger) => trigger.workflow_activo_id)
         .filter((workflowId): workflowId is string => Boolean(workflowId));
       const details = await Promise.all(workflowIds.map((workflowId) => getWorkflow(workflowId)));
-      setWorkflowDetailsById(Object.fromEntries(details.map((workflow) => [workflow.id, workflow])));
+      setWorkflowsById(Object.fromEntries(details.map((workflow) => [workflow.id, workflow])));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudieron cargar los disparadores");
+      setError(err instanceof Error ? err.message : "No se pudieron cargar los requerimientos");
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleStartWorkflow(trigger: Trigger) {
-    try {
-      const workflow = await startWorkflow(trigger.id, {
-        objetivo_final: `Resolver ${trigger.titulo}`,
-        resolucion_esperada: "Caso resuelto y verificado"
-      });
-      setTriggers((current) =>
-        current.map((item) =>
-          item.id === trigger.id
-            ? {
-                ...item,
-                estado_general: "en_proceso",
-                workflow_activo_id: workflow.id
-              }
-            : item
-        )
-      );
-      setWorkflowDetailsById((current) => ({ ...current, [workflow.id]: workflow }));
-      navigate(`/workflows/${workflow.id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo iniciar el workflow");
+  async function handleOpen(trigger: Trigger) {
+    if (trigger.workflow_activo_id) {
+      navigate(`/workflows/${trigger.workflow_activo_id}`);
+      return;
     }
+
+    navigate(`/triggers/${trigger.id}`);
   }
 
-  const filteredTriggers = triggers.filter((trigger) => {
-    const normalizedQuery = query.trim().toLowerCase();
-    if (filter === "active" && trigger.estado_general !== "en_proceso") {
+  function getWorkflowForTrigger(trigger: Trigger) {
+    return trigger.workflow_activo_id ? workflowsById[trigger.workflow_activo_id] : undefined;
+  }
+
+  function getDisplayStatus(trigger: Trigger) {
+    const workflow = getWorkflowForTrigger(trigger);
+    if (!workflow) return trigger.estado_general;
+
+    if (workflow.estado === "finalizado" || workflow.estado === "cancelado") {
+      return workflow.estado;
+    }
+
+    if (workflow.estado === "en_proceso") {
+      const currentStep = workflow.steps.find((s) => s.estado !== "completado");
+      if (currentStep?.estado === "problema") return "problema";
+      if (currentStep?.estado === "espera") return "espera";
+    }
+
+    return workflow.estado;
+  }
+
+  const ACTIVE_DISPLAY_STATES = new Set(["en_proceso", "espera", "problema", "activo"]);
+
+  const filtered = triggers.filter((trigger) => {
+    const displayStatus = getDisplayStatus(trigger);
+
+    if (filter === "active" && !ACTIVE_DISPLAY_STATES.has(displayStatus)) {
       return false;
     }
-    if (filter === "done" && trigger.estado_general !== "resuelto") {
+    if (filter === "done" && displayStatus !== "finalizado" && displayStatus !== "resuelto") {
       return false;
     }
-    if (!normalizedQuery) {
+
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) {
       return true;
     }
-    return (
-      trigger.titulo.toLowerCase().includes(normalizedQuery) ||
-      trigger.id.toLowerCase().includes(normalizedQuery) ||
-      trigger.tipo.toLowerCase().includes(normalizedQuery)
-    );
+
+    const haystack = `${trigger.id} ${trigger.solicitante ?? ""} ${trigger.descripcion ?? ""}`.toLowerCase();
+    return haystack.includes(normalized);
   });
 
+  const activeCount = triggers.filter((trigger) => ACTIVE_DISPLAY_STATES.has(getDisplayStatus(trigger))).length;
+  const completedCount = triggers.filter((trigger) => {
+    const displayStatus = getDisplayStatus(trigger);
+    return displayStatus === "finalizado" || displayStatus === "resuelto";
+  }).length;
+  const withoutWorkflowCount = triggers.filter(
+    (trigger) => !trigger.workflow_activo_id && trigger.estado_general !== "resuelto"
+  ).length;
+  const totalCreatedSteps = triggers.reduce((sum, trigger) => sum + (getWorkflowForTrigger(trigger)?.steps.length ?? 0), 0);
+
   return (
-    <section className="list-page">
-      <div className="list-page-head">
+    <section className="requirements-page">
+      <section className="kpi-topbar">
+        <div className="kpi-cluster">
+          <article className="kpi-card">
+            <span>Activos</span>
+            <strong>{activeCount}</strong>
+            <small>Requerimientos con flujo en curso</small>
+          </article>
+          <article className="kpi-card">
+            <span>Completados</span>
+            <strong>{completedCount}</strong>
+            <small>Casos cerrados correctamente</small>
+          </article>
+          <article className="kpi-card">
+            <span>Sin flujo</span>
+            <strong>{withoutWorkflowCount}</strong>
+            <small>Requieren definir paso inicial</small>
+          </article>
+          <article className="kpi-card">
+            <span>Pasos creados</span>
+            <strong>{totalCreatedSteps}</strong>
+            <small>Total de pasos generados entre todos los requerimientos</small>
+          </article>
+        </div>
+      </section>
+
+      <div className="page-heading">
         <div>
           <h2>Requerimientos</h2>
           <p className="page-subtitle">
-            Disparadores convertidos en flujos operativos con trazabilidad paso a paso.
+            {activeCount} activos | {completedCount} completados
           </p>
         </div>
-        <Link className="primary-action-link" to="/triggers/new">
-          Nuevo disparador
-        </Link>
+        <button type="button" className="primary-action-link" onClick={() => setSearchParams({ modal: "new" })}>
+          Nuevo requerimiento
+        </button>
       </div>
 
-      <div className="list-toolbar">
+      <div className="page-toolbar">
         <div className="search-field">
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar requerimiento o ID..."
+            placeholder="Buscar por ID, solicitante o descripcion..."
           />
         </div>
         <div className="segmented-control">
-          <button
-            type="button"
-            className={filter === "all" ? "segment active" : "segment"}
-            onClick={() => setFilter("all")}
-          >
+          <button type="button" className={filter === "all" ? "segment active" : "segment"} onClick={() => setFilter("all")}>
             Todos
           </button>
           <button
@@ -116,76 +158,46 @@ export function TriggerListPage() {
           >
             Activos
           </button>
-          <button
-            type="button"
-            className={filter === "done" ? "segment active" : "segment"}
-            onClick={() => setFilter("done")}
-          >
+          <button type="button" className={filter === "done" ? "segment active" : "segment"} onClick={() => setFilter("done")}>
             Completados
           </button>
         </div>
       </div>
 
       <section className="table-shell">
-        <div className="table-head">
+        <div className="table-head requirements-table">
           <span>ID</span>
-          <span>Requerimiento</span>
-          <span>Disparador</span>
-          <span>Progreso</span>
-          <span>Prioridad</span>
-          <span>Estado</span>
+          <span>Solicitante</span>
+          <span>Descripcion</span>
+          <span>Pasos</span>
+          <span className="align-right">Estado</span>
         </div>
-        {loading && <p className="status padded">Cargando disparadores...</p>}
+
+        {loading && <p className="status padded">Cargando requerimientos...</p>}
         {error && <p className="inline-error padded">{error}</p>}
-        {!loading && filteredTriggers.length === 0 && <p className="status padded">No hay coincidencias.</p>}
-        {filteredTriggers.map((trigger) => {
-          const workflow = trigger.workflow_activo_id ? workflowDetailsById[trigger.workflow_activo_id] : undefined;
-          const doneSteps = workflow?.steps.filter((step) => step.estado === "completado").length ?? 0;
-          const totalSteps = workflow?.steps.length ?? 0;
-          const progress = formatProgress(doneSteps, totalSteps);
+        {!loading && filtered.length === 0 && <p className="status padded">No hay requerimientos que coincidan.</p>}
+
+        {filtered.map((trigger) => {
+          const workflow = getWorkflowForTrigger(trigger);
+          const stepCount = workflow?.steps.length ?? 0;
+          const displayStatus = getDisplayStatus(trigger);
 
           return (
-            <article key={trigger.id} className="table-row">
+            <article key={trigger.id} className="table-row requirements-table clickable-row" onClick={() => void handleOpen(trigger)}>
               <span className="mono">{trigger.id.slice(0, 8)}</span>
-              <div className="row-title-block">
-                <Link className="row-link" to={trigger.workflow_activo_id ? `/workflows/${trigger.workflow_activo_id}` : `/triggers/${trigger.id}`}>
-                  {trigger.titulo}
-                </Link>
-                <small>{trigger.descripcion ?? "Sin descripcion"}</small>
-              </div>
-              <span>{trigger.tipo}</span>
-              <div className="progress-cell">
-                <div className="progress-bar">
-                  <span style={{ width: `${progress}%` }} />
-                </div>
-                <small>
-                  {doneSteps}/{totalSteps || 3}
-                </small>
-              </div>
-              <span className="priority-pill">{priorityLabel(trigger.prioridad)}</span>
-              <div className="row-status-actions">
-                <StatusBadge value={trigger.estado_general} />
-                {!trigger.workflow_activo_id && trigger.estado_general !== "resuelto" && (
-                  <button type="button" className="mini-action" onClick={() => void handleStartWorkflow(trigger)}>
-                    Iniciar
-                  </button>
-                )}
-                {trigger.workflow_activo_id && (
-                  <Link className="mini-link" to={`/workflows/${trigger.workflow_activo_id}`}>
-                    Abrir
-                  </Link>
-                )}
+              <strong className="truncate-text">{trigger.solicitante || "sin solicitante"}</strong>
+              <span className="muted truncate-text">{trigger.descripcion || "-"}</span>
+              <span className="muted">{stepCount === 1 ? "1 paso" : `${stepCount} pasos`}</span>
+              <div className="row-status-actions align-right">
+                <StatusBadge value={displayStatus} />
+                {!trigger.workflow_activo_id && trigger.estado_general !== "resuelto" && <span className="ghost-badge">sin flujo</span>}
               </div>
             </article>
           );
         })}
       </section>
 
-      <p className="footnote">
-        {triggers.filter((trigger) => trigger.estado_general === "en_proceso").length} activos ·{" "}
-        {triggers.filter((trigger) => trigger.estado_general === "resuelto").length} completados · ultima carga{" "}
-        {triggers[0] ? formatDate(triggers[0].fecha_actualizacion) : "sin datos"}
-      </p>
+      <p className="footnote">Ultima actualizacion: {triggers[0] ? formatDate(triggers[0].fecha_actualizacion) : "sin datos"}</p>
     </section>
   );
 }

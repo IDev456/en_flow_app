@@ -1,4 +1,4 @@
-export type WorkflowVariant = "vertical" | "horizontal" | "timeline";
+export type WorkflowVariant = "vertical" | "gitlog";
 
 type WorkflowVariantSwitcherProps = {
   value: WorkflowVariant;
@@ -7,8 +7,7 @@ type WorkflowVariantSwitcherProps = {
 
 const options: Array<{ value: WorkflowVariant; label: string }> = [
   { value: "vertical", label: "Grafo vertical" },
-  { value: "horizontal", label: "Grafo horizontal" },
-  { value: "timeline", label: "Timeline" }
+  { value: "gitlog", label: "Git log" }
 ];
 
 export function WorkflowVariantSwitcher({ value, onChange }: WorkflowVariantSwitcherProps) {
@@ -27,4 +26,3 @@ export function WorkflowVariantSwitcher({ value, onChange }: WorkflowVariantSwit
     </div>
   );
 }
-

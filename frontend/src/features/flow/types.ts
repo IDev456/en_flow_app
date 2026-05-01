@@ -1,20 +1,12 @@
 export type TriggerStatus = "nuevo" | "en_proceso" | "resuelto" | "cancelado";
 export type WorkflowStatus = "pendiente" | "en_proceso" | "finalizado" | "cancelado";
-export type StepStatus =
-  | "pendiente"
-  | "activo"
-  | "en_revision"
-  | "completado"
-  | "bloqueado"
-  | "cancelado";
-export type TriggerPriority = "baja" | "media" | "alta" | "critica";
+export type StepStatus = "activo" | "espera" | "problema" | "completado";
 
 export type Trigger = {
   id: string;
-  titulo: string;
+  solicitante: string | null;
   descripcion: string | null;
   tipo: string;
-  prioridad: TriggerPriority;
   estado_general: TriggerStatus;
   fecha_creacion: string;
   fecha_actualizacion: string;
@@ -34,6 +26,7 @@ export type WorkflowSummary = {
   workflow_template_nombre: string;
   estado: WorkflowStatus;
   paso_actual: number | null;
+  total_pasos: number;
   fecha_inicio: string;
   fecha_fin: string | null;
   objetivo_final: string | null;
@@ -51,6 +44,7 @@ export type Step = {
   requiere_aprobacion: boolean;
   puede_tener_comentarios: boolean;
   estado: StepStatus;
+  fecha_estado_actual: string;
   asignado_a: string | null;
   fecha_creacion: string;
   fecha_inicio: string | null;
@@ -58,6 +52,7 @@ export type Step = {
   fecha_cierre: string | null;
   resultado: string | null;
   observaciones: string | null;
+  ultimo_comentario: string | null;
 };
 
 export type WorkflowDetail = WorkflowSummary & {
@@ -80,14 +75,14 @@ export type StepHistoryEntry = {
   valor_nuevo: string | null;
   usuario: string;
   fecha: string;
+  nota: string | null;
 };
 
 export type TriggerCreateInput = {
-  titulo: string;
+  solicitante: string | null;
   descripcion: string | null;
   tipo: string;
-  prioridad: TriggerPriority;
-  creado_por: string;
+  creado_por?: string;
   metadata: Record<string, unknown> | null;
 };
 
@@ -95,8 +90,8 @@ export type WorkflowStartInput = {
   workflow_template_id?: string;
   objetivo_final?: string | null;
   resolucion_esperada?: string | null;
-  primer_paso?: {
-    nombre?: string | null;
+  primer_paso: {
+    nombre: string;
     descripcion?: string | null;
     asignado_a?: string | null;
     fecha_vencimiento?: string | null;
@@ -105,12 +100,38 @@ export type WorkflowStartInput = {
 
 export type StepCompleteInput = {
   usuario: string;
+  comentario: string;
   resultado: string | null;
   observaciones: string | null;
-  comentario_final: string | null;
+  siguiente_paso?: {
+    nombre: string;
+    descripcion?: string | null;
+    tipo?: string;
+    requiere_aprobacion?: boolean;
+    puede_tener_comentarios?: boolean;
+    asignado_a?: string | null;
+    fecha_vencimiento?: string | null;
+  } | null;
+  finalizar_workflow: boolean;
+};
+
+export type StepStatusUpdateInput = {
+  estado: StepStatus;
+  usuario: string;
+  nota?: string | null;
 };
 
 export type StepCommentInput = {
   autor: string;
   comentario: string;
+};
+
+export type StepJournalEntryInput = {
+  comentario: string;
+  estado?: Exclude<StepStatus, "activo"> | null;
+  siguiente_paso?: {
+    nombre: string;
+    descripcion?: string | null;
+  } | null;
+  finalizar_workflow?: boolean;
 };

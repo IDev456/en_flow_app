@@ -1,10 +1,11 @@
-import { apiGet, apiPost } from "../../api/client";
+import { apiGet, apiPatch, apiPost } from "../../api/client";
 import type {
   Step,
   StepComment,
   StepCommentInput,
   StepCompleteInput,
   StepHistoryEntry,
+  StepStatusUpdateInput,
   Trigger,
   TriggerCreateInput,
   TriggerDetail,
@@ -25,7 +26,7 @@ export function getTrigger(triggerId: string) {
   return apiGet<TriggerDetail>(`/triggers/${triggerId}`);
 }
 
-export function startWorkflow(triggerId: string, input: WorkflowStartInput = {}) {
+export function startWorkflow(triggerId: string, input: WorkflowStartInput) {
   return apiPost<WorkflowDetail>(`/triggers/${triggerId}/start-workflow`, input);
 }
 
@@ -53,6 +54,10 @@ export function getStep(stepId: string) {
   return apiGet<Step>(`/steps/${stepId}`);
 }
 
+export function updateStepStatus(stepId: string, input: StepStatusUpdateInput) {
+  return apiPatch<Step>(`/steps/${stepId}/status`, input);
+}
+
 export function completeStep(stepId: string, input: StepCompleteInput) {
   return apiPost<Step>(`/steps/${stepId}/complete`, input);
 }
@@ -68,4 +73,3 @@ export function getStepComments(stepId: string) {
 export function getStepHistory(stepId: string) {
   return apiGet<StepHistoryEntry[]>(`/steps/${stepId}/history`);
 }
-

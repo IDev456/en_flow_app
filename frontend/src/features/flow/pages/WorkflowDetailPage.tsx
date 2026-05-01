@@ -1,34 +1,78 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
-import { completeStep, getTrigger, getWorkflow } from "../api";
-import { WorkflowGraph } from "../components/WorkflowGraph";
-import { WorkflowInspector } from "../components/WorkflowInspector";
-import { WorkflowVariantSwitcher, type WorkflowVariant } from "../components/WorkflowVariantSwitcher";
+import {
+  addStepComment,
+  completeStep,
+  getStepComments,
+  getStepHistory,
+  getTrigger,
+  getWorkflow,
+  updateStepStatus
+} from "../api";
+import { StepDetailPanel } from "../components/StepDetailPanel";
 import { StatusBadge } from "../components/StatusBadge";
-import type { Step, TriggerDetail, WorkflowDetail } from "../types";
-import { formatDate } from "../utils";
+import { WorkflowGraph } from "../components/WorkflowGraph";
+import { WorkflowVariantSwitcher, type WorkflowVariant } from "../components/WorkflowVariantSwitcher";
+import type { Step, StepComment, StepHistoryEntry, StepJournalEntryInput, TriggerDetail, WorkflowDetail } from "../types";
+import { DEFAULT_ACTOR, formatDate } from "../utils";
 
 export function WorkflowDetailPage() {
   const { workflowId = "" } = useParams();
+  const navigate = useNavigate();
   const [workflow, setWorkflow] = useState<WorkflowDetail | null>(null);
   const [trigger, setTrigger] = useState<TriggerDetail | null>(null);
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [stepComments, setStepComments] = useState<StepComment[]>([]);
+  const [stepHistory, setStepHistory] = useState<StepHistoryEntry[]>([]);
   const [variant, setVariant] = useState<WorkflowVariant>("vertical");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [panelError, setPanelError] = useState<string | null>(null);
 
   useEffect(() => {
     void loadWorkflow();
   }, [workflowId]);
 
-  async function loadWorkflow() {
+  useEffect(() => {
+    if (selectedStepId) {
+      void loadStepSideData(selectedStepId);
+    } else {
+      setStepComments([]);
+      setStepHistory([]);
+    }
+  }, [selectedStepId]);
+
+  useEffect(() => {
+    if (!panelOpen) {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setPanelOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [panelOpen]);
+
+  async function loadWorkflow(preferredStepId?: string) {
     try {
       setLoading(true);
       setError(null);
       const workflowData = await getWorkflow(workflowId);
       setWorkflow(workflowData);
-      setSelectedStepId((current) => current ?? workflowData.steps.find((step) => step.estado === "activo")?.id ?? workflowData.steps[0]?.id ?? null);
+      const stepExistsInWorkflow = workflowData.steps.some((s) => s.id === selectedStepId);
+      const nextSelectedStepId =
+        preferredStepId ??
+        (stepExistsInWorkflow ? selectedStepId : null) ??
+        workflowData.steps.find((step) => step.estado === "activo")?.id ??
+        workflowData.steps[0]?.id ??
+        null;
+      setSelectedStepId(nextSelectedStepId);
       setTrigger(await getTrigger(workflowData.trigger_id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cargar el workflow");
@@ -37,30 +81,86 @@ export function WorkflowDetailPage() {
     }
   }
 
-  async function handleCompleteStep(payload: {
-    usuario: string;
-    resultado: string | null;
-    observaciones: string | null;
-    comentario_final: string | null;
-  }) {
-    if (!selectedStepId) {
+  async function loadStepSideData(stepId: string) {
+    try {
+      setPanelError(null);
+      const [comments, history] = await Promise.all([getStepComments(stepId), getStepHistory(stepId)]);
+      setStepComments(comments);
+      setStepHistory(history);
+    } catch (err) {
+      setPanelError(err instanceof Error ? err.message : "No se pudo cargar la bitacora del paso");
+    }
+  }
+
+  async function refreshAfterStepChange(preferredStepId?: string) {
+    await loadWorkflow(preferredStepId);
+    if (preferredStepId) {
+      await loadStepSideData(preferredStepId);
+    }
+  }
+
+  async function handleSubmitJournal(input: StepJournalEntryInput) {
+    if (!selectedStepId) return;
+
+    if (!input.estado) {
+      await addStepComment(selectedStepId, { autor: DEFAULT_ACTOR, comentario: input.comentario });
+      await loadStepSideData(selectedStepId);
       return;
     }
 
-    await completeStep(selectedStepId, payload);
-    const updatedWorkflow = await getWorkflow(workflowId);
-    setWorkflow(updatedWorkflow);
-    const activeStep = updatedWorkflow.steps.find((step) => step.estado === "activo");
-    setSelectedStepId(activeStep?.id ?? selectedStepId);
-    setTrigger(await getTrigger(updatedWorkflow.trigger_id));
+    if (input.estado === "completado") {
+      await completeStep(selectedStepId, {
+        usuario: DEFAULT_ACTOR,
+        comentario: input.comentario,
+        resultado: null,
+        observaciones: null,
+        siguiente_paso: input.siguiente_paso
+          ? {
+              nombre: input.siguiente_paso.nombre,
+              descripcion: input.siguiente_paso.descripcion ?? null
+            }
+          : null,
+        finalizar_workflow: Boolean(input.finalizar_workflow)
+      });
+      const currentWorkflow = await getWorkflow(workflowId);
+      const nextActiveStep = currentWorkflow.steps.find((step) => step.estado === "activo");
+      await refreshAfterStepChange(nextActiveStep?.id ?? selectedStepId);
+      return;
+    }
+
+    await updateStepStatus(selectedStepId, {
+      estado: input.estado,
+      usuario: DEFAULT_ACTOR,
+      nota: input.comentario
+    });
+    await refreshAfterStepChange(selectedStepId);
+  }
+
+  function handleSelectStep(stepId: string) {
+    setSelectedStepId(stepId);
+  }
+
+  function handleOpenStep(stepId: string) {
+    setSelectedStepId(stepId);
+    setPanelOpen(true);
   }
 
   if (loading) {
-    return <p className="status">Cargando workflow...</p>;
+    return (
+      <div className="loading-state">
+        <span className="spinner" />
+        Cargando workflow...
+      </div>
+    );
   }
 
   if (error) {
-    return <p className="inline-error">{error}</p>;
+    return (
+      <div className="error-state">
+        <span>⚠</span>
+        {error}
+      </div>
+    );
   }
 
   if (!workflow) {
@@ -71,26 +171,32 @@ export function WorkflowDetailPage() {
 
   return (
     <div className="workflow-page">
-      <section className="workflow-header">
-        <div className="workflow-heading">
-          <div className="workflow-heading-meta">
+      <div className="view-breadcrumbs">
+        <Link className="text-link" to="/triggers">Requerimientos</Link>
+        <span className="bc-sep">›</span>
+        <Link className="text-link" to={`/triggers/${workflow.trigger_id}`}>
+          {trigger?.solicitante ?? "Requerimiento"}
+        </Link>
+        <span className="bc-sep">›</span>
+        <strong>Workflow</strong>
+      </div>
+
+      <section className="workflow-topbar">
+        <div>
+          <div className="workflow-breadcrumb">
             <code>{workflow.id.slice(0, 8)}</code>
             <span>{workflow.workflow_template_nombre}</span>
           </div>
-          <div>
-            <h2>{trigger?.titulo ?? `Trigger ${workflow.trigger_id}`}</h2>
-            <p className="page-subtitle">{trigger?.descripcion ?? workflow.resolucion_esperada ?? "Workflow en ejecucion"}</p>
-          </div>
+          <h2>{trigger?.solicitante ?? "Sin solicitante"}</h2>
+          <p className="page-subtitle">{trigger?.descripcion ?? workflow.objetivo_final ?? "Seguimiento paso a paso del requerimiento."}</p>
         </div>
-        <div className="workflow-heading-actions">
+
+        <div className="workflow-topbar-actions">
           <StatusBadge value={workflow.estado} />
-          <Link className="text-link" to={`/triggers/${workflow.trigger_id}`}>
-            Ver disparador origen
-          </Link>
         </div>
       </section>
 
-      <section className="workflow-meta-bar">
+      <section className="workflow-meta-strip">
         <div>
           <span>Paso actual</span>
           <strong>{workflow.paso_actual ?? "Finalizado"}</strong>
@@ -100,32 +206,49 @@ export function WorkflowDetailPage() {
           <strong>{formatDate(workflow.fecha_inicio)}</strong>
         </div>
         <div>
-          <span>Fin</span>
+          <span>Cierre</span>
           <strong>{formatDate(workflow.fecha_fin)}</strong>
         </div>
         <div>
-          <span>Objetivo final</span>
-          <strong>{workflow.objetivo_final ?? "No definido"}</strong>
+          <span>Objetivo</span>
+          <strong>{workflow.objetivo_final ?? "Sin definir"}</strong>
         </div>
       </section>
 
-      <section className="workflow-content-grid">
-        <div className="surface-panel workflow-surface">
-          <div className="panel-header-row split">
-            <h3>Visualizacion del flujo</h3>
+      <section className={panelOpen && selectedStep ? "workflow-stage open" : "workflow-stage"}>
+        {panelOpen && selectedStep && (
+          <StepDetailPanel
+            workflowId={workflow.id}
+            step={selectedStep}
+            comments={stepComments}
+            history={stepHistory}
+            drawer
+            error={panelError}
+            onClose={() => setPanelOpen(false)}
+            onSubmitJournal={handleSubmitJournal}
+          />
+        )}
+
+        <div className="surface-panel workflow-canvas">
+          <div className="panel-header-row">
+            <div>
+              <h3>Flujo</h3>
+              <p className="muted">Vista secuencial de los pasos habilitados por este requerimiento.</p>
+            </div>
             <WorkflowVariantSwitcher value={variant} onChange={setVariant} />
           </div>
+
           <WorkflowGraph
             variant={variant}
-            triggerLabel={trigger?.tipo ?? "disparador"}
+            triggerLabel={trigger?.solicitante ?? "requerimiento"}
             steps={workflow.steps}
             workflowClosed={workflow.estado === "finalizado"}
             selectedStepId={selectedStepId}
-            onSelectStep={setSelectedStepId}
+            onSelectStep={handleSelectStep}
+            onOpenStep={handleOpenStep}
+            onOpenTrigger={() => navigate(`/triggers/${workflow.trigger_id}`)}
           />
         </div>
-
-        <WorkflowInspector workflowId={workflow.id} step={selectedStep} onComplete={handleCompleteStep} />
       </section>
     </div>
   );

@@ -48,6 +48,9 @@ class WorkflowService:
         if trigger is None:
             raise EntityNotFoundError("Trigger not found")
 
+        if not payload.primer_paso.nombre.strip():
+            raise BusinessRuleError("El primer paso es obligatorio para iniciar el workflow")
+
         active_workflow = self._find_open_workflow(trigger.workflow_ids)
         if active_workflow is not None:
             raise BusinessRuleError("El trigger ya tiene un workflow activo")
@@ -92,9 +95,26 @@ class WorkflowService:
         if workflow.estado == WorkflowStatus.FINALIZADO:
             raise BusinessRuleError("No se pueden agregar pasos a un workflow finalizado")
 
+        current_open_step = next(
+            (step for step in workflow.steps if step.estado in {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA}),
+            None,
+        )
+        if current_open_step is not None:
+            raise BusinessRuleError("No se puede crear un nuevo paso mientras el actual no este completado")
+
         steps = workflow.steps
         next_order = max((step.orden for step in steps), default=0) + 1
-        return self.repository.create_step(workflow_id, payload, next_order)
+        created_step = self.repository.create_step(workflow_id, payload, next_order, StepStatus.ACTIVO)
+        updated_workflow = workflow.model_copy(
+            update={
+                "estado": WorkflowStatus.EN_PROCESO,
+                "paso_actual": created_step.orden,
+                "total_pasos": max(workflow.total_pasos, created_step.orden),
+            }
+        )
+        self.repository.save_workflow(updated_workflow)
+        self._record_history(created_step.id, "estado", None, StepStatus.ACTIVO, "sistema")
+        return created_step
 
     def get_step(self, step_id: str) -> StepInstancePublic:
         step = self.repository.get_step(step_id)
@@ -104,40 +124,52 @@ class WorkflowService:
 
     def update_step_status(self, step_id: str, payload: StepStatusUpdate) -> StepInstancePublic:
         step = self.get_step(step_id)
-        workflow = self.get_workflow(step.workflow_id)
         previous_status = step.estado
 
         if payload.estado == StepStatus.COMPLETADO:
             raise BusinessRuleError("Usa el endpoint de completar paso para cerrar un step")
 
         if payload.estado == StepStatus.ACTIVO:
-            self._ensure_can_activate(workflow.steps, step)
-        elif payload.estado == StepStatus.EN_REVISION:
-            if step.estado != StepStatus.ACTIVO:
-                raise BusinessRuleError("Solo un step activo puede pasar a revision")
-        elif payload.estado == StepStatus.PENDIENTE:
-            raise BusinessRuleError("No se puede volver manualmente a pendiente")
+            raise BusinessRuleError("El estado en proceso no se modifica manualmente")
 
-        now = utc_now()
+        if payload.estado not in {StepStatus.ESPERA, StepStatus.PROBLEMA}:
+            raise BusinessRuleError("Solo se puede cambiar manualmente a espera o problema")
+
+        if step.estado not in {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA}:
+            raise BusinessRuleError("Solo un step abierto puede cambiar de estado")
+
+        if not payload.nota or len(payload.nota.strip()) < 3:
+            raise BusinessRuleError("Todo cambio de estado debe incluir un comentario justificando el motivo")
+
         updated_step = step.model_copy(
             update={
                 "estado": payload.estado,
-                "fecha_inicio": now if payload.estado == StepStatus.ACTIVO and step.fecha_inicio is None else step.fecha_inicio,
+                "fecha_estado_actual": utc_now(),
             }
         )
         self.repository.save_step(updated_step)
-        self._record_history(updated_step.id, "estado", previous_status, payload.estado, payload.usuario)
-
-        if payload.estado == StepStatus.ACTIVO:
-            updated_workflow = workflow.model_copy(update={"paso_actual": updated_step.orden, "estado": WorkflowStatus.EN_PROCESO})
-            self.repository.save_workflow(updated_workflow)
+        self._record_history(
+            updated_step.id,
+            "estado",
+            previous_status,
+            payload.estado,
+            payload.usuario,
+            note=payload.nota,
+        )
 
         return updated_step
 
     def complete_step(self, step_id: str, payload: StepCompletePayload) -> StepInstancePublic:
         step = self.get_step(step_id)
-        if step.estado not in {StepStatus.ACTIVO, StepStatus.EN_REVISION}:
-            raise BusinessRuleError("Solo se puede completar un step activo o en revision")
+        if step.estado not in {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA}:
+            raise BusinessRuleError("Solo se puede completar un step abierto")
+
+        if len(payload.comentario.strip()) < 3:
+            raise BusinessRuleError("Completar un paso requiere un comentario justificando el cierre")
+
+        has_next_step = payload.siguiente_paso is not None
+        if payload.finalizar_workflow == has_next_step:
+            raise BusinessRuleError("Debes definir el siguiente paso o indicar que el workflow finaliza")
 
         workflow = self.get_workflow(step.workflow_id)
         trigger = self.get_trigger(workflow.trigger_id)
@@ -146,46 +178,41 @@ class WorkflowService:
         completed_step = step.model_copy(
             update={
                 "estado": StepStatus.COMPLETADO,
+                "fecha_estado_actual": now,
                 "resultado": payload.resultado,
                 "observaciones": payload.observaciones,
                 "fecha_cierre": now,
             }
         )
         self.repository.save_step(completed_step)
-        self._record_history(completed_step.id, "estado", step.estado, StepStatus.COMPLETADO, payload.usuario)
+        self._record_history(
+            completed_step.id,
+            "estado",
+            step.estado,
+            StepStatus.COMPLETADO,
+            payload.usuario,
+            note=payload.comentario.strip(),
+        )
 
         if step.resultado != payload.resultado:
             self._record_history(completed_step.id, "resultado", step.resultado, payload.resultado, payload.usuario)
         if step.observaciones != payload.observaciones:
             self._record_history(completed_step.id, "observaciones", step.observaciones, payload.observaciones, payload.usuario)
 
-        if payload.comentario_final:
-            self.add_comment(
-                step_id,
-                CommentCreate(autor=payload.usuario, comentario=payload.comentario_final),
+        if payload.siguiente_paso is not None:
+            next_order = max((item.orden for item in workflow.steps), default=0) + 1
+            next_step = self.repository.create_step(
+                workflow.id,
+                payload.siguiente_paso,
+                next_order,
+                StepStatus.ACTIVO,
             )
-
-        ordered_steps = sorted(
-            [completed_step if item.id == completed_step.id else item for item in workflow.steps],
-            key=lambda item: item.orden,
-        )
-        next_step = next((item for item in ordered_steps if item.orden > step.orden), None)
-
-        if next_step is not None:
-            self._ensure_previous_step_completed(ordered_steps, next_step)
-            activated_step = next_step.model_copy(
-                update={
-                    "estado": StepStatus.ACTIVO,
-                    "fecha_inicio": next_step.fecha_inicio or now,
-                }
-            )
-            self.repository.save_step(activated_step)
-            self._record_history(activated_step.id, "estado", next_step.estado, StepStatus.ACTIVO, payload.usuario)
-
+            self._record_history(next_step.id, "estado", None, StepStatus.ACTIVO, payload.usuario)
             updated_workflow = workflow.model_copy(
                 update={
                     "estado": WorkflowStatus.EN_PROCESO,
-                    "paso_actual": activated_step.orden,
+                    "paso_actual": next_step.orden,
+                    "total_pasos": len(workflow.steps) + 1,
                 }
             )
             self.repository.save_workflow(updated_workflow)
@@ -204,6 +231,7 @@ class WorkflowService:
                     "estado": WorkflowStatus.FINALIZADO,
                     "paso_actual": None,
                     "fecha_fin": now,
+                    "total_pasos": len(workflow.steps),
                 }
             )
             self.repository.save_workflow(updated_workflow)
@@ -253,12 +281,12 @@ class WorkflowService:
             (
                 step
                 for step in steps
-                if step.id != step_to_activate.id and step.estado in {StepStatus.ACTIVO, StepStatus.EN_REVISION}
+                if step.id != step_to_activate.id and step.estado in {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA}
             ),
             None,
         )
         if concurrent_step is not None:
-            raise BusinessRuleError("Solo puede haber un step activo o en revision al mismo tiempo")
+            raise BusinessRuleError("Solo puede haber un step abierto al mismo tiempo")
 
     def _record_history(
         self,
@@ -267,6 +295,7 @@ class WorkflowService:
         valor_anterior: object,
         valor_nuevo: object,
         usuario: str,
+        note: str | None = None,
     ) -> None:
         history = StepHistoryPublic(
             id=str(uuid4()),
@@ -276,6 +305,7 @@ class WorkflowService:
             valor_nuevo=self._serialize_history_value(valor_nuevo),
             usuario=usuario,
             fecha=utc_now(),
+            nota=note,
         )
         self.repository.add_history(history)
 

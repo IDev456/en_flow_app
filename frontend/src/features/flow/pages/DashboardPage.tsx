@@ -31,17 +31,28 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="dashboard-layout">
+    <div className="dashboard-page">
       <section className="hero-panel">
         <div>
-          <p className="section-eyebrow">Vista operativa</p>
-          <h2>Workflows en marcha y pasos abiertos.</h2>
+          <span className="page-chip">Vista operativa</span>
+          <h2>Workflows activos y pasos abiertos</h2>
           <p className="page-subtitle">
-            Seguimiento rapido del frente activo para decidir sobre que flujo intervenir ahora.
+            Deteccion rapida de que flujo necesita atencion y en que estado esta cada paso.
           </p>
         </div>
-        {loading && <p className="status">Cargando informacion...</p>}
-        {error && <p className="inline-error">{error}</p>}
+
+        {loading && (
+          <div className="loading-state" style={{ padding: "1.5rem 0 0" }}>
+            <span className="spinner" />
+            Cargando informacion...
+          </div>
+        )}
+        {error && (
+          <div className="error-state" style={{ marginTop: "1rem" }}>
+            <span>⚠</span>
+            {error}
+          </div>
+        )}
         {!loading && !error && (
           <div className="stats-row">
             <article className="stat-card">
@@ -56,60 +67,66 @@ export function DashboardPage() {
         )}
       </section>
 
-      <section className="surface-panel">
-        <div className="panel-header-row">
-          <h3>Workflows activos</h3>
-        </div>
-        {workflows.length === 0 && !loading ? (
-          <p className="status">Todavia no hay workflows activos.</p>
-        ) : (
-          <ul className="card-stack">
-            {workflows.map((workflow) => (
-              <li key={workflow.id} className="flow-card">
-                <div className="entity-card-head">
-                  <div>
-                    <h3>{workflow.workflow_template_nombre}</h3>
-                    <p className="muted">Paso actual: {workflow.paso_actual ?? "sin paso activo"}</p>
-                  </div>
-                  <StatusBadge value={workflow.estado} />
-                </div>
-                <p className="muted">Inicio: {formatDate(workflow.fecha_inicio)}</p>
-                <Link className="text-link" to={`/workflows/${workflow.id}`}>
-                  Abrir workflow
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {!loading && !error && (
+        <div className="dashboard-grid">
+          <section className="surface-panel">
+            <div className="panel-header-row">
+              <h3>Workflows activos</h3>
+              <Link className="text-link" to="/triggers">Ver todos</Link>
+            </div>
+            <div className="dashboard-list">
+              {workflows.length === 0 ? (
+                <p className="status">Todavia no hay workflows activos.</p>
+              ) : (
+                workflows.map((workflow) => (
+                  <article key={workflow.id} className="dashboard-item">
+                    <div>
+                      <strong>{workflow.workflow_template_nombre}</strong>
+                      <p>Paso actual: {workflow.paso_actual ?? "sin paso activo"}</p>
+                    </div>
+                    <div className="dashboard-item-side">
+                      <StatusBadge value={workflow.estado} />
+                      <Link className="mini-link" to={`/workflows/${workflow.id}`}>
+                        Abrir
+                      </Link>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
 
-      <section className="surface-panel">
-        <div className="panel-header-row">
-          <h3>Pasos pendientes o activos</h3>
+          <section className="surface-panel">
+            <div className="panel-header-row">
+              <h3>Pasos abiertos</h3>
+            </div>
+            <div className="dashboard-list">
+              {steps.length === 0 ? (
+                <p className="status">No hay pasos abiertos.</p>
+              ) : (
+                steps.map((step) => (
+                  <article key={step.id} className="dashboard-item">
+                    <div>
+                      <strong>
+                        Paso {step.orden}: {step.nombre}
+                      </strong>
+                      <p>
+                        {step.asignado_a ?? "Sin asignar"} · {formatDate(step.fecha_vencimiento)}
+                      </p>
+                    </div>
+                    <div className="dashboard-item-side">
+                      <StatusBadge value={step.estado} />
+                      <Link className="mini-link" to={`/steps/${step.id}`}>
+                        Revisar
+                      </Link>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
         </div>
-        {steps.length === 0 && !loading ? (
-          <p className="status">No hay pasos abiertos.</p>
-        ) : (
-          <ul className="card-stack">
-            {steps.map((step) => (
-              <li key={step.id} className="flow-card compact-card">
-                <div className="entity-card-head">
-                  <div>
-                    <h3>
-                      Paso {step.orden}: {step.nombre}
-                    </h3>
-                    <p className="muted">Workflow: {step.workflow_id}</p>
-                  </div>
-                  <StatusBadge value={step.estado} />
-                </div>
-                <Link className="text-link" to={`/steps/${step.id}`}>
-                  Revisar paso
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      )}
     </div>
   );
 }
