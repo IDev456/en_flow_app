@@ -1,0 +1,37 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: en-flow-backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    working_dir: /app
+    environment:
+      APP_NAME: En Flow API
+      APP_ENV: development
+      API_V1_PREFIX: /api/v1
+      BACKEND_CORS_ORIGINS: http://localhost:5173
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: en-flow-frontend
+    command: npm run dev
+    working_dir: /app
+    environment:
+      VITE_API_URL: http://localhost:8000/api/v1
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  frontend_node_modules:
+
