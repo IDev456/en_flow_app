@@ -41,7 +41,6 @@ export function Journal({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const items = useMemo(() => buildJournalItems(history, comments), [history, comments]);
   const MAX_CHARS = 1000;
-  const nearLimit = text.length > MAX_CHARS * 0.85;
   const isCompleting = selectedStatus === "completado";
   const canComment = step.puede_tener_comentarios;
   const missingComment = text.trim().length === 0;
@@ -194,12 +193,6 @@ export function Journal({
           </div>
         )}
 
-        {!canChangeStatus && (
-          <p className="char-hint">Este paso ya no admite cambios de estado, pero puedes dejar comentarios en la bitacora.</p>
-        )}
-
-        {!canComment && <p className="char-hint">Este paso no admite nuevos comentarios.</p>}
-
         {isCompleting && composerExpanded && (
           <div className="completion-config">
             <span className="composer-section-label">Al completar este paso</span>
@@ -270,9 +263,6 @@ export function Journal({
         {error && <p className="inline-error">{error}</p>}
 
         <div className="journal-composer-footer composer-footer">
-          <span className={`char-hint${nearLimit ? " near-limit" : ""}`}>
-            {text.length > 0 ? `${text.length} / ${MAX_CHARS}` : "Ctrl + Enter para enviar"}
-          </span>
           <button type="button" className="primary-action" onClick={() => void handleSubmit()} disabled={!canSubmit}>
             {submitting ? "Guardando..." : getSubmitLabel()}
           </button>
@@ -289,7 +279,6 @@ export function Journal({
           items.map((item) => (
             <article key={item.id} className="journal-item">
               <div className="journal-item-head">
-                <strong>{item.author}</strong>
                 <span>{formatDate(item.date)}</span>
                 {item.kind === "status" && <StatusBadge value={item.status} />}
               </div>

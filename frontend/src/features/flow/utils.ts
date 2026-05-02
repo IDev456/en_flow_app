@@ -1,6 +1,6 @@
 import type { StepComment, StepHistoryEntry, StepStatus } from "./types";
 
-export const DEFAULT_ACTOR = "Usuario 1";
+export const DEFAULT_ACTOR = "sistema";
 
 const statusPresentationMap: Record<string, { label: string; tone: string }> = {
   nuevo: { label: "sin flujo", tone: "nuevo" },
@@ -132,6 +132,6 @@ export function buildJournalItems(history: StepHistoryEntry[], comments: StepCom
   }));
 
   return [...statusEntries, ...commentEntries].sort(
-    (left, right) => new Date(left.date).getTime() - new Date(right.date).getTime()
+    (left, right) => new Date(right.date).getTime() - new Date(left.date).getTime()
   );
 }

@@ -229,7 +229,7 @@ export function WorkflowDetailPage() {
           />
         )}
 
-        <div className="surface-panel workflow-canvas">
+        <div className="surface-panel workflow-canvas" onPointerDown={() => panelOpen && setPanelOpen(false)}>
           <div className="panel-header-row">
             <div>
               <h3>Flujo</h3>

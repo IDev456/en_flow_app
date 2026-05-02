@@ -84,7 +84,7 @@ export function StepDetailPanel({
   }
 
   return (
-    <section className={getPanelClassName(standalone, drawer)}>
+    <section className={getPanelClassName(standalone, drawer)} onPointerDown={(event) => event.stopPropagation()}>
       <div className="step-panel-head">
         <div className="step-panel-head-row">
           <div className="step-panel-breadcrumb">

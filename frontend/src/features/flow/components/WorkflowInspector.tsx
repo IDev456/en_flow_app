@@ -51,7 +51,14 @@ export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInsp
 
   if (!step) {
     return (
-      <section className="detail-rail empty">
+      <section 
+        className="detail-rail empty" 
+        style={{ 
+          marginLeft: "auto", 
+          borderLeft: "1px solid var(--border-color, #e0e0e0)", 
+          borderRight: "none" 
+        }}
+      >
         <h3>Sin paso seleccionado</h3>
         <p>Selecciona un paso del flujo para ver sus propiedades y operar sobre el.</p>
       </section>
@@ -61,7 +68,14 @@ export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInsp
   const canComplete = step.estado === "activo" || step.estado === "espera" || step.estado === "problema";
 
   return (
-    <section className="detail-rail">
+    <section 
+      className="detail-rail" 
+      style={{ 
+        marginLeft: "auto", 
+        borderLeft: "1px solid var(--border-color, #e0e0e0)", 
+        borderRight: "none" 
+      }}
+    >
       <div className="detail-rail-head">
         <code>{workflowId}</code>
         <h3>{step.nombre}</h3>
