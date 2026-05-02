@@ -8,8 +8,8 @@ from app.services.workflow_service import WorkflowService
 router = APIRouter()
 
 
-@router.get("/", response_model=list[TriggerPublic])
-def list_triggers(service: WorkflowService = Depends(get_workflow_service)) -> list[TriggerPublic]:
+@router.get("/", response_model=list[TriggerDetail])
+def list_triggers(service: WorkflowService = Depends(get_workflow_service)) -> list[TriggerDetail]:
     return service.list_triggers()
 
 
@@ -38,4 +38,3 @@ def start_workflow(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except BusinessRuleError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-

@@ -28,7 +28,7 @@ class WorkflowService:
     def __init__(self, repository: WorkflowRepository) -> None:
         self.repository = repository
 
-    def list_triggers(self) -> list[TriggerPublic]:
+    def list_triggers(self) -> list[TriggerDetail]:
         return self.repository.list_triggers()
 
     def get_trigger(self, trigger_id: str) -> TriggerDetail:
@@ -155,6 +155,7 @@ class WorkflowService:
             payload.estado,
             payload.usuario,
             note=payload.nota,
+            attachments=payload.attachments,
         )
 
         return updated_step
@@ -192,6 +193,7 @@ class WorkflowService:
             StepStatus.COMPLETADO,
             payload.usuario,
             note=payload.comentario.strip(),
+            attachments=payload.attachments,
         )
 
         if step.resultado != payload.resultado:
@@ -296,6 +298,7 @@ class WorkflowService:
         valor_nuevo: object,
         usuario: str,
         note: str | None = None,
+        attachments: list | None = None,
     ) -> None:
         history = StepHistoryPublic(
             id=str(uuid4()),
@@ -306,6 +309,16 @@ class WorkflowService:
             usuario=usuario,
             fecha=utc_now(),
             nota=note,
+            attachments=[
+                {
+                    "id": str(uuid4()),
+                    "nombre": item.nombre,
+                    "content_type": item.content_type,
+                    "size_bytes": item.size_bytes,
+                    "content_base64": item.content_base64,
+                }
+                for item in (attachments or [])
+            ],
         )
         self.repository.add_history(history)
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { Step, StepComment, StepHistoryEntry, StepJournalEntryInput } from "../types";
+import type { Attachment, AttachmentInput, Step, StepComment, StepHistoryEntry, StepJournalEntryInput } from "../types";
 import { buildJournalItems, formatDate, stepStatusOptions } from "../utils";
 
 import { StatusBadge } from "./StatusBadge";
@@ -18,6 +18,14 @@ type JournalProps = {
   onSubmitEntry: (input: StepJournalEntryInput) => Promise<void>;
 };
 
+type DraftAttachment = AttachmentInput & {
+  local_id: string;
+  preview_url: string;
+};
+
+const MAX_CHARS = 1000;
+const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+
 export function Journal({
   step,
   comments,
@@ -31,20 +39,24 @@ export function Journal({
   onSubmitEntry
 }: JournalProps) {
   const composerRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
+  const [attachments, setAttachments] = useState<DraftAttachment[]>([]);
   const [completionMode, setCompletionMode] = useState<"next" | "finish">("next");
   const [nextStepName, setNextStepName] = useState("");
   const [nextStepDescription, setNextStepDescription] = useState("");
   const [showNextStepDescription, setShowNextStepDescription] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const items = useMemo(() => buildJournalItems(history, comments), [history, comments]);
-  const MAX_CHARS = 1000;
   const isCompleting = selectedStatus === "completado";
+  const commentTrimmed = text.trim();
   const canComment = step.puede_tener_comentarios;
-  const missingComment = text.trim().length === 0;
+  const hasAttachments = attachments.length > 0;
+  const missingComment = selectedStatus !== "" ? commentTrimmed.length === 0 : commentTrimmed.length === 0 && !hasAttachments;
   const missingNextStep = isCompleting && completionMode === "next" && nextStepName.trim().length === 0;
+  const insufficientLength = selectedStatus !== "" && commentTrimmed.length < 3;
 
   useEffect(() => {
     if (focusRequestToken > 0) {
@@ -67,12 +79,52 @@ export function Journal({
     canComment &&
     !missingComment &&
     !missingNextStep &&
+    !insufficientLength &&
     !submitting;
 
+  async function readFileAsAttachment(file: File): Promise<DraftAttachment> {
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      throw new Error(`El archivo "${file.name}" supera el limite de 5 MB`);
+    }
+
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onerror = () => reject(new Error(`No se pudo leer "${file.name}"`));
+      reader.readAsDataURL(file);
+    });
+
+    const [, contentBase64 = ""] = dataUrl.split(",", 2);
+    return {
+      local_id: createLocalId(),
+      nombre: file.name,
+      content_type: file.type || "application/octet-stream",
+      size_bytes: file.size,
+      content_base64: contentBase64,
+      preview_url: dataUrl
+    };
+  }
+
+  async function addFiles(files: File[]) {
+    if (files.length === 0) {
+      return;
+    }
+
+    try {
+      const nextAttachments = await Promise.all(files.map((file) => readFileAsAttachment(file)));
+      setAttachments((current) => [...current, ...nextAttachments]);
+      setError(null);
+      onComposerExpandedChange(true);
+      textareaRef.current?.focus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudieron adjuntar los archivos");
+    }
+  }
+
   async function handleSubmit() {
-    const comentario = text.trim();
-    if (!comentario) {
-      setError("Debes escribir un comentario para registrarlo en la bitacora.");
+    const comentario = commentTrimmed || null;
+    if (!comentario && attachments.length === 0) {
+      setError("Debes escribir un comentario o adjuntar al menos un archivo.");
       return;
     }
 
@@ -81,7 +133,7 @@ export function Journal({
       return;
     }
 
-    if (selectedStatus && comentario.length < 3) {
+    if (selectedStatus && (!comentario || comentario.length < 3)) {
       setError("El comentario debe justificar el cambio de estado.");
       return;
     }
@@ -97,6 +149,12 @@ export function Journal({
       await onSubmitEntry({
         comentario,
         estado: selectedStatus || null,
+        attachments: attachments.map((item) => ({
+          nombre: item.nombre,
+          content_type: item.content_type,
+          size_bytes: item.size_bytes,
+          content_base64: item.content_base64
+        })),
         siguiente_paso:
           isCompleting && completionMode === "next"
             ? {
@@ -107,20 +165,49 @@ export function Journal({
         finalizar_workflow: isCompleting && completionMode === "finish"
       });
       setText("");
+      setAttachments([]);
       onSelectedStatusChange("");
       setCompletionMode("next");
       setNextStepName("");
       setNextStepDescription("");
       setShowNextStepDescription(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     } finally {
       setSubmitting(false);
     }
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && text.trim() && !submitting) {
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && canSubmit) {
+      event.preventDefault();
       void handleSubmit();
     }
+  }
+
+  async function handlePaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const imageFiles = Array.from(event.clipboardData.items)
+      .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null);
+
+    if (imageFiles.length === 0) {
+      return;
+    }
+
+    event.preventDefault();
+    await addFiles(imageFiles);
+  }
+
+  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    void addFiles(files);
+    event.target.value = "";
+  }
+
+  function handleRemoveAttachment(localId: string) {
+    setAttachments((current) => current.filter((item) => item.local_id !== localId));
   }
 
   function getSubmitLabel() {
@@ -146,26 +233,67 @@ export function Journal({
     if (selectedStatus === "completado") {
       return "Describe que se completo y que resultado se obtuvo...";
     }
-    return "Escribe una nota para la bitacora...";
+    return "Escribe una nota para la bitacora o pega una imagen...";
   }
 
   return (
     <div className="journal">
       <div ref={composerRef} className="journal-composer">
         <label htmlFor="step-comment">Agregar comentario</label>
+
         <textarea
           ref={textareaRef}
           id="step-comment"
-          rows={3}
+          rows={4}
           placeholder={getCommentPlaceholder()}
           value={text}
           onChange={(event) => setText(event.target.value)}
           onFocus={() => onComposerExpandedChange(true)}
           onClick={() => onComposerExpandedChange(true)}
           onKeyDown={handleKeyDown}
+          onPaste={(event) => void handlePaste(event)}
           maxLength={MAX_CHARS}
           disabled={!canComment || submitting}
         />
+
+        <div className="attachment-toolbar">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="visually-hidden"
+            onChange={handleFileChange}
+          />
+          <button
+            type="button"
+            className="secondary-action"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={!canComment || submitting}
+          >
+            Adjuntar archivos
+          </button>
+          <span className="attachment-hint">Tambien puedes pegar una imagen desde el portapapeles.</span>
+        </div>
+
+        {attachments.length > 0 && (
+          <div className="attachment-draft-list">
+            {attachments.map((attachment) => (
+              <article key={attachment.local_id} className="attachment-draft-card">
+                <div className="attachment-draft-head">
+                  <strong>{attachment.nombre}</strong>
+                  <button type="button" className="text-action" onClick={() => handleRemoveAttachment(attachment.local_id)}>
+                    Quitar
+                  </button>
+                </div>
+                {attachment.content_type.startsWith("image/") ? (
+                  <img className="attachment-preview-image" src={attachment.preview_url} alt={attachment.nombre} />
+                ) : (
+                  <p className="muted">{formatFileSize(attachment.size_bytes)}</p>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
 
         {composerExpanded && canChangeStatus && (
           <div className="journal-status-actions">
@@ -179,7 +307,7 @@ export function Journal({
                     type="button"
                     className={active ? "status-chip active" : "status-chip"}
                     onClick={() => {
-                      onSelectedStatusChange(active ? "" : (option.value as "" | "espera" | "problema" | "completado"));
+                      onSelectedStatusChange(active ? "" : option.value);
                       setError(null);
                     }}
                     disabled={submitting}
@@ -273,7 +401,7 @@ export function Journal({
         {items.length === 0 ? (
           <div className="journal-empty">
             <strong>Sin movimientos todavia</strong>
-            <p>Los comentarios y cambios de estado mas recientes apareceran primero.</p>
+            <p>Los comentarios, archivos y cambios de estado mas recientes apareceran primero.</p>
           </div>
         ) : (
           items.map((item) => (
@@ -282,11 +410,47 @@ export function Journal({
                 <span>{formatDate(item.date)}</span>
                 {item.kind === "status" && <StatusBadge value={item.status} />}
               </div>
-              <p>{item.body}</p>
+              {item.body && <p>{item.body}</p>}
+              {item.attachments.length > 0 && <AttachmentList attachments={item.attachments} />}
             </article>
           ))
         )}
       </div>
+    </div>
+  );
+}
+
+type AttachmentListProps = {
+  attachments: Attachment[];
+};
+
+function AttachmentList({ attachments }: AttachmentListProps) {
+  return (
+    <div className="attachment-list">
+      {attachments.map((attachment) => {
+        const dataUrl = `data:${attachment.content_type};base64,${attachment.content_base64}`;
+        const isImage = attachment.content_type.startsWith("image/");
+        return (
+          <a
+            key={attachment.id}
+            className={isImage ? "attachment-card image" : "attachment-card"}
+            href={dataUrl}
+            download={attachment.nombre}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {isImage ? (
+              <img className="attachment-preview-image" src={dataUrl} alt={attachment.nombre} />
+            ) : (
+              <div className="attachment-file-icon">FILE</div>
+            )}
+            <div className="attachment-meta">
+              <strong>{attachment.nombre}</strong>
+              <span>{formatFileSize(attachment.size_bytes)}</span>
+            </div>
+          </a>
+        );
+      })}
     </div>
   );
 }
@@ -313,10 +477,28 @@ export function HistoryList({ history }: HistoryListProps) {
             <span className="status-arrow">-&gt;</span>
             {entry.valor_nuevo ? <StatusBadge value={entry.valor_nuevo} /> : <span className="ghost-badge">vacio</span>}
           </div>
-          <small style={{ display: "block", marginTop: "0.4rem" }}>{entry.usuario}</small>
           {entry.nota && <blockquote>{entry.nota}</blockquote>}
+          {entry.attachments.length > 0 && <AttachmentList attachments={entry.attachments} />}
         </article>
       ))}
     </div>
   );
+}
+
+function createLocalId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `attachment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function formatFileSize(sizeBytes: number) {
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+  const sizeKb = sizeBytes / 1024;
+  if (sizeKb < 1024) {
+    return `${sizeKb.toFixed(1)} KB`;
+  }
+  return `${(sizeKb / 1024).toFixed(1)} MB`;
 }

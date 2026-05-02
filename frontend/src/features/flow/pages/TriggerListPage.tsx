@@ -3,11 +3,11 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { getWorkflow, listTriggers } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
-import type { Trigger, WorkflowDetail } from "../types";
+import type { TriggerDetail, WorkflowDetail } from "../types";
 import { formatDate } from "../utils";
 
 export function TriggerListPage() {
-  const [triggers, setTriggers] = useState<Trigger[]>([]);
+  const [triggers, setTriggers] = useState<TriggerDetail[]>([]);
   const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "active" | "done">("all");
@@ -27,9 +27,7 @@ export function TriggerListPage() {
       const triggerData = await listTriggers();
       setTriggers(triggerData);
 
-      const workflowIds = triggerData
-        .map((trigger) => trigger.workflow_activo_id)
-        .filter((workflowId): workflowId is string => Boolean(workflowId));
+      const workflowIds = [...new Set(triggerData.flatMap((trigger) => trigger.workflow_ids))];
       const details = await Promise.all(workflowIds.map((workflowId) => getWorkflow(workflowId)));
       setWorkflowsById(Object.fromEntries(details.map((workflow) => [workflow.id, workflow])));
     } catch (err) {
@@ -39,20 +37,34 @@ export function TriggerListPage() {
     }
   }
 
-  async function handleOpen(trigger: Trigger) {
+  function getWorkflowIdForTrigger(trigger: TriggerDetail) {
     if (trigger.workflow_activo_id) {
-      navigate(`/workflows/${trigger.workflow_activo_id}`);
+      return trigger.workflow_activo_id;
+    }
+
+    if (trigger.workflow_ids.length === 0) {
+      return null;
+    }
+
+    return trigger.workflow_ids[trigger.workflow_ids.length - 1];
+  }
+
+  async function handleOpen(trigger: TriggerDetail) {
+    const workflowId = getWorkflowIdForTrigger(trigger);
+    if (workflowId) {
+      navigate(`/workflows/${workflowId}`);
       return;
     }
 
     navigate(`/triggers/${trigger.id}`);
   }
 
-  function getWorkflowForTrigger(trigger: Trigger) {
-    return trigger.workflow_activo_id ? workflowsById[trigger.workflow_activo_id] : undefined;
+  function getWorkflowForTrigger(trigger: TriggerDetail) {
+    const workflowId = getWorkflowIdForTrigger(trigger);
+    return workflowId ? workflowsById[workflowId] : undefined;
   }
 
-  function getDisplayStatus(trigger: Trigger) {
+  function getDisplayStatus(trigger: TriggerDetail) {
     const workflow = getWorkflowForTrigger(trigger);
     if (!workflow) return trigger.estado_general;
 
@@ -96,7 +108,7 @@ export function TriggerListPage() {
     return displayStatus === "finalizado" || displayStatus === "resuelto";
   }).length;
   const withoutWorkflowCount = triggers.filter(
-    (trigger) => !trigger.workflow_activo_id && trigger.estado_general !== "resuelto"
+    (trigger) => trigger.workflow_ids.length === 0 && trigger.estado_general !== "resuelto"
   ).length;
   const totalCreatedSteps = triggers.reduce((sum, trigger) => sum + (getWorkflowForTrigger(trigger)?.steps.length ?? 0), 0);
 
@@ -190,7 +202,9 @@ export function TriggerListPage() {
               <span className="muted">{stepCount === 1 ? "1 paso" : `${stepCount} pasos`}</span>
               <div className="row-status-actions align-right">
                 <StatusBadge value={displayStatus} />
-                {!trigger.workflow_activo_id && trigger.estado_general !== "resuelto" && <span className="ghost-badge">sin flujo</span>}
+                {trigger.workflow_ids.length === 0 && trigger.estado_general !== "resuelto" && (
+                  <span className="ghost-badge">sin flujo</span>
+                )}
               </div>
             </article>
           );

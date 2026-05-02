@@ -65,7 +65,7 @@ export function WorkflowDetailPage() {
       setError(null);
       const workflowData = await getWorkflow(workflowId);
       setWorkflow(workflowData);
-      const stepExistsInWorkflow = workflowData.steps.some((s) => s.id === selectedStepId);
+      const stepExistsInWorkflow = workflowData.steps.some((step) => step.id === selectedStepId);
       const nextSelectedStepId =
         preferredStepId ??
         (stepExistsInWorkflow ? selectedStepId : null) ??
@@ -103,7 +103,11 @@ export function WorkflowDetailPage() {
     if (!selectedStepId) return;
 
     if (!input.estado) {
-      await addStepComment(selectedStepId, { autor: DEFAULT_ACTOR, comentario: input.comentario });
+      await addStepComment(selectedStepId, {
+        autor: DEFAULT_ACTOR,
+        comentario: input.comentario,
+        attachments: input.attachments ?? []
+      });
       await loadStepSideData(selectedStepId);
       return;
     }
@@ -111,9 +115,10 @@ export function WorkflowDetailPage() {
     if (input.estado === "completado") {
       await completeStep(selectedStepId, {
         usuario: DEFAULT_ACTOR,
-        comentario: input.comentario,
+        comentario: input.comentario ?? "",
         resultado: null,
         observaciones: null,
+        attachments: input.attachments ?? [],
         siguiente_paso: input.siguiente_paso
           ? {
               nombre: input.siguiente_paso.nombre,
@@ -131,7 +136,8 @@ export function WorkflowDetailPage() {
     await updateStepStatus(selectedStepId, {
       estado: input.estado,
       usuario: DEFAULT_ACTOR,
-      nota: input.comentario
+      nota: input.comentario,
+      attachments: input.attachments ?? []
     });
     await refreshAfterStepChange(selectedStepId);
   }
@@ -157,7 +163,7 @@ export function WorkflowDetailPage() {
   if (error) {
     return (
       <div className="error-state">
-        <span>⚠</span>
+        <span>!</span>
         {error}
       </div>
     );
@@ -173,11 +179,11 @@ export function WorkflowDetailPage() {
     <div className="workflow-page">
       <div className="view-breadcrumbs">
         <Link className="text-link" to="/triggers">Requerimientos</Link>
-        <span className="bc-sep">›</span>
+        <span className="bc-sep">{">"}</span>
         <Link className="text-link" to={`/triggers/${workflow.trigger_id}`}>
           {trigger?.solicitante ?? "Requerimiento"}
         </Link>
-        <span className="bc-sep">›</span>
+        <span className="bc-sep">{">"}</span>
         <strong>Workflow</strong>
       </div>
 

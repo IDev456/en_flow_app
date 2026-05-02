@@ -66,7 +66,6 @@ export function StepDetailPanel({
     );
   }
 
-  const noteCount = history.filter((entry) => entry.campo === "estado" && entry.nota).length;
   const canChangeStatus = ["activo", "espera", "problema"].includes(step.estado);
 
   async function handleSubmitJournal(input: StepJournalEntryInput) {
@@ -87,14 +86,10 @@ export function StepDetailPanel({
     <section className={getPanelClassName(standalone, drawer)} onPointerDown={(event) => event.stopPropagation()}>
       <div className="step-panel-head">
         <div className="step-panel-head-row">
-          <div className="step-panel-breadcrumb">
-            <code>{workflowId.slice(0, 8)}</code>
-            <span> / </span>
-            <code>{step.id.slice(0, 8)}</code>
-          </div>
+          <span className="step-panel-kicker">Detalle del paso</span>
           {drawer && onClose && (
             <button type="button" className="step-panel-close" onClick={onClose} aria-label="Cerrar detalle del paso">
-              ×
+              x
             </button>
           )}
         </div>
@@ -127,12 +122,6 @@ export function StepDetailPanel({
             )}
           </div>
         </div>
-      </div>
-
-      <div className="step-panel-tabs">
-        <span className="step-tab active">
-          {noteCount + comments.length > 0 ? `Bitacora (${noteCount + comments.length})` : "Bitacora"}
-        </span>
       </div>
 
       <div className="step-panel-body">

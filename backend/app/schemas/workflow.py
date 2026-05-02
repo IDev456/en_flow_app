@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class TriggerStatus(StrEnum):
@@ -140,10 +140,22 @@ class StepCreate(BaseModel):
     fecha_vencimiento: datetime | None = None
 
 
+class AttachmentBase(BaseModel):
+    nombre: str = Field(min_length=1, max_length=200)
+    content_type: str = Field(min_length=1, max_length=120)
+    size_bytes: int = Field(ge=0)
+    content_base64: str = Field(min_length=1, max_length=10_000_000)
+
+
+class AttachmentPublic(AttachmentBase):
+    id: str
+
+
 class StepStatusUpdate(BaseModel):
     estado: StepStatus
     usuario: str = Field(min_length=1, max_length=120)
     nota: str | None = Field(default=None, max_length=1000)
+    attachments: list[AttachmentBase] = Field(default_factory=list)
 
 
 class StepCompletePayload(BaseModel):
@@ -153,11 +165,19 @@ class StepCompletePayload(BaseModel):
     observaciones: str | None = Field(default=None, max_length=1000)
     siguiente_paso: StepCreate | None = None
     finalizar_workflow: bool = False
+    attachments: list[AttachmentBase] = Field(default_factory=list)
 
 
 class CommentCreate(BaseModel):
     autor: str = Field(min_length=1, max_length=120)
-    comentario: str = Field(min_length=1, max_length=1000)
+    comentario: str | None = Field(default=None, max_length=1000)
+    attachments: list[AttachmentBase] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_content(self) -> "CommentCreate":
+        if not (self.comentario and self.comentario.strip()) and not self.attachments:
+            raise ValueError("Debes enviar un comentario o al menos un adjunto")
+        return self
 
 
 class CommentPublic(CommentCreate):
@@ -175,3 +195,4 @@ class StepHistoryPublic(BaseModel):
     usuario: str
     fecha: datetime
     nota: str | None = None
+    attachments: list[AttachmentPublic] = Field(default_factory=list)

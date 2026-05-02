@@ -15,7 +15,7 @@ import type {
 } from "./types";
 
 export function listTriggers() {
-  return apiGet<Trigger[]>("/triggers/");
+  return apiGet<TriggerDetail[]>("/triggers/");
 }
 
 export function createTrigger(input: TriggerCreateInput) {

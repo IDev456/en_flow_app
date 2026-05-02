@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.schemas.workflow import (
+    AttachmentBase,
+    AttachmentPublic,
     CommentCreate,
     CommentPublic,
     StepCreate,
@@ -28,7 +30,7 @@ def utc_now() -> datetime:
 
 class WorkflowRepository(ABC):
     @abstractmethod
-    def list_triggers(self) -> list[TriggerPublic]:
+    def list_triggers(self) -> list[TriggerDetail]:
         raise NotImplementedError
 
     @abstractmethod
@@ -171,8 +173,17 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         )
         self._workflow_templates[template.id] = template
 
-    def list_triggers(self) -> list[TriggerPublic]:
-        return sorted(self._triggers.values(), key=lambda item: item.fecha_actualizacion, reverse=True)
+    def list_triggers(self) -> list[TriggerDetail]:
+        ordered_ids = [
+            trigger.id
+            for trigger in sorted(self._triggers.values(), key=lambda item: item.fecha_actualizacion, reverse=True)
+        ]
+        items: list[TriggerDetail] = []
+        for trigger_id in ordered_ids:
+            trigger = self.get_trigger(trigger_id)
+            if trigger is not None:
+                items.append(trigger)
+        return items
 
     def get_trigger(self, trigger_id: str) -> TriggerDetail | None:
         trigger = self._triggers.get(trigger_id)
@@ -341,6 +352,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
             autor=payload.autor,
             comentario=payload.comentario,
             fecha_creacion=utc_now(),
+            attachments=self._materialize_attachments(payload.attachments),
         )
         self._comments_by_step.setdefault(step_id, []).append(comment)
         return comment
@@ -382,5 +394,30 @@ class InMemoryWorkflowRepository(WorkflowRepository):
 
     def _enrich_step(self, step: StepInstancePublic) -> StepInstancePublic:
         comments = self._comments_by_step.get(step.id, [])
+        history_notes = [entry for entry in self._history_by_step.get(step.id, []) if entry.nota]
         latest_comment = comments[-1].comentario if comments else None
+        latest_comment_at = comments[-1].fecha_creacion if comments else None
+        latest_history_note = history_notes[-1].nota if history_notes else None
+        latest_history_at = history_notes[-1].fecha if history_notes else None
+
+        if comments and not latest_comment and comments[-1].attachments:
+            latest_comment = f"Adjunto: {comments[-1].attachments[0].nombre}"
+
+        if latest_history_note and (
+            latest_comment_at is None or (latest_history_at is not None and latest_history_at > latest_comment_at)
+        ):
+            latest_comment = latest_history_note
+
         return step.model_copy(update={"ultimo_comentario": latest_comment})
+
+    def _materialize_attachments(self, attachments: list[AttachmentBase]) -> list[AttachmentPublic]:
+        return [
+            AttachmentPublic(
+                id=str(uuid4()),
+                nombre=item.nombre,
+                content_type=item.content_type,
+                size_bytes=item.size_bytes,
+                content_base64=item.content_base64,
+            )
+            for item in attachments
+        ]

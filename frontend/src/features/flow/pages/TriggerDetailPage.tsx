@@ -70,7 +70,7 @@ export function TriggerDetailPage() {
   if (error && !trigger) {
     return (
       <div className="error-state">
-        <span>⚠</span>
+        <span>!</span>
         {error}
       </div>
     );
@@ -84,7 +84,7 @@ export function TriggerDetailPage() {
     <div className="detail-page">
       <div className="view-breadcrumbs detail-breadcrumbs">
         <Link className="text-link" to="/triggers">Requerimientos</Link>
-        <span className="bc-sep">›</span>
+        <span className="bc-sep">{">"}</span>
         <strong>{trigger.solicitante ?? "Requerimiento"}</strong>
       </div>
 
@@ -128,7 +128,7 @@ export function TriggerDetailPage() {
           <div className="stack">
             <p className="muted">Hay un workflow activo asociado a este requerimiento.</p>
             <Link className="primary-action-link" to={`/workflows/${trigger.workflow_activo_id}`}>
-              Abrir workflow →
+              Abrir workflow {"->"}
             </Link>
           </div>
         ) : (

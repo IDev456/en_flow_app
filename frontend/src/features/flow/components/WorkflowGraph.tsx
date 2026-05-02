@@ -80,26 +80,32 @@ function VerticalWorkflowGraph({
         </div>
 
         <div className="flow-timeline-steps">
-          <span className="flow-timeline-rail" aria-hidden="true" />
-          {orderedSteps.map((step) => {
+          {orderedSteps.map((step, index) => {
             const metaItems = buildMeta(step);
             const isSelected = selectedStepId === step.id;
             const waitingElapsed = step.estado === "espera" ? formatElapsedTime(step.fecha_estado_actual) : null;
             const createdElapsed = formatElapsedTime(step.fecha_creacion);
+            const latestComment = step.ultimo_comentario?.trim() || null;
+            const isFirst = index === 0;
+            const isLast = index === orderedSteps.length - 1;
 
             return (
-              <div className="flow-timeline-row">
-                <button
-                  type="button"
-                  className={
-                    isSelected
-                      ? `flow-step-node state-${step.estado} selected`
-                      : `flow-step-node state-${step.estado}`
-                  }
-                  onClick={() => onSelectStep(step.id)}
-                >
-                  <span className="flow-step-code">Paso {step.orden}</span>
-                </button>
+              <div key={step.id} className="flow-timeline-row">
+                <div className="flow-step-node-wrap" aria-hidden="true">
+                  {!isFirst && <span className="flow-step-connector top" />}
+                  <button
+                    type="button"
+                    className={
+                      isSelected
+                        ? `flow-step-node state-${step.estado} selected`
+                        : `flow-step-node state-${step.estado}`
+                    }
+                    onClick={() => onSelectStep(step.id)}
+                  >
+                    <span className="flow-step-code">Paso {step.orden}</span>
+                  </button>
+                  {!isLast && <span className="flow-step-connector bottom" />}
+                </div>
 
                 <button
                   ref={isSelected ? selectedCardRef : null}
@@ -111,15 +117,20 @@ function VerticalWorkflowGraph({
                     <div>
                       <strong>{step.nombre}</strong>
                       {step.descripcion && <p>{step.descripcion}</p>}
+                      <div className="flow-step-status-line">
+                        <span className={`flow-step-state state-${step.estado}`}>{humanizeStepState(step.estado)}</span>
+                        {waitingElapsed && <span className="flow-step-waiting">En espera {waitingElapsed}</span>}
+                      </div>
                       <div className="flow-step-facts">
-                        <span>Estado: {humanizeStepState(step.estado)}</span>
                         <span>Creado: {formatDate(step.fecha_creacion)}</span>
                         {createdElapsed && <span>{createdElapsed}</span>}
-                        {waitingElapsed && <span>En espera {waitingElapsed}</span>}
                       </div>
-                      {step.ultimo_comentario && (
-                        <p className="flow-step-comment">Ultimo comentario: "{step.ultimo_comentario}"</p>
-                      )}
+                      <div className="flow-step-latest">
+                        <span className="flow-step-latest-label">Ultimo comentario</span>
+                        <p className={latestComment ? "flow-step-comment" : "flow-step-comment empty"}>
+                          {latestComment ?? "Sin comentarios todavia"}
+                        </p>
+                      </div>
                     </div>
                     <StatusBadge value={step.estado} />
                   </div>
@@ -202,6 +213,7 @@ function GitLogWorkflowGraph({
         const isSelected = selectedStepId === step.id;
         const waitingElapsed = step.estado === "espera" ? formatElapsedTime(step.fecha_estado_actual) : null;
         const createdElapsed = formatElapsedTime(step.fecha_creacion);
+        const latestComment = step.ultimo_comentario?.trim() || null;
         return (
           <button
             ref={isSelected ? selectedRowRef : null}
@@ -222,13 +234,18 @@ function GitLogWorkflowGraph({
               </div>
               {step.descripcion && <p>{step.descripcion}</p>}
               <div className="gitlog-meta">
-                <span>Estado: {humanizeStepState(step.estado)}</span>
+                <span>{humanizeStepState(step.estado)}</span>
                 <span>Creado: {formatDate(step.fecha_creacion)}</span>
                 {createdElapsed && <span>{createdElapsed}</span>}
                 {waitingElapsed && <span>En espera {waitingElapsed}</span>}
                 {step.fecha_vencimiento && <span>Vence: {formatDate(step.fecha_vencimiento)}</span>}
               </div>
-              {step.ultimo_comentario && <p className="flow-step-comment">Ultimo comentario: "{step.ultimo_comentario}"</p>}
+              <div className="flow-step-latest">
+                <span className="flow-step-latest-label">Ultimo comentario</span>
+                <p className={latestComment ? "flow-step-comment" : "flow-step-comment empty"}>
+                  {latestComment ?? "Sin comentarios todavia"}
+                </p>
+              </div>
             </div>
           </button>
         );

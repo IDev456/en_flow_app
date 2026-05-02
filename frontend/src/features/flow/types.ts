@@ -2,6 +2,21 @@ export type TriggerStatus = "nuevo" | "en_proceso" | "resuelto" | "cancelado";
 export type WorkflowStatus = "pendiente" | "en_proceso" | "finalizado" | "cancelado";
 export type StepStatus = "activo" | "espera" | "problema" | "completado";
 
+export type Attachment = {
+  id: string;
+  nombre: string;
+  content_type: string;
+  size_bytes: number;
+  content_base64: string;
+};
+
+export type AttachmentInput = {
+  nombre: string;
+  content_type: string;
+  size_bytes: number;
+  content_base64: string;
+};
+
 export type Trigger = {
   id: string;
   solicitante: string | null;
@@ -63,8 +78,9 @@ export type StepComment = {
   id: string;
   step_instance_id: string;
   autor: string;
-  comentario: string;
+  comentario: string | null;
   fecha_creacion: string;
+  attachments: Attachment[];
 };
 
 export type StepHistoryEntry = {
@@ -76,6 +92,7 @@ export type StepHistoryEntry = {
   usuario: string;
   fecha: string;
   nota: string | null;
+  attachments: Attachment[];
 };
 
 export type TriggerCreateInput = {
@@ -103,6 +120,7 @@ export type StepCompleteInput = {
   comentario: string;
   resultado: string | null;
   observaciones: string | null;
+  attachments?: AttachmentInput[];
   siguiente_paso?: {
     nombre: string;
     descripcion?: string | null;
@@ -119,16 +137,19 @@ export type StepStatusUpdateInput = {
   estado: StepStatus;
   usuario: string;
   nota?: string | null;
+  attachments?: AttachmentInput[];
 };
 
 export type StepCommentInput = {
   autor: string;
-  comentario: string;
+  comentario: string | null;
+  attachments?: AttachmentInput[];
 };
 
 export type StepJournalEntryInput = {
-  comentario: string;
+  comentario: string | null;
   estado?: Exclude<StepStatus, "activo"> | null;
+  attachments?: AttachmentInput[];
   siguiente_paso?: {
     nombre: string;
     descripcion?: string | null;

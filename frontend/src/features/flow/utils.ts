@@ -1,4 +1,4 @@
-import type { StepComment, StepHistoryEntry, StepStatus } from "./types";
+import type { Attachment, StepComment, StepHistoryEntry, StepStatus } from "./types";
 
 export const DEFAULT_ACTOR = "sistema";
 
@@ -15,29 +15,29 @@ const statusPresentationMap: Record<string, { label: string; tone: string }> = {
   finalizado: { label: "finalizado", tone: "finalizado" }
 };
 
-export const stepStatusOptions: Array<{ 
-  value: StepStatus; 
-  label: string; 
+export const stepStatusOptions: Array<{
+  value: Exclude<StepStatus, "activo">;
+  label: string;
   requiresNote: boolean;
   placeholder: string;
 }> = [
-  { 
-    value: "espera", 
-    label: "en espera", 
-    requiresNote: true, 
-    placeholder: "Describe qué es lo que estás esperando (ej: respuesta de proveedor, validación de presupuesto)..." 
+  {
+    value: "espera",
+    label: "en espera",
+    requiresNote: true,
+    placeholder: "Describe que es lo que estas esperando (ej: respuesta de proveedor, validacion de presupuesto)..."
   },
-  { 
-    value: "problema", 
-    label: "problema", 
-    requiresNote: true, 
-    placeholder: "Explica el inconveniente detectado y si bloquea el avance del flujo..." 
+  {
+    value: "problema",
+    label: "problema",
+    requiresNote: true,
+    placeholder: "Explica el inconveniente detectado y si bloquea el avance del flujo..."
   },
-  { 
-    value: "completado", 
-    label: "completado", 
-    requiresNote: true, 
-    placeholder: "Resume el resultado final y cualquier detalle relevante del cierre del paso..." 
+  {
+    value: "completado",
+    label: "completado",
+    requiresNote: true,
+    placeholder: "Resume el resultado final y cualquier detalle relevante del cierre del paso..."
   }
 ];
 
@@ -102,6 +102,7 @@ export type JournalItem =
       date: string;
       body: string;
       status: string;
+      attachments: Attachment[];
     }
   | {
       id: string;
@@ -109,6 +110,7 @@ export type JournalItem =
       author: string;
       date: string;
       body: string;
+      attachments: Attachment[];
     };
 
 export function buildJournalItems(history: StepHistoryEntry[], comments: StepComment[]): JournalItem[] {
@@ -120,7 +122,8 @@ export function buildJournalItems(history: StepHistoryEntry[], comments: StepCom
       author: entry.usuario,
       date: entry.fecha,
       body: entry.nota ?? "",
-      status: entry.valor_nuevo ?? "activo"
+      status: entry.valor_nuevo ?? "activo",
+      attachments: entry.attachments ?? []
     }));
 
   const commentEntries = comments.map((comment) => ({
@@ -128,7 +131,8 @@ export function buildJournalItems(history: StepHistoryEntry[], comments: StepCom
     kind: "comment" as const,
     author: comment.autor,
     date: comment.fecha_creacion,
-    body: comment.comentario
+    body: comment.comentario ?? "",
+    attachments: comment.attachments ?? []
   }));
 
   return [...statusEntries, ...commentEntries].sort(

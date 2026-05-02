@@ -41,7 +41,11 @@ export function StepDetailPage() {
     if (!step) return;
 
     if (!input.estado) {
-      await addStepComment(step.id, { autor: DEFAULT_ACTOR, comentario: input.comentario });
+      await addStepComment(step.id, {
+        autor: DEFAULT_ACTOR,
+        comentario: input.comentario,
+        attachments: input.attachments ?? []
+      });
       await loadStepData();
       return;
     }
@@ -49,9 +53,10 @@ export function StepDetailPage() {
     if (input.estado === "completado") {
       await completeStep(step.id, {
         usuario: DEFAULT_ACTOR,
-        comentario: input.comentario,
+        comentario: input.comentario ?? "",
         resultado: null,
         observaciones: null,
+        attachments: input.attachments ?? [],
         siguiente_paso: input.siguiente_paso
           ? {
               nombre: input.siguiente_paso.nombre,
@@ -64,7 +69,12 @@ export function StepDetailPage() {
       return;
     }
 
-    await updateStepStatus(step.id, { estado: input.estado, usuario: DEFAULT_ACTOR, nota: input.comentario });
+    await updateStepStatus(step.id, {
+      estado: input.estado,
+      usuario: DEFAULT_ACTOR,
+      nota: input.comentario,
+      attachments: input.attachments ?? []
+    });
     await loadStepData();
   }
 
@@ -80,7 +90,7 @@ export function StepDetailPage() {
   if (error && !step) {
     return (
       <div className="error-state">
-        <span>⚠</span>
+        <span>!</span>
         {error}
       </div>
     );
@@ -92,13 +102,13 @@ export function StepDetailPage() {
         <Link className="text-link" to="/triggers">Requerimientos</Link>
         {step && (
           <>
-            <span className="bc-sep">›</span>
+            <span className="bc-sep">{">"}</span>
             <Link className="text-link" to={`/workflows/${step.workflow_id}`}>
               Workflow
             </Link>
           </>
         )}
-        <span className="bc-sep">›</span>
+        <span className="bc-sep">{">"}</span>
         <strong>Paso</strong>
       </div>
 
