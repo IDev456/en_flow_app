@@ -11,11 +11,10 @@ import {
   updateStepStatus
 } from "../api";
 import { StepDetailPanel } from "../components/StepDetailPanel";
-import { StatusBadge } from "../components/StatusBadge";
 import { WorkflowGraph } from "../components/WorkflowGraph";
 import { WorkflowVariantSwitcher, type WorkflowVariant } from "../components/WorkflowVariantSwitcher";
 import type { Step, StepComment, StepHistoryEntry, StepJournalEntryInput, TriggerDetail, WorkflowDetail } from "../types";
-import { DEFAULT_ACTOR, formatDate } from "../utils";
+import { DEFAULT_ACTOR, formatDate, humanizeStatus } from "../utils";
 
 export function WorkflowDetailPage() {
   const { workflowId = "" } = useParams();
@@ -30,6 +29,14 @@ export function WorkflowDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
+
+  function getPrimaryRequirementLabel() {
+    return trigger?.descripcion?.trim() || workflow?.objetivo_final?.trim() || "Requerimiento sin detalle";
+  }
+
+  function getSecondaryRequesterLabel() {
+    return trigger?.solicitante?.trim() || "Sin solicitante";
+  }
 
   useEffect(() => {
     void loadWorkflow();
@@ -181,7 +188,7 @@ export function WorkflowDetailPage() {
         <Link className="text-link" to="/triggers">Requerimientos</Link>
         <span className="bc-sep">{">"}</span>
         <Link className="text-link" to={`/triggers/${workflow.trigger_id}`}>
-          {trigger?.solicitante ?? "Requerimiento"}
+          {getPrimaryRequirementLabel()}
         </Link>
         <span className="bc-sep">{">"}</span>
         <strong>Workflow</strong>
@@ -190,15 +197,12 @@ export function WorkflowDetailPage() {
       <section className="workflow-topbar">
         <div>
           <div className="workflow-breadcrumb">
-            <code>{workflow.id.slice(0, 8)}</code>
             <span>{workflow.workflow_template_nombre}</span>
+            <span className="workflow-breadcrumb-sep">·</span>
+            <span className="workflow-state-inline">{humanizeStatus(workflow.estado)}</span>
           </div>
-          <h2>{trigger?.solicitante ?? "Sin solicitante"}</h2>
-          <p className="page-subtitle">{trigger?.descripcion ?? workflow.objetivo_final ?? "Seguimiento paso a paso del requerimiento."}</p>
-        </div>
-
-        <div className="workflow-topbar-actions">
-          <StatusBadge value={workflow.estado} />
+          <h2>{getPrimaryRequirementLabel()}</h2>
+          <p className="page-subtitle">Solicitante: {getSecondaryRequesterLabel()}</p>
         </div>
       </section>
 
@@ -246,7 +250,7 @@ export function WorkflowDetailPage() {
 
           <WorkflowGraph
             variant={variant}
-            triggerLabel={trigger?.solicitante ?? "requerimiento"}
+            triggerLabel={getPrimaryRequirementLabel()}
             steps={workflow.steps}
             workflowClosed={workflow.estado === "finalizado"}
             selectedStepId={selectedStepId}

@@ -49,7 +49,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
       });
 
       const workflow = await startWorkflow(trigger.id, {
-        objetivo_final: descriptionText || `Gestionar requerimiento ${trigger.id.slice(0, 8)}`,
+        objetivo_final: descriptionText || "Gestionar requerimiento",
         resolucion_esperada: "Workflow resuelto y validado",
         primer_paso: {
           nombre: "Paso inicial",

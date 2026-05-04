@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     api_v1_prefix: str = "/api/v1"
     backend_cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
-    database_url: str | None = None
+    database_url: str = "postgresql+psycopg://enflow:enflow@localhost:5432/enflow"
 
     model_config = SettingsConfigDict(
         env_file=".env",

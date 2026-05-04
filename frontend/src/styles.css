@@ -216,6 +216,12 @@ code,
   max-width: 68ch;
 }
 
+.entity-secondary {
+  margin: 0.45rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
 .primary-action,
 .primary-action-link {
   border: none;
@@ -479,7 +485,7 @@ code,
 }
 
 .requirements-table {
-  grid-template-columns: 90px 1fr 1.5fr 1fr 110px;
+  grid-template-columns: 1.65fr 1fr 110px 110px;
 }
 
 .table-head {
@@ -557,7 +563,6 @@ code,
 
 .workflow-topbar {
   display: flex;
-  justify-content: space-between;
   align-items: flex-start;
   gap: 1rem;
 }
@@ -566,6 +571,18 @@ code,
   margin-bottom: 0.5rem;
   color: var(--text-dim);
   font-size: 0.85rem;
+}
+
+.workflow-breadcrumb-sep {
+  color: var(--border-strong);
+}
+
+.workflow-state-inline {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+  font-weight: 700;
 }
 
 .workflow-meta-strip {
@@ -593,19 +610,19 @@ code,
 }
 
 .workflow-canvas {
-  min-height: 42rem;
+  min-height: 40rem;
   min-width: 0;
 }
 
 .workflow-stage {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 1rem;
+  gap: 1.25rem;
   align-items: start;
 }
 
 .workflow-stage.open {
-  grid-template-columns: minmax(0, 1fr) minmax(22rem, 30rem);
+  grid-template-columns: minmax(0, 1fr) minmax(24rem, 28rem);
 }
 
 .workflow-stage.open > .step-panel.drawer {
@@ -629,7 +646,7 @@ code,
   --flow-node-size: 120px;
   --flow-lane-size: 120px;
   --flow-row-gap: 1.5rem;
-  width: min(920px, 100%);
+  width: min(960px, 100%);
   margin: 0 auto;
   display: grid;
   align-items: start;
@@ -638,7 +655,7 @@ code,
 }
 
 .flow-anchor-wrap {
-  width: min(920px, 100%);
+  width: min(960px, 100%);
   display: grid;
   grid-template-columns: var(--flow-lane-size) minmax(0, 1fr);
   column-gap: 1rem;
@@ -664,7 +681,7 @@ code,
 }
 
 .flow-timeline-steps {
-  width: min(920px, 100%);
+  width: min(960px, 100%);
   display: grid;
   gap: var(--flow-row-gap);
   position: relative;
@@ -676,7 +693,7 @@ code,
   display: grid;
   grid-template-columns: var(--flow-lane-size) minmax(0, 1fr);
   gap: 1rem;
-  align-items: start;
+  align-items: center;
   position: relative;
 }
 
@@ -791,7 +808,7 @@ code,
 .flow-step-card {
   grid-column: 2;
   border-radius: 18px;
-  padding: 1.1rem 1.15rem;
+  padding: 1.15rem 1.2rem;
   text-align: left;
   position: relative;
   background: linear-gradient(180deg, rgba(23, 31, 45, 0.98), rgba(18, 24, 36, 0.98));
@@ -808,10 +825,24 @@ code,
 }
 
 .flow-step-card-head {
+  display: block;
+}
+
+.flow-step-card-copy {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.flow-step-card-topline {
   display: flex;
+  align-items: baseline;
   justify-content: space-between;
-  align-items: flex-start;
   gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.flow-step-card-topline strong {
+  font-size: 1.1rem;
 }
 
 .flow-step-card-head p,
@@ -825,51 +856,38 @@ code,
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem 0.9rem;
-  margin-top: 0.55rem;
   color: var(--text-muted);
   font-size: 0.82rem;
 }
 
-.flow-step-status-line {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  flex-wrap: wrap;
-  margin-top: 0.75rem;
-}
-
-.flow-step-state {
+.flow-step-status-text {
   display: inline-flex;
   align-items: center;
-  padding: 0.24rem 0.58rem;
-  border-radius: 999px;
+  gap: 0.35rem;
   font-size: 0.74rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.flow-step-state.state-activo {
+.flow-step-status-text.state-activo {
   color: #9ec3ff;
-  background: rgba(79, 140, 255, 0.14);
 }
 
-.flow-step-state.state-espera {
+.flow-step-status-text.state-espera {
   color: #ffd37a;
-  background: rgba(245, 158, 11, 0.14);
 }
 
-.flow-step-state.state-problema {
+.flow-step-status-text.state-problema {
   color: #ffb0b0;
-  background: rgba(239, 68, 68, 0.14);
 }
 
-.flow-step-state.state-completado {
+.flow-step-status-text.state-completado {
   color: #a7f3c0;
-  background: rgba(34, 197, 94, 0.14);
 }
 
 .flow-step-waiting {
+  margin: 0;
   color: #f3d48a;
   font-size: 0.8rem;
 }
@@ -883,33 +901,6 @@ code,
   margin-top: 0.85rem;
   color: var(--text-muted);
   font-size: 0.82rem;
-}
-
-.flow-step-card-props {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 0.75rem;
-  margin-top: 0.95rem;
-}
-
-.flow-step-prop {
-  display: grid;
-  gap: 0.2rem;
-  padding: 0.7rem 0.8rem;
-  border-radius: 10px;
-  background: rgba(13, 18, 27, 0.42);
-  border: 1px solid rgba(36, 49, 66, 0.7);
-}
-
-.flow-step-prop span {
-  color: var(--text-dim);
-  font-size: 0.72rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.flow-step-prop strong {
-  font-size: 0.9rem;
 }
 
 .flow-step-latest {
@@ -940,6 +931,42 @@ code,
   color: #d6e0ef;
   font-size: 0.9rem;
   line-height: 1.45;
+}
+
+.flow-step-comment.attachment {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.flow-step-comment-icon {
+  width: 2.2rem;
+  height: 2.2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(79, 140, 255, 0.14);
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.flow-step-comment-copy {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.flow-step-comment-copy strong {
+  font-size: 0.9rem;
+}
+
+.flow-step-comment-copy span {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .flow-step-comment.empty {
@@ -1039,6 +1066,11 @@ code,
   flex-wrap: wrap;
 }
 
+.gitlog-content {
+  display: grid;
+  gap: 0.55rem;
+}
+
 .step-panel {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
@@ -1065,6 +1097,8 @@ code,
 
 .step-panel-head {
   border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 0.7rem;
 }
 
 .step-panel-head-row {
@@ -1084,6 +1118,8 @@ code,
 
 .step-panel-badges {
   position: relative;
+  display: flex;
+  justify-content: flex-start;
 }
 
 .step-panel.drawer .step-panel-body {
@@ -1204,7 +1240,7 @@ code,
 
 .journal {
   display: grid;
-  gap: 1rem;
+  gap: 1.1rem;
 }
 
 .journal-list,
@@ -1254,20 +1290,19 @@ code,
 
 .journal-composer {
   display: grid;
-  gap: 0.65rem;
+  gap: 0.8rem;
+  padding-bottom: 0.25rem;
 }
 
 .attachment-toolbar {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  justify-content: space-between;
+  justify-content: flex-start;
 }
 
-.attachment-hint {
-  color: var(--text-dim);
-  font-size: 0.8rem;
+.attachment-button {
+  padding: 0.55rem 0.85rem;
+  font-size: 0.86rem;
 }
 
 .visually-hidden {
@@ -1675,7 +1710,7 @@ code,
   }
 
   .workflow-stage.open {
-    grid-template-columns: minmax(0, 1fr) minmax(19rem, 25rem);
+    grid-template-columns: minmax(0, 1fr) minmax(22rem, 25rem);
   }
 
   .workflow-stage.open > .step-panel.drawer {

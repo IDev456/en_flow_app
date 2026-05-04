@@ -124,6 +124,9 @@ class StepInstancePublic(StepInstanceBase):
     resultado: str | None = None
     observaciones: str | None = None
     ultimo_comentario: str | None = None
+    ultimo_comentario_tipo: str | None = None
+    ultimo_comentario_adjunto_nombre: str | None = None
+    ultimo_comentario_adjunto_content_type: str | None = None
 
 
 class WorkflowDetail(WorkflowSummary):

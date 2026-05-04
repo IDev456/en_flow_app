@@ -1,14 +1,14 @@
 from functools import lru_cache
 
-from app.repositories.task_repository import InMemoryTaskRepository, TaskRepository
-from app.repositories.workflow_repository import InMemoryWorkflowRepository, WorkflowRepository
+from app.repositories.task_repository import PostgresTaskRepository, TaskRepository
+from app.repositories.workflow_repository import PostgresWorkflowRepository, WorkflowRepository
 from app.services.task_service import TaskService
 from app.services.workflow_service import WorkflowService
 
 
 @lru_cache
 def get_task_repository() -> TaskRepository:
-    return InMemoryTaskRepository()
+    return PostgresTaskRepository()
 
 
 def get_task_service() -> TaskService:
@@ -17,7 +17,7 @@ def get_task_service() -> TaskService:
 
 @lru_cache
 def get_workflow_repository() -> WorkflowRepository:
-    return InMemoryWorkflowRepository()
+    return PostgresWorkflowRepository()
 
 
 def get_workflow_service() -> WorkflowService:

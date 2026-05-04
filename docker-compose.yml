@@ -1,4 +1,21 @@
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: en-flow-db
+    environment:
+      POSTGRES_DB: enflow
+      POSTGRES_USER: enflow
+      POSTGRES_PASSWORD: enflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U enflow -d enflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ./backend
@@ -10,10 +27,14 @@ services:
       APP_ENV: development
       API_V1_PREFIX: /api/v1
       BACKEND_CORS_ORIGINS: http://localhost:5173
+      DATABASE_URL: postgresql+psycopg://enflow:enflow@db:5432/enflow
     volumes:
       - ./backend:/app
     ports:
       - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
 
   frontend:
     build:
@@ -33,5 +54,5 @@ services:
       - backend
 
 volumes:
+  postgres_data:
   frontend_node_modules:
-

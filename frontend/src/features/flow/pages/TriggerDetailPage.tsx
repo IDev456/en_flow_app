@@ -15,6 +15,14 @@ export function TriggerDetailPage() {
   const [firstDescription, setFirstDescription] = useState("");
   const navigate = useNavigate();
 
+  function getPrimaryDetail(currentTrigger: TriggerDetail) {
+    return currentTrigger.descripcion?.trim() || "Requerimiento sin detalle";
+  }
+
+  function getSecondaryRequester(currentTrigger: TriggerDetail) {
+    return currentTrigger.solicitante?.trim() || "Sin solicitante";
+  }
+
   useEffect(() => {
     void loadTrigger();
   }, [triggerId]);
@@ -43,7 +51,7 @@ export function TriggerDetailPage() {
     try {
       setStartError(null);
       const workflow = await startWorkflow(trigger.id, {
-        objetivo_final: trigger.descripcion ?? `Gestionar requerimiento ${trigger.id.slice(0, 8)}`,
+        objetivo_final: trigger.descripcion ?? "Gestionar requerimiento",
         resolucion_esperada: "Flujo completado con validacion final",
         primer_paso: {
           nombre: "Paso inicial",
@@ -85,19 +93,18 @@ export function TriggerDetailPage() {
       <div className="view-breadcrumbs detail-breadcrumbs">
         <Link className="text-link" to="/triggers">Requerimientos</Link>
         <span className="bc-sep">{">"}</span>
-        <strong>{trigger.solicitante ?? "Requerimiento"}</strong>
+        <strong>{getPrimaryDetail(trigger)}</strong>
       </div>
 
       <section className="surface-panel">
         <span className="page-chip">Disparador</span>
         <div className="entity-card-head">
           <div>
-            <p className="mono muted">{trigger.id.slice(0, 8)}</p>
-            <h2>{trigger.solicitante ?? "Sin solicitante"}</h2>
+            <h2>{getPrimaryDetail(trigger)}</h2>
+            <p className="entity-secondary">Solicitante: {getSecondaryRequester(trigger)}</p>
           </div>
           <StatusBadge value={trigger.estado_general} />
         </div>
-        <p className="page-subtitle">{trigger.descripcion ?? "Sin descripcion"}</p>
         <dl className="detail-grid">
           <div>
             <dt>Tipo</dt>
@@ -153,10 +160,10 @@ export function TriggerDetailPage() {
           <div className="stack" style={{ marginTop: "1rem" }}>
             <h3>Historial de workflows</h3>
             <ul className="simple-list">
-              {trigger.workflow_ids.map((workflowId) => (
+              {trigger.workflow_ids.map((workflowId, index) => (
                 <li key={workflowId}>
                   <Link className="text-link" to={`/workflows/${workflowId}`}>
-                    <code>{workflowId.slice(0, 8)}</code>
+                    Workflow {index + 1}
                   </Link>
                 </li>
               ))}

@@ -64,6 +64,14 @@ export function TriggerListPage() {
     return workflowId ? workflowsById[workflowId] : undefined;
   }
 
+  function getPrimaryDetail(trigger: TriggerDetail) {
+    return trigger.descripcion?.trim() || "Requerimiento sin detalle";
+  }
+
+  function getSecondaryRequester(trigger: TriggerDetail) {
+    return trigger.solicitante?.trim() || "Sin solicitante";
+  }
+
   function getDisplayStatus(trigger: TriggerDetail) {
     const workflow = getWorkflowForTrigger(trigger);
     if (!workflow) return trigger.estado_general;
@@ -156,7 +164,7 @@ export function TriggerListPage() {
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar por ID, solicitante o descripcion..."
+            placeholder="Buscar por detalle o solicitante..."
           />
         </div>
         <div className="segmented-control">
@@ -178,9 +186,8 @@ export function TriggerListPage() {
 
       <section className="table-shell">
         <div className="table-head requirements-table">
-          <span>ID</span>
+          <span>Detalle</span>
           <span>Solicitante</span>
-          <span>Descripcion</span>
           <span>Pasos</span>
           <span className="align-right">Estado</span>
         </div>
@@ -196,9 +203,8 @@ export function TriggerListPage() {
 
           return (
             <article key={trigger.id} className="table-row requirements-table clickable-row" onClick={() => void handleOpen(trigger)}>
-              <span className="mono">{trigger.id.slice(0, 8)}</span>
-              <strong className="truncate-text">{trigger.solicitante || "sin solicitante"}</strong>
-              <span className="muted truncate-text">{trigger.descripcion || "-"}</span>
+              <strong className="truncate-text">{getPrimaryDetail(trigger)}</strong>
+              <span className="muted truncate-text">{getSecondaryRequester(trigger)}</span>
               <span className="muted">{stepCount === 1 ? "1 paso" : `${stepCount} pasos`}</span>
               <div className="row-status-actions align-right">
                 <StatusBadge value={displayStatus} />

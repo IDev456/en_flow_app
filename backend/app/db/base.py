@@ -1,15 +1,5 @@
-from typing import Protocol
-
-from app.schemas.task import TaskCreate, TaskPublic, TaskUpdate
+from sqlalchemy.orm import DeclarativeBase
 
 
-class TaskStore(Protocol):
-    def list(self) -> list[TaskPublic]:
-        ...
-
-    def create(self, payload: TaskCreate) -> TaskPublic:
-        ...
-
-    def update(self, task_id: str, payload: TaskUpdate) -> TaskPublic | None:
-        ...
-
+class Base(DeclarativeBase):
+    pass

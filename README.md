@@ -8,9 +8,9 @@ Cada requerimiento nace desde un disparador, inicia un workflow y avanza paso a 
 
 - **Backend:** FastAPI
 - **Frontend:** React + Vite + TypeScript
+- **Base de datos:** PostgreSQL
 - **Ejecucion local:** Docker Compose
-- **Persistencia actual:** repositorio en memoria
-- **Persistencia objetivo:** base de datos relacional en una siguiente iteracion
+- **Persistencia actual:** PostgreSQL
 
 ## Estado actual
 
@@ -25,7 +25,7 @@ El proyecto ya tiene un flujo funcional de punta a punta:
 7. Finalizar el workflow cuando se completa el ultimo paso
 8. Resolver el requerimiento al cierre del flujo
 
-Todavia es una version temprana, pero ya tiene estructura de proyecto real, API integrada, frontend navegable y reglas de negocio consistentes.
+Todavia es una version temprana, pero ya tiene estructura de proyecto real, API integrada, frontend navegable, reglas de negocio consistentes y persistencia relacional.
 
 ## Concepto funcional
 
@@ -73,12 +73,12 @@ En Flow modela el trabajo como una secuencia controlada:
 El backend sigue una estructura por capas:
 
 - `schemas`: contratos Pydantic y tipos del dominio
-- `repositories`: abstraccion de persistencia e implementacion en memoria
+- `repositories`: abstraccion de persistencia e implementacion sobre PostgreSQL
 - `services`: reglas de negocio y orquestacion del workflow
 - `api`: endpoints FastAPI
 - `core`: configuracion y errores compartidos
 
-Esto deja el proyecto listo para migrar a PostgreSQL mas adelante sin reescribir la API ni la logica principal.
+La API y la logica principal siguen desacopladas de la infraestructura gracias a la capa de repositorios.
 
 ### Frontend
 
@@ -132,11 +132,13 @@ Servicios disponibles:
 - Frontend: `http://localhost:5173`
 - Backend API: `http://localhost:8000`
 - Swagger UI: `http://localhost:8000/docs`
+- PostgreSQL: `localhost:5432`
 
 Notas:
 
 - el backend corre con `uvicorn --reload`
 - el frontend corre con `vite`
+- PostgreSQL se inicializa automaticamente al arrancar el backend
 - la configuracion actual esta orientada a desarrollo local
 
 ## Desarrollo local sin Docker
@@ -148,6 +150,12 @@ Desde `backend/`:
 ```bash
 pip install -r requirements.txt
 uvicorn app.main:app --reload
+```
+
+Variables minimas del backend para desarrollo local:
+
+```bash
+DATABASE_URL=postgresql+psycopg://enflow:enflow@localhost:5432/enflow
 ```
 
 ### Frontend
@@ -263,8 +271,6 @@ Caso minimo soportado actualmente:
 
 ## Limitaciones actuales
 
-- La persistencia sigue siendo en memoria
-- Los datos se reinician al reiniciar el backend
 - No hay autenticacion ni permisos
 - No hay migraciones de base de datos
 - No hay pipeline de CI/CD
@@ -272,7 +278,6 @@ Caso minimo soportado actualmente:
 
 ## Roadmap
 
-- Migrar persistencia a PostgreSQL
 - Agregar autenticacion y roles
 - Incorporar tests de reglas de negocio
 - Mejorar observabilidad y auditoria operativa

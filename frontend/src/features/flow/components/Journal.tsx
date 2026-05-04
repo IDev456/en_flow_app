@@ -256,24 +256,27 @@ export function Journal({
           disabled={!canComment || submitting}
         />
 
-        <div className="attachment-toolbar">
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className="visually-hidden"
-            onChange={handleFileChange}
-          />
-          <button
-            type="button"
-            className="secondary-action"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={!canComment || submitting}
-          >
-            Adjuntar archivos
-          </button>
-          <span className="attachment-hint">Tambien puedes pegar una imagen desde el portapapeles.</span>
-        </div>
+        {composerExpanded && (
+          <div className="attachment-toolbar">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="visually-hidden"
+              onChange={handleFileChange}
+            />
+            <button
+              type="button"
+              className="secondary-action attachment-button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!canComment || submitting}
+              aria-label="Adjuntar archivos"
+              title="Adjuntar archivos"
+            >
+              Adjuntar
+            </button>
+          </div>
+        )}
 
         {attachments.length > 0 && (
           <div className="attachment-draft-list">
