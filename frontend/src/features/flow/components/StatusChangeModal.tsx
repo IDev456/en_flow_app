@@ -1,8 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
 
 import type { Step, StepStatus } from "../types";
 import { stepStatusOptions } from "../utils";
-
 import { StatusBadge } from "./StatusBadge";
 
 type StatusChangeModalProps = {
@@ -18,28 +27,17 @@ export function StatusChangeModal({
   step,
   targetStatus,
   onCancel,
-  onConfirm
+  onConfirm,
 }: StatusChangeModalProps) {
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (open) {
       setNote("");
       setSubmitting(false);
-      setTimeout(() => textareaRef.current?.focus(), 50);
     }
   }, [open, targetStatus]);
-
-  useEffect(() => {
-    if (!open) return;
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onCancel();
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onCancel]);
 
   if (!open || !step || !targetStatus) {
     return null;
@@ -60,65 +58,47 @@ export function StatusChangeModal({
     }
   }
 
-  function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && isValid && !submitting) {
-      void handleConfirm();
-    }
-  }
-
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
-      <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-copy">
-          <span className="modal-kicker">
-            {targetStatus === "completado" ? "Completar paso" : "Cambiar estado"}
-          </span>
-          <div className="status-transition">
+    <Dialog open={open} onClose={submitting ? undefined : onCancel} fullWidth maxWidth="sm">
+      <DialogTitle>{targetStatus === "completado" ? "Completar paso" : "Cambiar estado"}</DialogTitle>
+      <DialogContent dividers>
+        <Stack spacing={2.5}>
+          <Stack direction="row" spacing={1.25} sx={{ alignItems: "center", flexWrap: "wrap", gap: 1.25 }}>
             <StatusBadge value={step.estado} />
-            <span className="status-arrow">→</span>
+            <Typography color="text.secondary">→</Typography>
             <StatusBadge value={targetStatus} />
-          </div>
-          <p style={{ marginTop: "0.65rem" }}>
-            La nota queda registrada en la bitácora del paso.
-          </p>
-        </div>
+          </Stack>
 
-        <label className="modal-field">
-          {requiresNote ? "Nota del cambio *" : "Nota del cambio (opcional)"}
-          <textarea
-            ref={textareaRef}
-            rows={4}
+          <Typography variant="body2" color="text.secondary">
+            La nota queda registrada en la bitacora del paso.
+          </Typography>
+
+          <TextField
+            autoFocus
+            label={requiresNote ? "Nota del cambio *" : "Nota del cambio"}
+            multiline
+            minRows={4}
             placeholder={option?.placeholder ?? "Describe brevemente el motivo del cambio..."}
             value={note}
             onChange={(event) => setNote(event.target.value)}
-            onKeyDown={handleKeyDown}
-            aria-invalid={requiresNote && charCount < 3}
+            error={requiresNote && charCount < 3}
+            helperText={requiresNote ? `${charCount} / 3 caracteres minimo` : "Opcional"}
           />
-          {requiresNote && (
-            <span className={`char-counter ${charCount < 3 ? 'error' : 'success'}`}>
-              {charCount} / 3 caracteres mínimo
-            </span>
-          )}
-        </label>
-
-        <div className="modal-actions">
-          <button type="button" className="secondary-action" onClick={onCancel}>
-            Cancelar
-          </button>
-          <button
-            type="button"
-            className="primary-action"
-            onClick={() => void handleConfirm()}
-            disabled={!isValid || submitting}
-          >
-            {submitting ? "Guardando..." : targetStatus === "completado" ? "Completar paso" : "Confirmar"}
-          </button>
-        </div>
-
-        <p className="char-hint" style={{ textAlign: "right", marginTop: "-0.25rem" }}>
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ p: 3, justifyContent: "space-between" }}>
+        <Typography variant="body2" color="text.secondary">
           Ctrl + Enter para confirmar
-        </p>
-      </div>
-    </div>
+        </Typography>
+        <Stack direction="row" spacing={1.25}>
+          <Button variant="text" color="inherit" onClick={onCancel}>
+            Cancelar
+          </Button>
+          <Button variant="contained" onClick={() => void handleConfirm()} disabled={!isValid || submitting}>
+            {submitting ? "Guardando..." : targetStatus === "completado" ? "Completar paso" : "Confirmar"}
+          </Button>
+        </Stack>
+      </DialogActions>
+    </Dialog>
   );
 }

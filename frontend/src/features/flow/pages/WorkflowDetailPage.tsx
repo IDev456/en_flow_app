@@ -1,5 +1,17 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  Alert,
+  Box,
+  Breadcrumbs,
+  Card,
+  CardContent,
+  Chip,
+  CircularProgress,
+  Link,
+  Stack,
+  Typography,
+} from "@mui/material";
+import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 
 import {
   addStepComment,
@@ -8,8 +20,9 @@ import {
   getStepHistory,
   getTrigger,
   getWorkflow,
-  updateStepStatus
+  updateStepStatus,
 } from "../api";
+import { StatusBadge } from "../components/StatusBadge";
 import { StepDetailPanel } from "../components/StepDetailPanel";
 import { WorkflowGraph } from "../components/WorkflowGraph";
 import { WorkflowVariantSwitcher, type WorkflowVariant } from "../components/WorkflowVariantSwitcher";
@@ -50,21 +63,6 @@ export function WorkflowDetailPage() {
       setStepHistory([]);
     }
   }, [selectedStepId]);
-
-  useEffect(() => {
-    if (!panelOpen) {
-      return;
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setPanelOpen(false);
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [panelOpen]);
 
   async function loadWorkflow(preferredStepId?: string) {
     try {
@@ -113,7 +111,7 @@ export function WorkflowDetailPage() {
       await addStepComment(selectedStepId, {
         autor: DEFAULT_ACTOR,
         comentario: input.comentario,
-        attachments: input.attachments ?? []
+        attachments: input.attachments ?? [],
       });
       await loadStepSideData(selectedStepId);
       return;
@@ -129,10 +127,10 @@ export function WorkflowDetailPage() {
         siguiente_paso: input.siguiente_paso
           ? {
               nombre: input.siguiente_paso.nombre,
-              descripcion: input.siguiente_paso.descripcion ?? null
+              descripcion: input.siguiente_paso.descripcion ?? null,
             }
           : null,
-        finalizar_workflow: Boolean(input.finalizar_workflow)
+        finalizar_workflow: Boolean(input.finalizar_workflow),
       });
       const currentWorkflow = await getWorkflow(workflowId);
       const nextActiveStep = currentWorkflow.steps.find((step) => step.estado === "activo");
@@ -144,7 +142,7 @@ export function WorkflowDetailPage() {
       estado: input.estado,
       usuario: DEFAULT_ACTOR,
       nota: input.comentario,
-      attachments: input.attachments ?? []
+      attachments: input.attachments ?? [],
     });
     await refreshAfterStepChange(selectedStepId);
   }
@@ -160,72 +158,116 @@ export function WorkflowDetailPage() {
 
   if (loading) {
     return (
-      <div className="loading-state">
-        <span className="spinner" />
-        Cargando workflow...
-      </div>
+      <Stack direction="row" spacing={1.5} sx={{ py: 8, alignItems: "center", justifyContent: "center" }}>
+        <CircularProgress size={24} />
+        <Typography color="text.secondary">Cargando workflow...</Typography>
+      </Stack>
     );
   }
 
   if (error) {
-    return (
-      <div className="error-state">
-        <span>!</span>
-        {error}
-      </div>
-    );
+    return <Alert severity="error">{error}</Alert>;
   }
 
   if (!workflow) {
-    return <p className="status">Workflow no encontrado.</p>;
+    return <Alert severity="info">Workflow no encontrado.</Alert>;
   }
 
   const selectedStep: Step | null = workflow.steps.find((step) => step.id === selectedStepId) ?? workflow.steps[0] ?? null;
+  const activeStep: Step | null = workflow.steps.find((step) => step.estado === "activo") ?? selectedStep;
 
   return (
-    <div className="workflow-page">
-      <div className="view-breadcrumbs">
-        <Link className="text-link" to="/triggers">Requerimientos</Link>
-        <span className="bc-sep">{">"}</span>
-        <Link className="text-link" to={`/triggers/${workflow.trigger_id}`}>
+    <Stack spacing={3}>
+      <Breadcrumbs>
+        <Link component={RouterLink} underline="hover" color="inherit" to="/triggers">
+          Requerimientos
+        </Link>
+        <Link component={RouterLink} underline="hover" color="inherit" to={`/triggers/${workflow.trigger_id}`}>
           {getPrimaryRequirementLabel()}
         </Link>
-        <span className="bc-sep">{">"}</span>
-        <strong>Workflow</strong>
-      </div>
+        <Typography color="text.primary">Workflow</Typography>
+      </Breadcrumbs>
 
-      <section className="workflow-topbar">
-        <div>
-          <div className="workflow-breadcrumb">
-            <span>{workflow.workflow_template_nombre}</span>
-            <span className="workflow-breadcrumb-sep">·</span>
-            <span className="workflow-state-inline">{humanizeStatus(workflow.estado)}</span>
-          </div>
-          <h2>{getPrimaryRequirementLabel()}</h2>
-          <p className="page-subtitle">Solicitante: {getSecondaryRequesterLabel()}</p>
-        </div>
-      </section>
+      <Card>
+        <CardContent sx={{ p: { xs: 2.25, md: 2.5 } }}>
+          <Stack spacing={2}>
+            <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ justifyContent: "space-between" }}>
+              <Box>
+                <Typography variant="overline" color="primary.light">
+                  {workflow.workflow_template_nombre}
+                </Typography>
+                <Typography variant="h3">{getPrimaryRequirementLabel()}</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
+                  Solicitante: {getSecondaryRequesterLabel()}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  {activeStep
+                    ? `Ahora conviene avanzar sobre "${activeStep.nombre}". Puedes abrir cualquier paso para revisar contexto o registrar novedades.`
+                    : "El workflow no tiene pasos activos en este momento."}
+                </Typography>
+              </Box>
+              <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                <StatusBadge value={workflow.estado} />
+                <Chip
+                  label={workflow.paso_actual ? `Paso actual ${workflow.paso_actual}` : "Workflow finalizado"}
+                  variant="outlined"
+                  size="small"
+                />
+              </Stack>
+            </Stack>
 
-      <section className="workflow-meta-strip">
-        <div>
-          <span>Paso actual</span>
-          <strong>{workflow.paso_actual ?? "Finalizado"}</strong>
-        </div>
-        <div>
-          <span>Inicio</span>
-          <strong>{formatDate(workflow.fecha_inicio)}</strong>
-        </div>
-        <div>
-          <span>Cierre</span>
-          <strong>{formatDate(workflow.fecha_fin)}</strong>
-        </div>
-        <div>
-          <span>Objetivo</span>
-          <strong>{workflow.objetivo_final ?? "Sin definir"}</strong>
-        </div>
-      </section>
+            {(workflow.fecha_inicio || workflow.fecha_fin || workflow.objetivo_final) && (
+              <Stack direction={{ xs: "column", md: "row" }} spacing={{ xs: 0.5, md: 2 }} sx={{ color: "text.secondary" }}>
+                {workflow.fecha_inicio && (
+                  <Typography variant="body2">Inicio: {formatDate(workflow.fecha_inicio)}</Typography>
+                )}
+                {workflow.fecha_fin && <Typography variant="body2">Cierre: {formatDate(workflow.fecha_fin)}</Typography>}
+                {workflow.objetivo_final && <Typography variant="body2">Objetivo: {workflow.objetivo_final}</Typography>}
+              </Stack>
+            )}
+          </Stack>
+        </CardContent>
+      </Card>
 
-      <section className={panelOpen && selectedStep ? "workflow-stage open" : "workflow-stage"}>
+      <Box
+        sx={{
+          display: "grid",
+          gap: 2,
+          alignItems: "start",
+          gridTemplateColumns: panelOpen && selectedStep ? { xs: "1fr", xl: "minmax(0, 1fr) 420px" } : "1fr",
+        }}
+      >
+        <Card sx={{ minWidth: 0 }} onPointerDown={() => panelOpen && setPanelOpen(false)}>
+          <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
+            <Stack spacing={3}>
+              <Stack
+                direction={{ xs: "column", md: "row" }}
+                spacing={2}
+                sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", md: "center" } }}
+              >
+                <Box>
+                  <Typography variant="h5">Pasos</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                    Selecciona un paso para ver su detalle, dejar comentarios, adjuntar evidencia o cambiar su estado.
+                  </Typography>
+                </Box>
+                <WorkflowVariantSwitcher value={variant} onChange={setVariant} />
+              </Stack>
+
+              <WorkflowGraph
+                variant={variant}
+                triggerLabel={getPrimaryRequirementLabel()}
+                steps={workflow.steps}
+                workflowClosed={workflow.estado === "finalizado"}
+                selectedStepId={selectedStepId}
+                onSelectStep={handleSelectStep}
+                onOpenStep={handleOpenStep}
+                onOpenTrigger={() => navigate(`/triggers/${workflow.trigger_id}`)}
+              />
+            </Stack>
+          </CardContent>
+        </Card>
+
         {panelOpen && selectedStep && (
           <StepDetailPanel
             workflowId={workflow.id}
@@ -238,28 +280,7 @@ export function WorkflowDetailPage() {
             onSubmitJournal={handleSubmitJournal}
           />
         )}
-
-        <div className="surface-panel workflow-canvas" onPointerDown={() => panelOpen && setPanelOpen(false)}>
-          <div className="panel-header-row">
-            <div>
-              <h3>Flujo</h3>
-              <p className="muted">Vista secuencial de los pasos habilitados por este requerimiento.</p>
-            </div>
-            <WorkflowVariantSwitcher value={variant} onChange={setVariant} />
-          </div>
-
-          <WorkflowGraph
-            variant={variant}
-            triggerLabel={getPrimaryRequirementLabel()}
-            steps={workflow.steps}
-            workflowClosed={workflow.estado === "finalizado"}
-            selectedStepId={selectedStepId}
-            onSelectStep={handleSelectStep}
-            onOpenStep={handleOpenStep}
-            onOpenTrigger={() => navigate(`/triggers/${workflow.trigger_id}`)}
-          />
-        </div>
-      </section>
-    </div>
+      </Box>
+    </Stack>
   );
 }

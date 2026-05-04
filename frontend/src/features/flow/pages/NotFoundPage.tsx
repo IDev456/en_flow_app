@@ -1,13 +1,23 @@
-import { Link } from "react-router-dom";
+import { Button, Card, CardContent, Stack, Typography } from "@mui/material";
+import { Link as RouterLink } from "react-router-dom";
 
 export function NotFoundPage() {
   return (
-    <section className="empty-state">
-      <h2>Ruta no encontrada</h2>
-      <p>La vista solicitada no existe dentro del flujo actual.</p>
-      <Link className="text-link" to="/triggers">
-        Volver a requerimientos
-      </Link>
-    </section>
+    <Card sx={{ maxWidth: 620, mx: "auto", mt: { xs: 4, md: 8 } }}>
+      <CardContent sx={{ p: { xs: 3, md: 4 } }}>
+        <Stack spacing={2} sx={{ alignItems: "flex-start" }}>
+          <Typography variant="subtitle2" color="warning.light">
+            Ruta no encontrada
+          </Typography>
+          <Typography variant="h3">La vista solicitada no existe</Typography>
+          <Typography variant="body1" color="text.secondary">
+            La URL actual no corresponde a ninguna pantalla operativa disponible dentro del flujo.
+          </Typography>
+          <Button component={RouterLink} to="/triggers" variant="contained">
+            Volver a requerimientos
+          </Button>
+        </Stack>
+      </CardContent>
+    </Card>
   );
 }

@@ -1,5 +1,20 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import PlayCircleOutlineRoundedIcon from "@mui/icons-material/PlayCircleOutlineRounded";
+import SchemaRoundedIcon from "@mui/icons-material/SchemaRounded";
+import {
+  Alert,
+  Box,
+  Breadcrumbs,
+  Button,
+  Card,
+  CardContent,
+  CircularProgress,
+  Link,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
+import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 
 import { getTrigger, startWorkflow } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
@@ -57,8 +72,8 @@ export function TriggerDetailPage() {
           nombre: "Paso inicial",
           descripcion: firstDescription.trim() || null,
           asignado_a: DEFAULT_ACTOR,
-          fecha_vencimiento: null
-        }
+          fecha_vencimiento: null,
+        },
       });
       navigate(`/workflows/${workflow.id}`);
     } catch (err) {
@@ -68,109 +83,188 @@ export function TriggerDetailPage() {
 
   if (loading) {
     return (
-      <div className="loading-state">
-        <span className="spinner" />
-        Cargando requerimiento...
-      </div>
+      <Stack direction="row" spacing={1.5} sx={{ py: 8, alignItems: "center", justifyContent: "center" }}>
+        <CircularProgress size={24} />
+        <Typography color="text.secondary">Cargando requerimiento...</Typography>
+      </Stack>
     );
   }
 
   if (error && !trigger) {
-    return (
-      <div className="error-state">
-        <span>!</span>
-        {error}
-      </div>
-    );
+    return <Alert severity="error">{error}</Alert>;
   }
 
   if (!trigger) {
-    return <p className="status">Requerimiento no encontrado.</p>;
+    return <Alert severity="info">Requerimiento no encontrado.</Alert>;
   }
 
   return (
-    <div className="detail-page">
-      <div className="view-breadcrumbs detail-breadcrumbs">
-        <Link className="text-link" to="/triggers">Requerimientos</Link>
-        <span className="bc-sep">{">"}</span>
-        <strong>{getPrimaryDetail(trigger)}</strong>
-      </div>
+    <Stack spacing={3}>
+      <Breadcrumbs>
+        <Link component={RouterLink} underline="hover" color="inherit" to="/triggers">
+          Requerimientos
+        </Link>
+        <Typography color="text.primary">{getPrimaryDetail(trigger)}</Typography>
+      </Breadcrumbs>
 
-      <section className="surface-panel">
-        <span className="page-chip">Disparador</span>
-        <div className="entity-card-head">
-          <div>
-            <h2>{getPrimaryDetail(trigger)}</h2>
-            <p className="entity-secondary">Solicitante: {getSecondaryRequester(trigger)}</p>
-          </div>
-          <StatusBadge value={trigger.estado_general} />
-        </div>
-        <dl className="detail-grid">
-          <div>
-            <dt>Tipo</dt>
-            <dd>{trigger.tipo}</dd>
-          </div>
-          <div>
-            <dt>Registrado por</dt>
-            <dd>{trigger.creado_por}</dd>
-          </div>
-          <div>
-            <dt>Creado</dt>
-            <dd>{formatDate(trigger.fecha_creacion)}</dd>
-          </div>
-          <div>
-            <dt>Actualizado</dt>
-            <dd>{formatDate(trigger.fecha_actualizacion)}</dd>
-          </div>
-        </dl>
-        {trigger.metadata && <pre className="code-block">{JSON.stringify(trigger.metadata, null, 2)}</pre>}
-      </section>
+      <Box
+        sx={{
+          display: "grid",
+          gap: 2,
+          gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1.1fr) minmax(320px, 0.9fr)" },
+        }}
+      >
+        <Card>
+          <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
+            <Stack spacing={2.5}>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ justifyContent: "space-between" }}>
+                <Box>
+                  <Typography variant="subtitle2" color="primary.light">
+                    Disparador
+                  </Typography>
+                  <Typography variant="h3">{getPrimaryDetail(trigger)}</Typography>
+                  <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
+                    Solicitante: {getSecondaryRequester(trigger)}
+                  </Typography>
+                </Box>
+                <StatusBadge value={trigger.estado_general} />
+              </Stack>
 
-      <section className="surface-panel">
-        <div className="panel-header-row">
-          <h3>Workflow asociado</h3>
-        </div>
+              <Box
+                sx={{
+                  display: "grid",
+                  gap: 2,
+                  gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" },
+                }}
+              >
+                <InfoItem label="Tipo" value={trigger.tipo} />
+                <InfoItem label="Registrado por" value={trigger.creado_por} />
+                <InfoItem label="Creado" value={formatDate(trigger.fecha_creacion)} />
+                <InfoItem label="Actualizado" value={formatDate(trigger.fecha_actualizacion)} />
+              </Box>
 
-        {trigger.workflow_activo_id ? (
-          <div className="stack">
-            <p className="muted">Hay un workflow activo asociado a este requerimiento.</p>
-            <Link className="primary-action-link" to={`/workflows/${trigger.workflow_activo_id}`}>
-              Abrir workflow {"->"}
-            </Link>
-          </div>
-        ) : (
-          <div className="stack">
-            <p className="status">Todavia no hay workflow activo. Define el primer paso para iniciarlo.</p>
-            {trigger.estado_general !== "resuelto" && (
-              <>
-                <label>
-                  Descripcion del primer paso *
-                  <textarea rows={4} value={firstDescription} onChange={(event) => setFirstDescription(event.target.value)} />
-                </label>
-                <button type="button" className="primary-action" onClick={() => void handleStartWorkflow()}>
-                  Iniciar workflow
-                </button>
-                {startError && <p className="inline-error">{startError}</p>}
-              </>
-            )}
-          </div>
-        )}
+              {trigger.metadata && (
+                <Box
+                  component="pre"
+                  sx={{
+                    m: 0,
+                    p: 2,
+                    overflow: "auto",
+                    borderRadius: 3,
+                    backgroundColor: "rgba(7, 11, 20, 0.75)",
+                    border: "1px solid",
+                    borderColor: "divider",
+                    fontSize: 13,
+                  }}
+                >
+                  {JSON.stringify(trigger.metadata, null, 2)}
+                </Box>
+              )}
+            </Stack>
+          </CardContent>
+        </Card>
 
-        {trigger.workflow_ids.length > 0 && (
-          <div className="stack" style={{ marginTop: "1rem" }}>
-            <h3>Historial de workflows</h3>
-            <ul className="simple-list">
-              {trigger.workflow_ids.map((workflowId, index) => (
-                <li key={workflowId}>
-                  <Link className="text-link" to={`/workflows/${workflowId}`}>
-                    Workflow {index + 1}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </section>
-    </div>
+        <Card>
+          <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
+            <Stack spacing={2.5}>
+              <Stack spacing={0.75}>
+                <Typography variant="h5">Workflow asociado</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Define el primer paso o abre el flujo actual para seguir operando.
+                </Typography>
+              </Stack>
+
+              {trigger.workflow_activo_id ? (
+                <Stack spacing={2}>
+                  <Alert severity="info">Hay un workflow activo asociado a este requerimiento.</Alert>
+                  <Button
+                    component={RouterLink}
+                    to={`/workflows/${trigger.workflow_activo_id}`}
+                    variant="contained"
+                    startIcon={<SchemaRoundedIcon />}
+                  >
+                    Abrir workflow
+                  </Button>
+                </Stack>
+              ) : (
+                <Stack spacing={2}>
+                  <Typography color="text.secondary">
+                    Todavia no hay workflow activo. Define el primer paso para iniciarlo.
+                  </Typography>
+                  {trigger.estado_general !== "resuelto" && (
+                    <>
+                      <TextField
+                        label="Descripcion del primer paso *"
+                        multiline
+                        minRows={4}
+                        value={firstDescription}
+                        onChange={(event) => setFirstDescription(event.target.value)}
+                      />
+                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
+                        <Button
+                          variant="contained"
+                          startIcon={<PlayCircleOutlineRoundedIcon />}
+                          onClick={() => void handleStartWorkflow()}
+                        >
+                          Iniciar workflow
+                        </Button>
+                      </Stack>
+                      {startError && <Alert severity="error">{startError}</Alert>}
+                    </>
+                  )}
+                </Stack>
+              )}
+
+              {trigger.workflow_ids.length > 0 && (
+                <Stack spacing={1.25}>
+                  <Typography variant="h6">Historial de workflows</Typography>
+                  <Stack spacing={1}>
+                    {trigger.workflow_ids.map((workflowId, index) => (
+                      <Button
+                        key={workflowId}
+                        component={RouterLink}
+                        to={`/workflows/${workflowId}`}
+                        variant="outlined"
+                        color="inherit"
+                        sx={{ justifyContent: "space-between" }}
+                      >
+                        <span>Workflow {index + 1}</span>
+                        <span>{workflowId.slice(0, 8)}</span>
+                      </Button>
+                    ))}
+                  </Stack>
+                </Stack>
+              )}
+            </Stack>
+          </CardContent>
+        </Card>
+      </Box>
+    </Stack>
+  );
+}
+
+type InfoItemProps = {
+  label: string;
+  value: string;
+};
+
+function InfoItem({ label, value }: InfoItemProps) {
+  return (
+    <Box
+      sx={{
+        p: 2,
+        borderRadius: 3,
+        border: "1px solid",
+        borderColor: "divider",
+        backgroundColor: "rgba(12, 18, 31, 0.62)",
+      }}
+    >
+      <Typography variant="subtitle2" color="text.secondary">
+        {label}
+      </Typography>
+      <Typography variant="body1" sx={{ mt: 0.5 }}>
+        {value}
+      </Typography>
+    </Box>
   );
 }

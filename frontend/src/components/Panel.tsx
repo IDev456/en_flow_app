@@ -1,4 +1,5 @@
 import { PropsWithChildren } from "react";
+import { Card, CardContent, Typography } from "@mui/material";
 
 type PanelProps = PropsWithChildren<{
   title: string;
@@ -6,10 +7,11 @@ type PanelProps = PropsWithChildren<{
 
 export function Panel({ title, children }: PanelProps) {
   return (
-    <section className="panel">
-      <h2>{title}</h2>
-      {children}
-    </section>
+    <Card>
+      <CardContent sx={{ display: "grid", gap: 2 }}>
+        <Typography variant="h5">{title}</Typography>
+        {children}
+      </CardContent>
+    </Card>
   );
 }
-

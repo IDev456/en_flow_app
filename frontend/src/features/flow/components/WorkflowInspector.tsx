@@ -1,9 +1,19 @@
-import { type CSSProperties, type FormEvent, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import type { FormEvent } from "react";
+import { useEffect, useState } from "react";
+import {
+  Alert,
+  Button,
+  Card,
+  CardContent,
+  Link,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
+import { Link as RouterLink } from "react-router-dom";
 
 import type { Step } from "../types";
 import { DEFAULT_ACTOR, formatDate } from "../utils";
-
 import { StatusBadge } from "./StatusBadge";
 
 type WorkflowInspectorProps = {
@@ -15,18 +25,6 @@ type WorkflowInspectorProps = {
     observaciones: string | null;
     comentario_final: string | null;
   }) => Promise<void>;
-};
-
-const RAIL_STYLE: CSSProperties = {
-  marginLeft: "auto",
-  width: "400px",
-  flexShrink: 0,
-  overflowY: "auto",
-  height: "100%",
-  backgroundColor: "var(--surface-color, #ffffff)",
-  borderLeft: "1px solid var(--border-color, #e0e0e0)",
-  borderRight: "none",
-  boxShadow: "-4px 0 12px rgba(0, 0, 0, 0.05)"
 };
 
 export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInspectorProps) {
@@ -60,7 +58,7 @@ export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInsp
         usuario: userTrimmed,
         resultado: resultado.trim() || null,
         observaciones: observaciones.trim() || null,
-        comentario_final: comentarioFinal.trim() || null
+        comentario_final: comentarioFinal.trim() || null,
       });
       setResultado("");
       setObservaciones("");
@@ -74,95 +72,93 @@ export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInsp
 
   if (!step) {
     return (
-      <section className="detail-rail empty" style={RAIL_STYLE}>
-        <h3>Sin paso seleccionado</h3>
-        <p>Selecciona un paso del flujo para ver sus propiedades y operar sobre el.</p>
-      </section>
+      <Card>
+        <CardContent>
+          <Stack spacing={1}>
+            <Typography variant="h6">Sin paso seleccionado</Typography>
+            <Typography color="text.secondary">
+              Selecciona un paso del flujo para ver sus propiedades y operar sobre el.
+            </Typography>
+          </Stack>
+        </CardContent>
+      </Card>
     );
   }
 
   const canComplete = step.estado === "activo" || step.estado === "espera" || step.estado === "problema";
 
   return (
-    <section className="detail-rail" style={RAIL_STYLE}>
-      <div className="detail-rail-head">
-        <code>{workflowId}</code>
-        <h3>{step.nombre}</h3>
-        <p>{step.descripcion ?? "Sin descripcion"}</p>
-        <div className="detail-badges">
-          <StatusBadge value={step.estado} />
-          <span className="ghost-badge">{step.tipo}</span>
-        </div>
-      </div>
+    <Card>
+      <CardContent sx={{ display: "grid", gap: 2 }}>
+        <Stack spacing={1}>
+          <Typography variant="subtitle2" color="text.secondary">
+            {workflowId}
+          </Typography>
+          <Typography variant="h5">{step.nombre}</Typography>
+          <Typography color="text.secondary">{step.descripcion ?? "Sin descripcion"}</Typography>
+          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
+            <StatusBadge value={step.estado} />
+            <Typography variant="body2" color="text.secondary">
+              {step.tipo}
+            </Typography>
+          </Stack>
+        </Stack>
 
-      <dl className="detail-stack">
-        <div>
-          <dt>Asignado</dt>
-          <dd>{step.asignado_a ?? "Sin asignar"}</dd>
-        </div>
-        <div>
-          <dt>Inicio</dt>
-          <dd>{formatDate(step.fecha_inicio)}</dd>
-        </div>
-        <div>
-          <dt>Vencimiento</dt>
-          <dd>{formatDate(step.fecha_vencimiento)}</dd>
-        </div>
-        <div>
-          <dt>Resultado</dt>
-          <dd>{step.resultado ?? "Todavia sin resultado"}</dd>
-        </div>
-      </dl>
+        <Stack spacing={1}>
+          <Typography variant="body2" color="text.secondary">
+            Asignado: {step.asignado_a ?? "Sin asignar"}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Inicio: {formatDate(step.fecha_inicio)}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Vencimiento: {formatDate(step.fecha_vencimiento)}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Resultado: {step.resultado ?? "Todavia sin resultado"}
+          </Typography>
+        </Stack>
 
-      {canComplete ? (
-        <form className="inspector-form" onSubmit={handleSubmit}>
-          <label>
-            Usuario operativo
-            <input value={usuario} onChange={(event) => setUsuario(event.target.value)} required />
-          </label>
-          <label>
-            Resultado
-            <textarea
-              rows={3}
+        {canComplete ? (
+          <Stack component="form" spacing={1.5} onSubmit={handleSubmit}>
+            <TextField label="Usuario operativo" value={usuario} onChange={(event) => setUsuario(event.target.value)} required />
+            <TextField
+              label="Resultado"
+              multiline
+              minRows={3}
               value={resultado}
               onChange={(event) => setResultado(event.target.value)}
               placeholder="Que se obtuvo al finalizar este paso?"
             />
-          </label>
-          <label>
-            Observaciones
-            <textarea
-              rows={3}
+            <TextField
+              label="Observaciones"
+              multiline
+              minRows={3}
               value={observaciones}
               onChange={(event) => setObservaciones(event.target.value)}
               placeholder="Detalles tecnicos o impedimentos encontrados durante la ejecucion..."
             />
-          </label>
-          <label>
-            Comentario final
-            <textarea
-              rows={3}
+            <TextField
+              label="Comentario final"
+              multiline
+              minRows={3}
               value={comentarioFinal}
               onChange={(event) => setComentarioFinal(event.target.value)}
               placeholder="Nota de cierre para la bitacora general..."
             />
-          </label>
-          {error && <p className="inline-error">{error}</p>}
-          <button type="submit" className="primary-action" disabled={submitting}>
-            {submitting ? "Completando..." : "Completar paso"}
-          </button>
-        </form>
-      ) : (
-        <div className="inspector-note">
-          <p>Este paso no esta listo para completarse desde la vista del workflow.</p>
-        </div>
-      )}
+            {error && <Alert severity="error">{error}</Alert>}
+            <Button type="submit" variant="contained" disabled={submitting}>
+              {submitting ? "Completando..." : "Completar paso"}
+            </Button>
+          </Stack>
+        ) : (
+          <Alert severity="info">Este paso no esta listo para completarse desde la vista del workflow.</Alert>
+        )}
 
-      <div className="rail-footer-links">
-        <Link className="text-link" to={`/steps/${step.id}`}>
+        <Link component={RouterLink} to={`/steps/${step.id}`} underline="hover">
           Abrir detalle completo del paso
         </Link>
-      </div>
-    </section>
+      </CardContent>
+    </Card>
   );
 }

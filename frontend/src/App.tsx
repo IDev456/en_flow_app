@@ -1,3 +1,6 @@
+import AddCircleOutlineRoundedIcon from "@mui/icons-material/AddCircleOutlineRounded";
+import AssignmentTurnedInRoundedIcon from "@mui/icons-material/AssignmentTurnedInRounded";
+import { AppBar, Box, Button, Container, Stack, Toolbar, Typography } from "@mui/material";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 import { NotFoundPage } from "./features/flow/pages/NotFoundPage";
@@ -22,26 +25,81 @@ function App() {
   }
 
   return (
-    <main className="app-shell">
-      <header className="app-titlebar">
-        <h1>Gestion secuencial de tareas</h1>
-      </header>
+    <Box sx={{ minHeight: "100vh" }}>
+      <AppBar
+        position="sticky"
+        color="transparent"
+        sx={{
+          backgroundColor: "rgba(10, 15, 27, 0.78)",
+        }}
+      >
+        <Container maxWidth="xl">
+          <Toolbar disableGutters sx={{ minHeight: 80, gap: 2, justifyContent: "space-between" }}>
+            <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
+              <Box
+                sx={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 3,
+                  display: "grid",
+                  placeItems: "center",
+                  background: "linear-gradient(135deg, rgba(94, 168, 255, 0.22), rgba(115, 214, 197, 0.24))",
+                  border: "1px solid rgba(147, 169, 198, 0.18)",
+                }}
+              >
+                <AssignmentTurnedInRoundedIcon color="primary" />
+              </Box>
+              <Box>
+                <Typography variant="subtitle2" color="primary.light">
+                  En Flow
+                </Typography>
+                <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                  Gestion secuencial de tareas
+                </Typography>
+              </Box>
+            </Stack>
 
-      <section className="workspace">
-        <Routes>
-          <Route path="/" element={<Navigate to="/triggers" replace />} />
-          <Route path="/dashboard" element={<Navigate to="/triggers" replace />} />
-          <Route path="/triggers" element={<TriggerListPage />} />
-          <Route path="/triggers/new" element={<TriggerCreatePage />} />
-          <Route path="/triggers/:triggerId" element={<TriggerDetailPage />} />
-          <Route path="/workflows/:workflowId" element={<WorkflowDetailPage />} />
-          <Route path="/steps/:stepId" element={<StepDetailPage />} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
-      </section>
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              spacing={1.25}
+              sx={{ alignItems: { xs: "stretch", sm: "center" } }}
+            >
+              <Button variant="text" color="inherit" onClick={() => navigate("/triggers")}>
+                Requerimientos
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<AddCircleOutlineRoundedIcon />}
+                onClick={() => navigate("/triggers?modal=new")}
+              >
+                Nuevo requerimiento
+              </Button>
+            </Stack>
+          </Toolbar>
+        </Container>
+      </AppBar>
 
+      <Container
+        maxWidth="xl"
+        sx={{
+          py: { xs: 3, md: 4 },
+        }}
+      >
+        <Box sx={{ minHeight: "calc(100vh - 112px)" }}>
+          <Routes>
+            <Route path="/" element={<Navigate to="/triggers" replace />} />
+            <Route path="/dashboard" element={<Navigate to="/triggers" replace />} />
+            <Route path="/triggers" element={<TriggerListPage />} />
+            <Route path="/triggers/new" element={<TriggerCreatePage />} />
+            <Route path="/triggers/:triggerId" element={<TriggerDetailPage />} />
+            <Route path="/workflows/:workflowId" element={<WorkflowDetailPage />} />
+            <Route path="/steps/:stepId" element={<StepDetailPage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        </Box>
+      </Container>
       {isCreateModalOpen && <TriggerCreateModal onClose={closeCreateModal} />}
-    </main>
+    </Box>
   );
 }
 

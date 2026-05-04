@@ -1,3 +1,5 @@
+import { ToggleButton, ToggleButtonGroup } from "@mui/material";
+
 export type WorkflowVariant = "vertical" | "gitlog";
 
 type WorkflowVariantSwitcherProps = {
@@ -12,17 +14,24 @@ const options: Array<{ value: WorkflowVariant; label: string }> = [
 
 export function WorkflowVariantSwitcher({ value, onChange }: WorkflowVariantSwitcherProps) {
   return (
-    <div className="segmented-control">
+    <ToggleButtonGroup
+      exclusive
+      size="small"
+      value={value}
+      onChange={(_, nextValue: WorkflowVariant | null) => {
+        if (nextValue) {
+          onChange(nextValue);
+        }
+      }}
+    >
       {options.map((option) => (
-        <button
+        <ToggleButton
           key={option.value}
-          type="button"
-          className={value === option.value ? "segment active" : "segment"}
-          onClick={() => onChange(option.value)}
+          value={option.value}
         >
           {option.label}
-        </button>
+        </ToggleButton>
       ))}
-    </div>
+    </ToggleButtonGroup>
   );
 }

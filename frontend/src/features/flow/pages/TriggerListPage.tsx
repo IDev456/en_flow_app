@@ -1,4 +1,29 @@
 import { useEffect, useState } from "react";
+import AddCircleOutlineRoundedIcon from "@mui/icons-material/AddCircleOutlineRounded";
+import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
+import { alpha } from "@mui/material/styles";
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  CircularProgress,
+  InputAdornment,
+  Paper,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
+} from "@mui/material";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { getWorkflow, listTriggers } from "../api";
@@ -6,11 +31,13 @@ import { StatusBadge } from "../components/StatusBadge";
 import type { TriggerDetail, WorkflowDetail } from "../types";
 import { formatDate } from "../utils";
 
+type TriggerFilter = "all" | "active" | "done";
+
 export function TriggerListPage() {
   const [triggers, setTriggers] = useState<TriggerDetail[]>([]);
   const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"all" | "active" | "done">("all");
+  const [filter, setFilter] = useState<TriggerFilter>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -81,7 +108,7 @@ export function TriggerListPage() {
     }
 
     if (workflow.estado === "en_proceso") {
-      const currentStep = workflow.steps.find((s) => s.estado !== "completado");
+      const currentStep = workflow.steps.find((step) => step.estado !== "completado");
       if (currentStep?.estado === "problema") return "problema";
       if (currentStep?.estado === "espera") return "espera";
     }
@@ -120,104 +147,220 @@ export function TriggerListPage() {
   ).length;
   const totalCreatedSteps = triggers.reduce((sum, trigger) => sum + (getWorkflowForTrigger(trigger)?.steps.length ?? 0), 0);
 
+  const kpis = [
+    { label: "Activos", value: activeCount, helper: "Requerimientos con flujo en curso" },
+    { label: "Completados", value: completedCount, helper: "Casos cerrados correctamente" },
+    { label: "Sin flujo", value: withoutWorkflowCount, helper: "Requieren definir paso inicial" },
+    { label: "Pasos creados", value: totalCreatedSteps, helper: "Total generado entre todos los requerimientos" },
+  ];
+
   return (
-    <section className="requirements-page">
-      <section className="kpi-topbar">
-        <div className="kpi-cluster">
-          <article className="kpi-card">
-            <span>Activos</span>
-            <strong>{activeCount}</strong>
-            <small>Requerimientos con flujo en curso</small>
-          </article>
-          <article className="kpi-card">
-            <span>Completados</span>
-            <strong>{completedCount}</strong>
-            <small>Casos cerrados correctamente</small>
-          </article>
-          <article className="kpi-card">
-            <span>Sin flujo</span>
-            <strong>{withoutWorkflowCount}</strong>
-            <small>Requieren definir paso inicial</small>
-          </article>
-          <article className="kpi-card">
-            <span>Pasos creados</span>
-            <strong>{totalCreatedSteps}</strong>
-            <small>Total de pasos generados entre todos los requerimientos</small>
-          </article>
-        </div>
-      </section>
+    <Stack spacing={3.5}>
+      <Box
+        sx={{
+          display: "grid",
+          gap: 2,
+          gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", xl: "repeat(4, minmax(0, 1fr))" },
+        }}
+      >
+        {kpis.map((item) => (
+          <Card key={item.label}>
+            <CardContent sx={{ display: "grid", gap: 0.75 }}>
+              <Typography variant="subtitle2" color="text.secondary">
+                {item.label}
+              </Typography>
+              <Typography variant="h3">{item.value}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {item.helper}
+              </Typography>
+            </CardContent>
+          </Card>
+        ))}
+      </Box>
 
-      <div className="page-heading">
-        <div>
-          <h2>Requerimientos</h2>
-          <p className="page-subtitle">
-            {activeCount} activos | {completedCount} completados
-          </p>
-        </div>
-        <button type="button" className="primary-action-link" onClick={() => setSearchParams({ modal: "new" })}>
-          Nuevo requerimiento
-        </button>
-      </div>
+      <Card>
+        <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
+          <Stack spacing={3}>
+            <Stack
+              direction={{ xs: "column", md: "row" }}
+              spacing={2}
+              sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", md: "center" } }}
+            >
+              <Box>
+                <Typography variant="subtitle2" color="primary.light">
+                  Operacion diaria
+                </Typography>
+                <Typography variant="h2">Requerimientos</Typography>
+                <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
+                  Revisa los casos en curso, detecta bloqueos y entra al workflow para continuar el siguiente paso.
+                </Typography>
+              </Box>
+              <Button
+                variant="contained"
+                startIcon={<AddCircleOutlineRoundedIcon />}
+                onClick={() => setSearchParams({ modal: "new" })}
+              >
+                Nuevo requerimiento
+              </Button>
+            </Stack>
 
-      <div className="page-toolbar">
-        <div className="search-field">
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar por detalle o solicitante..."
-          />
-        </div>
-        <div className="segmented-control">
-          <button type="button" className={filter === "all" ? "segment active" : "segment"} onClick={() => setFilter("all")}>
-            Todos
-          </button>
-          <button
-            type="button"
-            className={filter === "active" ? "segment active" : "segment"}
-            onClick={() => setFilter("active")}
-          >
-            Activos
-          </button>
-          <button type="button" className={filter === "done" ? "segment active" : "segment"} onClick={() => setFilter("done")}>
-            Completados
-          </button>
-        </div>
-      </div>
+            <Stack direction={{ xs: "column", lg: "row" }} spacing={1.5} sx={{ justifyContent: "space-between" }}>
+              <TextField
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Buscar por detalle, solicitante o id..."
+                sx={{ maxWidth: 460 }}
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchRoundedIcon color="action" />
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+              />
 
-      <section className="table-shell">
-        <div className="table-head requirements-table">
-          <span>Detalle</span>
-          <span>Solicitante</span>
-          <span>Pasos</span>
-          <span className="align-right">Estado</span>
-        </div>
+              <ToggleButtonGroup
+                exclusive
+                size="small"
+                value={filter}
+                onChange={(_, value: TriggerFilter | null) => {
+                  if (value) {
+                    setFilter(value);
+                  }
+                }}
+              >
+                <ToggleButton value="all">Todos</ToggleButton>
+                <ToggleButton value="active">Activos</ToggleButton>
+                <ToggleButton value="done">Completados</ToggleButton>
+              </ToggleButtonGroup>
+            </Stack>
 
-        {loading && <p className="status padded">Cargando requerimientos...</p>}
-        {error && <p className="inline-error padded">{error}</p>}
-        {!loading && filtered.length === 0 && <p className="status padded">No hay requerimientos que coincidan.</p>}
+            {!loading && !error && (
+              <Typography variant="body2" color="text.secondary">
+                {filtered.length} {filtered.length === 1 ? "resultado" : "resultados"}. Haz click en un requerimiento para abrir su flujo activo o revisar el detalle si aun no tiene workflow.
+              </Typography>
+            )}
 
-        {filtered.map((trigger) => {
-          const workflow = getWorkflowForTrigger(trigger);
-          const stepCount = workflow?.steps.length ?? 0;
-          const displayStatus = getDisplayStatus(trigger);
+            {loading && (
+              <Stack direction="row" spacing={1.5} sx={{ py: 6, alignItems: "center", justifyContent: "center" }}>
+                <CircularProgress size={22} />
+                <Typography color="text.secondary">Cargando requerimientos...</Typography>
+              </Stack>
+            )}
 
-          return (
-            <article key={trigger.id} className="table-row requirements-table clickable-row" onClick={() => void handleOpen(trigger)}>
-              <strong className="truncate-text">{getPrimaryDetail(trigger)}</strong>
-              <span className="muted truncate-text">{getSecondaryRequester(trigger)}</span>
-              <span className="muted">{stepCount === 1 ? "1 paso" : `${stepCount} pasos`}</span>
-              <div className="row-status-actions align-right">
-                <StatusBadge value={displayStatus} />
-                {trigger.workflow_ids.length === 0 && trigger.estado_general !== "resuelto" && (
-                  <span className="ghost-badge">sin flujo</span>
-                )}
-              </div>
-            </article>
-          );
-        })}
-      </section>
+            {error && <Alert severity="error">{error}</Alert>}
 
-      <p className="footnote">Ultima actualizacion: {triggers[0] ? formatDate(triggers[0].fecha_actualizacion) : "sin datos"}</p>
-    </section>
+            {!loading && !error && filtered.length === 0 && (
+              <Alert severity="info">No hay requerimientos que coincidan con tu búsqueda actual.</Alert>
+            )}
+
+            {!loading && !error && filtered.length > 0 && (
+              <>
+                <TableContainer
+                  component={Paper}
+                  sx={{
+                    display: { xs: "none", md: "block" },
+                    borderRadius: 3,
+                    border: "1px solid",
+                    borderColor: "divider",
+                    backgroundColor: alpha("#0c1324", 0.76),
+                  }}
+                >
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Detalle</TableCell>
+                        <TableCell>Solicitante</TableCell>
+                        <TableCell>Pasos</TableCell>
+                        <TableCell align="right">Estado</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {filtered.map((trigger) => {
+                        const workflow = getWorkflowForTrigger(trigger);
+                        const stepCount = workflow?.steps.length ?? 0;
+                        const displayStatus = getDisplayStatus(trigger);
+
+                        return (
+                          <TableRow
+                            key={trigger.id}
+                            hover
+                            onClick={() => void handleOpen(trigger)}
+                            sx={{ cursor: "pointer" }}
+                          >
+                            <TableCell>
+                              <Stack spacing={0.5}>
+                                <Typography sx={{ fontWeight: 700 }}>{getPrimaryDetail(trigger)}</Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  {trigger.id}
+                                </Typography>
+                              </Stack>
+                            </TableCell>
+                            <TableCell>{getSecondaryRequester(trigger)}</TableCell>
+                            <TableCell>{stepCount === 1 ? "1 paso" : `${stepCount} pasos`}</TableCell>
+                            <TableCell align="right">
+                              <Stack direction="row" spacing={1} sx={{ justifyContent: "flex-end", alignItems: "center" }}>
+                                <StatusBadge value={displayStatus} />
+                                {trigger.workflow_ids.length === 0 && trigger.estado_general !== "resuelto" && (
+                                  <Chip label="sin flujo" size="small" variant="outlined" />
+                                )}
+                              </Stack>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+
+                <Stack spacing={1.5} sx={{ display: { xs: "flex", md: "none" } }}>
+                  {filtered.map((trigger) => {
+                    const workflow = getWorkflowForTrigger(trigger);
+                    const stepCount = workflow?.steps.length ?? 0;
+                    const displayStatus = getDisplayStatus(trigger);
+
+                    return (
+                      <Card
+                        key={trigger.id}
+                        sx={{ cursor: "pointer" }}
+                        onClick={() => void handleOpen(trigger)}
+                      >
+                        <CardContent>
+                          <Stack spacing={1.25}>
+                            <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+                              <Box>
+                                <Typography variant="h6">{getPrimaryDetail(trigger)}</Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  {getSecondaryRequester(trigger)}
+                                </Typography>
+                              </Box>
+                              <StatusBadge value={displayStatus} />
+                            </Stack>
+
+                            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
+                              <Chip label={stepCount === 1 ? "1 paso" : `${stepCount} pasos`} size="small" variant="outlined" />
+                              <Chip label={trigger.id.slice(0, 8)} size="small" variant="outlined" />
+                              {trigger.workflow_ids.length === 0 && trigger.estado_general !== "resuelto" && (
+                                <Chip label="sin flujo" size="small" variant="outlined" />
+                              )}
+                            </Stack>
+                          </Stack>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </Stack>
+              </>
+            )}
+          </Stack>
+        </CardContent>
+      </Card>
+
+      <Typography variant="body2" color="text.secondary">
+        Ultima actualizacion: {triggers[0] ? formatDate(triggers[0].fecha_actualizacion) : "sin datos"}
+      </Typography>
+    </Stack>
   );
 }

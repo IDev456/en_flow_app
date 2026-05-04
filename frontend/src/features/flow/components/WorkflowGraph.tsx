@@ -1,7 +1,21 @@
 import { useEffect, useRef } from "react";
+import AttachmentRoundedIcon from "@mui/icons-material/AttachmentRounded";
+import ImageRoundedIcon from "@mui/icons-material/ImageRounded";
+import type { Theme } from "@mui/material/styles";
+import { alpha, useTheme } from "@mui/material/styles";
+import {
+  Box,
+  ButtonBase,
+  Card,
+  Chip,
+  Divider,
+  Stack,
+  Typography,
+} from "@mui/material";
 
 import type { Step } from "../types";
-import { formatDate, formatElapsedTime, humanizeStatus } from "../utils";
+import { formatDate, formatElapsedTime, getStatusTone, humanizeStatus } from "../utils";
+import { StatusBadge } from "./StatusBadge";
 import type { WorkflowVariant } from "./WorkflowVariantSwitcher";
 
 type WorkflowGraphProps = {
@@ -26,23 +40,63 @@ export function WorkflowGraph(props: WorkflowGraphProps) {
 function renderLatestStepMovement(step: Step) {
   if (step.ultimo_comentario_tipo === "imagen" || step.ultimo_comentario_tipo === "adjunto") {
     return (
-      <div className="flow-step-comment attachment">
-        <span className="flow-step-comment-icon" aria-hidden="true">
-          {step.ultimo_comentario_tipo === "imagen" ? "🖼" : "📎"}
-        </span>
-        <div className="flow-step-comment-copy">
-          <strong>{step.ultimo_comentario_tipo === "imagen" ? "Imagen adjunta" : "Archivo adjunto"}</strong>
-          <span>{step.ultimo_comentario_adjunto_nombre ?? "Adjunto reciente"}</span>
-        </div>
-      </div>
+      <Stack direction="row" spacing={1.25} sx={{ alignItems: "center" }}>
+        {step.ultimo_comentario_tipo === "imagen" ? <ImageRoundedIcon color="info" /> : <AttachmentRoundedIcon color="info" />}
+        <Box>
+          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+            {step.ultimo_comentario_tipo === "imagen" ? "Imagen adjunta" : "Archivo adjunto"}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {step.ultimo_comentario_adjunto_nombre ?? "Adjunto reciente"}
+          </Typography>
+        </Box>
+      </Stack>
     );
   }
 
   return (
-    <p className={step.ultimo_comentario?.trim() ? "flow-step-comment" : "flow-step-comment empty"}>
+    <Typography variant="body2" color={step.ultimo_comentario?.trim() ? "text.primary" : "text.secondary"}>
       {step.ultimo_comentario?.trim() || "Sin comentarios todavia"}
-    </p>
+    </Typography>
   );
+}
+
+function getStepStateColors(theme: Theme, status: Step["estado"]) {
+  const tone = getStatusTone(status);
+
+  if (tone === "completado" || tone === "finalizado" || tone === "resuelto") {
+    return {
+      borderColor: alpha(theme.palette.success.main, 0.48),
+      backgroundColor: alpha(theme.palette.success.main, 0.16),
+      textColor: theme.palette.success.light,
+      lineColor: alpha(theme.palette.success.main, 0.36),
+    };
+  }
+
+  if (tone === "espera") {
+    return {
+      borderColor: alpha(theme.palette.warning.main, 0.48),
+      backgroundColor: alpha(theme.palette.warning.main, 0.16),
+      textColor: theme.palette.warning.light,
+      lineColor: alpha(theme.palette.warning.main, 0.34),
+    };
+  }
+
+  if (tone === "problema" || tone === "cancelado" || tone === "error") {
+    return {
+      borderColor: alpha(theme.palette.error.main, 0.5),
+      backgroundColor: alpha(theme.palette.error.main, 0.16),
+      textColor: theme.palette.error.light,
+      lineColor: alpha(theme.palette.error.main, 0.34),
+    };
+  }
+
+  return {
+    borderColor: alpha(theme.palette.primary.main, 0.5),
+    backgroundColor: alpha(theme.palette.primary.main, 0.16),
+    textColor: theme.palette.primary.light,
+    lineColor: alpha(theme.palette.primary.main, 0.34),
+  };
 }
 
 function VerticalWorkflowGraph({
@@ -52,16 +106,12 @@ function VerticalWorkflowGraph({
   selectedStepId,
   onSelectStep,
   onOpenStep,
-  onOpenTrigger
+  onOpenTrigger,
 }: WorkflowGraphProps) {
+  const theme = useTheme();
   const viewportRef = useRef<HTMLDivElement>(null);
   const selectedCardRef = useRef<HTMLButtonElement | null>(null);
   const orderedSteps = [...steps].sort((left, right) => right.orden - left.orden);
-
-  function handleOpenStep(stepId: string) {
-    onSelectStep(stepId);
-    onOpenStep(stepId);
-  }
 
   useEffect(() => {
     if (!viewportRef.current || !selectedCardRef.current) {
@@ -77,82 +127,225 @@ function VerticalWorkflowGraph({
   }, [selectedStepId, steps.length]);
 
   return (
-    <div ref={viewportRef} className="graph-viewport">
-      <div className="flow-timeline">
-        <div className="flow-anchor-wrap">
-          <div className={workflowClosed ? "flow-origin flow-end flow-anchor active" : "flow-origin flow-end flow-anchor"}>
-            <span className="flow-origin-label">Cierre</span>
-            <strong>{workflowClosed ? "Workflow finalizado" : "Pendiente"}</strong>
-          </div>
-          <span className="flow-anchor-link" aria-hidden="true" />
-        </div>
+    <Box ref={viewportRef} sx={{ maxHeight: "72vh", overflow: "auto", pr: 0.5 }}>
+      <Stack spacing={2.5}>
+        <Card
+          variant="outlined"
+          sx={{
+            borderStyle: "dashed",
+            borderColor: workflowClosed ? alpha(theme.palette.success.main, 0.4) : "divider",
+            backgroundColor: workflowClosed ? alpha(theme.palette.success.main, 0.08) : alpha(theme.palette.common.white, 0.02),
+            borderRadius: 2,
+          }}
+        >
+          <Box sx={{ p: 2.25 }}>
+            <Stack spacing={0.75}>
+              <Typography variant="subtitle2" color="text.secondary">
+                Cierre
+              </Typography>
+              <Typography variant="h6">{workflowClosed ? "Workflow finalizado" : "Cierre pendiente"}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {workflowClosed ? "El requerimiento ya completo su recorrido." : "El flujo se cerrara al completar el ultimo paso."}
+              </Typography>
+            </Stack>
+          </Box>
+        </Card>
 
-        <div className="flow-timeline-steps">
+        <Box
+          aria-hidden="true"
+          sx={{
+            width: 2,
+            height: 24,
+            alignSelf: { xs: "center", md: "flex-start" },
+            ml: { md: "59px" },
+            borderRadius: 999,
+            background: `linear-gradient(180deg, ${alpha(theme.palette.success.main, 0.38)}, ${alpha(theme.palette.primary.main, 0.28)})`,
+          }}
+        />
+
+        <Stack spacing={2}>
           {orderedSteps.map((step, index) => {
             const isSelected = selectedStepId === step.id;
             const waitingElapsed = step.estado === "espera" ? formatElapsedTime(step.fecha_estado_actual) : null;
-            const createdElapsed = formatElapsedTime(step.fecha_creacion);
-            const latestComment = step.ultimo_comentario?.trim() || null;
-            const isFirst = index === 0;
             const isLast = index === orderedSteps.length - 1;
+            const isFirst = index === 0;
+            const stateColors = getStepStateColors(theme, step.estado);
+            const shouldExpand = isSelected || step.estado !== "completado";
 
             return (
-              <div key={step.id} className="flow-timeline-row">
-                <div className="flow-step-node-wrap" aria-hidden="true">
-                  {!isFirst && <span className="flow-step-connector top" />}
-                  <button
-                    type="button"
-                    className={
-                      isSelected
-                        ? `flow-step-node state-${step.estado} selected`
-                        : `flow-step-node state-${step.estado}`
-                    }
-                    onClick={() => onSelectStep(step.id)}
-                  >
-                    <span className="flow-step-code">Paso {step.orden}</span>
-                  </button>
-                  {!isLast && <span className="flow-step-connector bottom" />}
-                </div>
-
-                <button
-                  ref={isSelected ? selectedCardRef : null}
-                  type="button"
-                  className={isSelected ? "flow-step-card selected" : "flow-step-card"}
-                  onClick={() => handleOpenStep(step.id)}
+              <Box
+                key={step.id}
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: { xs: "1fr", md: "120px minmax(0, 1fr)" },
+                  gap: 2,
+                  alignItems: "stretch",
+                }}
+              >
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    position: "relative",
+                    py: { xs: 0.5, md: 0.75 },
+                  }}
                 >
-                  <div className="flow-step-card-head">
-                    <div className="flow-step-card-copy">
-                      <div className="flow-step-card-topline">
-                        <strong>{step.nombre}</strong>
-                        <span className={`flow-step-status-text state-${step.estado}`}>{humanizeStatus(step.estado)}</span>
-                      </div>
-                      {step.descripcion && <p>{step.descripcion}</p>}
-                      {waitingElapsed && <p className="flow-step-waiting">En espera {waitingElapsed}</p>}
-                      <div className="flow-step-facts">
-                        <span>Creado: {formatDate(step.fecha_creacion)}</span>
-                        {createdElapsed && <span>{createdElapsed}</span>}
-                      </div>
-                      <div className="flow-step-latest">
-                        <span className="flow-step-latest-label">Ultimo comentario</span>
-                        {renderLatestStepMovement(step)}
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              </div>
+                  {!isFirst && (
+                    <Box
+                      sx={{
+                        position: "absolute",
+                        top: { xs: -22, md: -26 },
+                        height: { xs: 24, md: 28 },
+                        width: 2,
+                        borderRadius: 999,
+                        background: `linear-gradient(180deg, ${alpha(theme.palette.common.white, 0.08)}, ${stateColors.lineColor})`,
+                      }}
+                    />
+                  )}
+                  {!isLast && (
+                    <Box
+                      sx={{
+                        position: "absolute",
+                        bottom: { xs: -22, md: -26 },
+                        height: { xs: 24, md: 28 },
+                        width: 2,
+                        borderRadius: 999,
+                        background: `linear-gradient(180deg, ${stateColors.lineColor}, ${alpha(theme.palette.common.white, 0.08)})`,
+                      }}
+                    />
+                  )}
+                  <Box
+                    sx={{
+                      width: 96,
+                      height: 96,
+                      borderRadius: "50%",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      px: 1,
+                      textAlign: "center",
+                      border: "1.5px solid",
+                      borderColor: stateColors.borderColor,
+                      backgroundColor: stateColors.backgroundColor,
+                      boxShadow: isSelected ? `0 0 0 3px ${alpha(stateColors.textColor, 0.12)}` : "none",
+                    }}
+                  >
+                    <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.1, color: stateColors.textColor }}>
+                      Paso {step.orden}
+                    </Typography>
+                    <Typography variant="caption" sx={{ mt: 0.5, px: 1, color: stateColors.textColor }}>
+                      {humanizeStatus(step.estado)}
+                    </Typography>
+                  </Box>
+                </Box>
+
+                <Card
+                  variant="outlined"
+                  sx={{
+                    borderColor: isSelected ? "primary.main" : "divider",
+                    boxShadow: isSelected ? `0 0 0 1px ${alpha(theme.palette.primary.main, 0.34)}` : "none",
+                    borderRadius: 2,
+                  }}
+                >
+                  <ButtonBase
+                    ref={isSelected ? selectedCardRef : null}
+                    onClick={() => {
+                      onSelectStep(step.id);
+                      onOpenStep(step.id);
+                    }}
+                    sx={{ display: "block", width: "100%", textAlign: "left" }}
+                  >
+                    {shouldExpand ? (
+                      <Box sx={{ p: 2.25 }}>
+                        <Stack spacing={1.25}>
+                          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} sx={{ justifyContent: "space-between" }}>
+                            <Box>
+                              {step.estado === "activo" && (
+                                <Typography variant="overline" color="primary.light">
+                                  Paso actual
+                                </Typography>
+                              )}
+                              <Typography variant="h6" sx={{ mt: 1 }}>
+                                {step.nombre}
+                              </Typography>
+                            </Box>
+                            <StatusBadge value={step.estado} />
+                          </Stack>
+
+                          {step.descripcion && (
+                            <Typography variant="body2" color="text.secondary">
+                              {step.descripcion}
+                            </Typography>
+                          )}
+
+                          <Stack spacing={0.5}>
+                            <Typography variant="body2" color="text.secondary">
+                              Creado: {formatDate(step.fecha_creacion)}
+                            </Typography>
+                            {step.fecha_inicio && (
+                              <Typography variant="body2" color="text.secondary">
+                                Inicio: {formatDate(step.fecha_inicio)}
+                              </Typography>
+                            )}
+                            {waitingElapsed && (
+                              <Typography variant="body2" color="warning.light">
+                                En espera {waitingElapsed}
+                              </Typography>
+                            )}
+                          </Stack>
+                        </Stack>
+                      </Box>
+                    ) : (
+                      <Box sx={{ p: 1.75 }}>
+                        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} sx={{ justifyContent: "space-between", alignItems: { sm: "center" } }}>
+                          <Typography variant="h6">{step.nombre}</Typography>
+                          <StatusBadge value={step.estado} />
+                        </Stack>
+                      </Box>
+                    )}
+                  </ButtonBase>
+                </Card>
+              </Box>
             );
           })}
-        </div>
+        </Stack>
 
-        <div className="flow-anchor-wrap bottom">
-          <span className="flow-anchor-link" aria-hidden="true" />
-          <button type="button" className="flow-origin flow-origin-button flow-anchor" onClick={onOpenTrigger}>
-            <span className="flow-origin-label">Disparador</span>
-            <strong>{triggerLabel}</strong>
-          </button>
-        </div>
-      </div>
-    </div>
+        <Box
+          aria-hidden="true"
+          sx={{
+            width: 2,
+            height: 24,
+            alignSelf: { xs: "center", md: "flex-start" },
+            ml: { md: "59px" },
+            borderRadius: 999,
+            background: `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.28)}, ${alpha(theme.palette.common.white, 0.12)})`,
+          }}
+        />
+
+        <Card
+          variant="outlined"
+          sx={{
+            borderStyle: "dashed",
+            cursor: "pointer",
+            borderRadius: 2,
+          }}
+        >
+          <ButtonBase onClick={onOpenTrigger} sx={{ p: 2.25, display: "block", textAlign: "left" }}>
+            <Stack spacing={0.75}>
+              <Typography variant="subtitle2" color="text.secondary">
+                Disparador
+              </Typography>
+              <Typography variant="h6">{triggerLabel}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Origen del flujo operativo.
+              </Typography>
+            </Stack>
+          </ButtonBase>
+        </Card>
+      </Stack>
+    </Box>
   );
 }
 
@@ -163,16 +356,12 @@ function GitLogWorkflowGraph({
   selectedStepId,
   onSelectStep,
   onOpenStep,
-  onOpenTrigger
+  onOpenTrigger,
 }: WorkflowGraphProps) {
+  const theme = useTheme();
   const viewportRef = useRef<HTMLDivElement>(null);
   const selectedRowRef = useRef<HTMLButtonElement | null>(null);
   const orderedSteps = [...steps].sort((left, right) => right.orden - left.orden);
-
-  function handleOpenStep(stepId: string) {
-    onSelectStep(stepId);
-    onOpenStep(stepId);
-  }
 
   useEffect(() => {
     if (!viewportRef.current || !selectedRowRef.current) {
@@ -188,70 +377,96 @@ function GitLogWorkflowGraph({
   }, [selectedStepId, steps.length]);
 
   return (
-    <div ref={viewportRef} className="gitlog-list">
-      <button type="button" className="gitlog-row static trigger-row" onClick={onOpenTrigger}>
-        <div className="gitlog-rail">
-          <span className="gitlog-dot trigger" />
-          <span className="gitlog-line" />
-        </div>
-        <div className="gitlog-content">
-          <div className="gitlog-head">
-            <code>TRG</code>
-            <strong>{triggerLabel}</strong>
-          </div>
-          <p>Origen del flujo</p>
-        </div>
-      </button>
+    <Box ref={viewportRef} sx={{ maxHeight: "72vh", overflow: "auto", pr: 0.5 }}>
+      <Stack spacing={1.5}>
+        <Card variant="outlined">
+          <ButtonBase onClick={onOpenTrigger} sx={{ p: 2.25, display: "block", textAlign: "left" }}>
+            <Stack spacing={0.75}>
+              <Chip label="TRG" size="small" color="primary" variant="outlined" sx={{ alignSelf: "flex-start" }} />
+              <Typography variant="h6">{triggerLabel}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Origen del flujo
+              </Typography>
+            </Stack>
+          </ButtonBase>
+        </Card>
 
-      {orderedSteps.map((step) => {
-        const isSelected = selectedStepId === step.id;
-        const waitingElapsed = step.estado === "espera" ? formatElapsedTime(step.fecha_estado_actual) : null;
-        const createdElapsed = formatElapsedTime(step.fecha_creacion);
-        return (
-          <button
-            ref={isSelected ? selectedRowRef : null}
-            key={step.id}
-            type="button"
-            className={isSelected ? "gitlog-row selected" : "gitlog-row"}
-            onClick={() => handleOpenStep(step.id)}
-          >
-            <div className="gitlog-rail">
-              <span className={`gitlog-dot ${step.estado}`} />
-              <span className="gitlog-line" />
-            </div>
-            <div className="gitlog-content">
-              <div className="gitlog-head">
-                <code>{`P${step.orden.toString().padStart(2, "0")}`}</code>
-                <strong>{step.nombre}</strong>
-                <span className={`flow-step-status-text state-${step.estado}`}>{humanizeStatus(step.estado)}</span>
-              </div>
-              {step.descripcion && <p>{step.descripcion}</p>}
-              <div className="gitlog-meta">
-                <span>Creado: {formatDate(step.fecha_creacion)}</span>
-                {createdElapsed && <span>{createdElapsed}</span>}
-                {waitingElapsed && <span>En espera {waitingElapsed}</span>}
-                {step.fecha_vencimiento && <span>Vence: {formatDate(step.fecha_vencimiento)}</span>}
-              </div>
-              <div className="flow-step-latest">
-                <span className="flow-step-latest-label">Ultimo comentario</span>
-                {renderLatestStepMovement(step)}
-              </div>
-            </div>
-          </button>
-        );
-      })}
+        {orderedSteps.map((step) => {
+          const isSelected = selectedStepId === step.id;
+          const waitingElapsed = step.estado === "espera" ? formatElapsedTime(step.fecha_estado_actual) : null;
+          const createdElapsed = formatElapsedTime(step.fecha_creacion);
+          return (
+            <Card
+              key={step.id}
+              variant="outlined"
+              sx={{
+                borderColor: isSelected ? "primary.main" : "divider",
+                boxShadow: isSelected ? `0 0 0 1px ${alpha(theme.palette.primary.main, 0.34)}` : "none",
+                borderRadius: 2,
+              }}
+            >
+              <ButtonBase
+                ref={isSelected ? selectedRowRef : null}
+                onClick={() => {
+                  onSelectStep(step.id);
+                  onOpenStep(step.id);
+                }}
+                sx={{ p: 2.25, display: "block", width: "100%", textAlign: "left" }}
+              >
+                <Stack spacing={1.25}>
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} sx={{ justifyContent: "space-between" }}>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", gap: 1 }}>
+                      <Chip label={`P${step.orden.toString().padStart(2, "0")}`} size="small" variant="outlined" />
+                      <Typography variant="h6">{step.nombre}</Typography>
+                    </Stack>
+                    <StatusBadge value={step.estado} />
+                  </Stack>
+                  {step.descripcion && (
+                    <Typography variant="body2" color="text.secondary">
+                      {step.descripcion}
+                    </Typography>
+                  )}
+                  <Stack spacing={0.5}>
+                    <Typography variant="body2" color="text.secondary">
+                      Creado: {formatDate(step.fecha_creacion)}
+                    </Typography>
+                    {createdElapsed && (
+                      <Typography variant="body2" color="text.secondary">
+                        {createdElapsed}
+                      </Typography>
+                    )}
+                    {waitingElapsed && (
+                      <Typography variant="body2" color="warning.light">
+                        En espera {waitingElapsed}
+                      </Typography>
+                    )}
+                    {step.fecha_vencimiento && (
+                      <Typography variant="body2" color="text.secondary">
+                        Vence: {formatDate(step.fecha_vencimiento)}
+                      </Typography>
+                    )}
+                  </Stack>
+                  <Box>
+                    <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 0.75 }}>
+                      Ultimo movimiento
+                    </Typography>
+                    {renderLatestStepMovement(step)}
+                  </Box>
+                </Stack>
+              </ButtonBase>
+            </Card>
+          );
+        })}
 
-      <div className="gitlog-row static">
-        <div className="gitlog-rail">
-          <span className={workflowClosed ? "gitlog-dot completado" : "gitlog-dot"} />
-        </div>
-        <div className="gitlog-content">
-          <div className="gitlog-head">
-            <code>END</code>
-            <strong>{workflowClosed ? "Workflow finalizado" : "Cierre pendiente"}</strong>
-          </div>
-        </div>
-      </div>
-    </div>
+        <Card variant="outlined" sx={{ borderRadius: 2 }}>
+          <Box sx={{ p: 2.25 }}>
+            <Stack spacing={0.75}>
+              <Chip label="END" size="small" color={workflowClosed ? "success" : "default"} variant="outlined" sx={{ alignSelf: "flex-start" }} />
+              <Typography variant="h6">{workflowClosed ? "Workflow finalizado" : "Cierre pendiente"}</Typography>
+            </Stack>
+          </Box>
+        </Card>
+      </Stack>
+    </Box>
   );
 }

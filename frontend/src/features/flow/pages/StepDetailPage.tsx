@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Alert, Breadcrumbs, CircularProgress, Link, Stack, Typography } from "@mui/material";
+import { Link as RouterLink, useParams } from "react-router-dom";
 
 import { addStepComment, completeStep, getStep, getStepComments, getStepHistory, updateStepStatus } from "../api";
 import { StepDetailPanel } from "../components/StepDetailPanel";
@@ -25,7 +26,7 @@ export function StepDetailPage() {
       const [stepData, commentsData, historyData] = await Promise.all([
         getStep(stepId),
         getStepComments(stepId),
-        getStepHistory(stepId)
+        getStepHistory(stepId),
       ]);
       setStep(stepData);
       setComments(commentsData);
@@ -44,7 +45,7 @@ export function StepDetailPage() {
       await addStepComment(step.id, {
         autor: DEFAULT_ACTOR,
         comentario: input.comentario,
-        attachments: input.attachments ?? []
+        attachments: input.attachments ?? [],
       });
       await loadStepData();
       return;
@@ -60,10 +61,10 @@ export function StepDetailPage() {
         siguiente_paso: input.siguiente_paso
           ? {
               nombre: input.siguiente_paso.nombre,
-              descripcion: input.siguiente_paso.descripcion ?? null
+              descripcion: input.siguiente_paso.descripcion ?? null,
             }
           : null,
-        finalizar_workflow: Boolean(input.finalizar_workflow)
+        finalizar_workflow: Boolean(input.finalizar_workflow),
       });
       await loadStepData();
       return;
@@ -73,44 +74,37 @@ export function StepDetailPage() {
       estado: input.estado,
       usuario: DEFAULT_ACTOR,
       nota: input.comentario,
-      attachments: input.attachments ?? []
+      attachments: input.attachments ?? [],
     });
     await loadStepData();
   }
 
   if (loading) {
     return (
-      <div className="loading-state">
-        <span className="spinner" />
-        Cargando paso...
-      </div>
+      <Stack direction="row" spacing={1.5} sx={{ py: 8, alignItems: "center", justifyContent: "center" }}>
+        <CircularProgress size={24} />
+        <Typography color="text.secondary">Cargando paso...</Typography>
+      </Stack>
     );
   }
 
   if (error && !step) {
-    return (
-      <div className="error-state">
-        <span>!</span>
-        {error}
-      </div>
-    );
+    return <Alert severity="error">{error}</Alert>;
   }
 
   return (
-    <div className="step-detail-page">
-      <div className="view-breadcrumbs">
-        <Link className="text-link" to="/triggers">Requerimientos</Link>
+    <Stack spacing={3}>
+      <Breadcrumbs>
+        <Link component={RouterLink} underline="hover" color="inherit" to="/triggers">
+          Requerimientos
+        </Link>
         {step && (
-          <>
-            <span className="bc-sep">{">"}</span>
-            <Link className="text-link" to={`/workflows/${step.workflow_id}`}>
-              Workflow
-            </Link>
-          </>
+          <Link component={RouterLink} underline="hover" color="inherit" to={`/workflows/${step.workflow_id}`}>
+            Workflow
+          </Link>
         )}
-        <span className="bc-sep">{">"}</span>
-        <strong>Paso</strong>
-      </div>
+        <Typography color="text.primary">Paso</Typography>
+      </Breadcrumbs>
 
       <StepDetailPanel
         workflowId={step?.workflow_id ?? ""}
@@ -121,6 +115,6 @@ export function StepDetailPage() {
         error={error}
         onSubmitJournal={handleSubmitJournal}
       />
-    </div>
+    </Stack>
   );
 }

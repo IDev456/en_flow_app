@@ -1,4 +1,6 @@
-import { Link } from "react-router-dom";
+import type { ReactNode } from "react";
+import { Card, CardContent, Link, Stack, Typography } from "@mui/material";
+import { Link as RouterLink } from "react-router-dom";
 
 import type { Step } from "../types";
 import { formatDate } from "../utils";
@@ -10,27 +12,42 @@ type StepTimelineProps = {
 
 export function StepTimeline({ steps }: StepTimelineProps) {
   return (
-    <ol className="step-timeline">
+    <Stack spacing={1.5}>
       {steps.map((step) => (
-        <li key={step.id} className={`step-card ${step.estado === "activo" ? "is-current" : ""}`}>
-          <div className="step-card-head">
-            <div>
-              <p className="step-order">Paso {step.orden}</p>
-              <h3>{step.nombre}</h3>
-            </div>
-            <StatusBadge value={step.estado} />
-          </div>
-          {step.descripcion && <p className="muted">{step.descripcion}</p>}
-          <div className="step-meta">
-            <span>Tipo: {step.tipo}</span>
-            <span>Inicio: {formatDate(step.fecha_inicio)}</span>
-          </div>
-          <Link className="text-link" to={`/steps/${step.id}`}>
-            Ver detalle del paso
-          </Link>
-        </li>
+        <Card key={step.id} variant="outlined" sx={{ borderColor: step.estado === "activo" ? "primary.main" : "divider" }}>
+          <CardContent sx={{ display: "grid", gap: 1.25 }}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between" }}>
+              <BoxBlock>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Paso {step.orden}
+                </Typography>
+                <Typography variant="h6">{step.nombre}</Typography>
+              </BoxBlock>
+              <StatusBadge value={step.estado} />
+            </Stack>
+            {step.descripcion && (
+              <Typography variant="body2" color="text.secondary">
+                {step.descripcion}
+              </Typography>
+            )}
+            <Stack direction="row" spacing={1.5} sx={{ flexWrap: "wrap", gap: 1.5 }}>
+              <Typography variant="body2" color="text.secondary">
+                Tipo: {step.tipo}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Inicio: {formatDate(step.fecha_inicio)}
+              </Typography>
+            </Stack>
+            <Link component={RouterLink} to={`/steps/${step.id}`} underline="hover">
+              Ver detalle del paso
+            </Link>
+          </CardContent>
+        </Card>
       ))}
-    </ol>
+    </Stack>
   );
 }
 
+function BoxBlock({ children }: { children: ReactNode }) {
+  return <Stack spacing={0.5}>{children}</Stack>;
+}

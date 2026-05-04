@@ -1,4 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import AddTaskRoundedIcon from "@mui/icons-material/AddTaskRounded";
+import {
+  Alert,
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
 import { useNavigate } from "react-router-dom";
 
 import { createTrigger, startWorkflow } from "../api";
@@ -15,20 +28,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
-  const solicitanteRef = useRef<HTMLInputElement>(null);
   const canSubmit = firstDescription.trim().length > 0;
-
-  useEffect(() => {
-    setTimeout(() => solicitanteRef.current?.focus(), 50);
-  }, []);
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
 
   async function handleSubmit() {
     if (!canSubmit) {
@@ -45,7 +45,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
         solicitante: solicitante.trim() || null,
         descripcion: descriptionText || null,
         tipo: "requerimiento",
-        metadata: null
+        metadata: null,
       });
 
       const workflow = await startWorkflow(trigger.id, {
@@ -55,8 +55,8 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
           nombre: "Paso inicial",
           descripcion: firstDescription.trim() || null,
           asignado_a: DEFAULT_ACTOR,
-          fecha_vencimiento: null
-        }
+          fecha_vencimiento: null,
+        },
       });
 
       onClose();
@@ -69,71 +69,95 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card create-modal-card" onClick={(event) => event.stopPropagation()}>
-        <div className="create-heading compact">
-          <span className="page-chip">Nuevo requerimiento</span>
-          <h1>Iniciar un flujo</h1>
-          <p>Define el primer paso para arrancar. Solicitante y descripcion son opcionales.</p>
-        </div>
+    <Dialog open onClose={submitting ? undefined : onClose} fullWidth maxWidth="md">
+      <DialogTitle sx={{ pb: 1 }}>
+        <Stack spacing={1}>
+          <Typography variant="subtitle2" color="primary.light">
+            Nuevo requerimiento
+          </Typography>
+          <Typography variant="h4">Iniciar un flujo</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Define el primer paso para arrancar. Solicitante y descripcion son opcionales.
+          </Typography>
+        </Stack>
+      </DialogTitle>
 
-        <div className="surface-panel form-panel">
-          <label>
-            Solicitante
-            <input
-              ref={solicitanteRef}
+      <DialogContent dividers sx={{ borderColor: "divider" }}>
+        <Stack spacing={3}>
+          <Box
+            sx={{
+              display: "grid",
+              gap: 2,
+              gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+            }}
+          >
+            <TextField
+              autoFocus
+              label="Solicitante"
               value={solicitante}
               onChange={(event) => setSolicitante(event.target.value)}
               placeholder="Ej. Cliente A, Sector Operaciones, Juan Perez..."
             />
-          </label>
-
-          <label>
-            Descripcion
-            <textarea
-              rows={3}
+            <TextField
+              label="Descripcion"
+              multiline
+              minRows={3}
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               placeholder="De que se trata este requerimiento?"
             />
-          </label>
-        </div>
+          </Box>
 
-        <section className="surface-panel form-panel">
-          <div className="panel-header-row">
-            <div>
-              <h3>Primer paso</h3>
-              <p className="muted">Todo flujo arranca con un paso. Describe que hay que hacer para comenzar.</p>
-            </div>
-          </div>
+          <Box
+            sx={{
+              p: { xs: 2, md: 2.5 },
+              borderRadius: 3,
+              border: "1px solid",
+              borderColor: "divider",
+              backgroundColor: "rgba(12, 18, 31, 0.58)",
+            }}
+          >
+            <Stack spacing={2}>
+              <Stack spacing={0.75}>
+                <Typography variant="h6">Primer paso</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Todo flujo arranca con un paso. Describe que hay que hacer para comenzar.
+                </Typography>
+              </Stack>
 
-          <label>
-            Descripcion del paso *
-            <textarea
-              rows={4}
-              value={firstDescription}
-              onChange={(event) => setFirstDescription(event.target.value)}
-              placeholder="Ej. Preguntarle a Orlando quien es Orlando."
-            />
-          </label>
-        </section>
+              <TextField
+                label="Descripcion del paso *"
+                multiline
+                minRows={4}
+                value={firstDescription}
+                onChange={(event) => setFirstDescription(event.target.value)}
+                placeholder="Ej. Preguntarle a Orlando quien es Orlando."
+              />
+            </Stack>
+          </Box>
 
-        {error && <p className="inline-error">{error}</p>}
+          {error && <Alert severity="error">{error}</Alert>}
+        </Stack>
+      </DialogContent>
 
-        <div className="create-actions">
-          <button type="button" className="ghost-link" onClick={onClose}>
+      <DialogActions sx={{ p: 3, justifyContent: "space-between" }}>
+        <Typography variant="body2" color="text.secondary">
+          Se creara el trigger y el workflow inicial en una sola accion.
+        </Typography>
+        <Stack direction="row" spacing={1.25}>
+          <Button variant="text" color="inherit" onClick={onClose} disabled={submitting}>
             Cancelar
-          </button>
-          <button
-            type="button"
-            className="primary-action"
+          </Button>
+          <Button
+            variant="contained"
             onClick={() => void handleSubmit()}
             disabled={submitting || !canSubmit}
+            startIcon={<AddTaskRoundedIcon />}
           >
             {submitting ? "Creando..." : "Crear requerimiento"}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </Stack>
+      </DialogActions>
+    </Dialog>
   );
 }

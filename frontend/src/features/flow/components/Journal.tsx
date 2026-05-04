@@ -1,8 +1,27 @@
+import type { ChangeEvent, ClipboardEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import AddPhotoAlternateRoundedIcon from "@mui/icons-material/AddPhotoAlternateRounded";
+import AttachmentRoundedIcon from "@mui/icons-material/AttachmentRounded";
+import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
+import InsertDriveFileRoundedIcon from "@mui/icons-material/InsertDriveFileRounded";
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  Divider,
+  IconButton,
+  Stack,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
+} from "@mui/material";
 
 import type { Attachment, AttachmentInput, Step, StepComment, StepHistoryEntry, StepJournalEntryInput } from "../types";
 import { buildJournalItems, formatDate, stepStatusOptions } from "../utils";
-
 import { StatusBadge } from "./StatusBadge";
 
 type JournalProps = {
@@ -36,10 +55,10 @@ export function Journal({
   composerExpanded,
   onComposerExpandedChange,
   focusRequestToken,
-  onSubmitEntry
+  onSubmitEntry,
 }: JournalProps) {
   const composerRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<DraftAttachment[]>([]);
@@ -75,12 +94,7 @@ export function Journal({
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [onComposerExpandedChange]);
 
-  const canSubmit =
-    canComment &&
-    !missingComment &&
-    !missingNextStep &&
-    !insufficientLength &&
-    !submitting;
+  const canSubmit = canComment && !missingComment && !missingNextStep && !insufficientLength && !submitting;
 
   async function readFileAsAttachment(file: File): Promise<DraftAttachment> {
     if (file.size > MAX_ATTACHMENT_BYTES) {
@@ -101,7 +115,7 @@ export function Journal({
       content_type: file.type || "application/octet-stream",
       size_bytes: file.size,
       content_base64: contentBase64,
-      preview_url: dataUrl
+      preview_url: dataUrl,
     };
   }
 
@@ -153,16 +167,16 @@ export function Journal({
           nombre: item.nombre,
           content_type: item.content_type,
           size_bytes: item.size_bytes,
-          content_base64: item.content_base64
+          content_base64: item.content_base64,
         })),
         siguiente_paso:
           isCompleting && completionMode === "next"
             ? {
                 nombre: nextStepName.trim(),
-                descripcion: nextStepDescription.trim() || null
+                descripcion: nextStepDescription.trim() || null,
               }
             : null,
-        finalizar_workflow: isCompleting && completionMode === "finish"
+        finalizar_workflow: isCompleting && completionMode === "finish",
       });
       setText("");
       setAttachments([]);
@@ -179,14 +193,14 @@ export function Journal({
     }
   }
 
-  function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && canSubmit) {
       event.preventDefault();
       void handleSubmit();
     }
   }
 
-  async function handlePaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
+  async function handlePaste(event: ClipboardEvent<HTMLDivElement>) {
     const imageFiles = Array.from(event.clipboardData.items)
       .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
       .map((item) => item.getAsFile())
@@ -200,7 +214,7 @@ export function Journal({
     await addFiles(imageFiles);
   }
 
-  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
     void addFiles(files);
     event.target.value = "";
@@ -237,189 +251,248 @@ export function Journal({
   }
 
   return (
-    <div className="journal">
-      <div ref={composerRef} className="journal-composer">
-        <label htmlFor="step-comment">Agregar comentario</label>
+    <Stack spacing={3}>
+      <Box ref={composerRef}>
+        <Stack spacing={2}>
+          <Stack spacing={0.75}>
+            <Typography variant="h6">Bitacora operativa</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Registra comentarios, adjuntos y cambios de estado sin salir del paso. Todo lo que guardes quedara visible en el historial.
+            </Typography>
+          </Stack>
 
-        <textarea
-          ref={textareaRef}
-          id="step-comment"
-          rows={4}
-          placeholder={getCommentPlaceholder()}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          onFocus={() => onComposerExpandedChange(true)}
-          onClick={() => onComposerExpandedChange(true)}
-          onKeyDown={handleKeyDown}
-          onPaste={(event) => void handlePaste(event)}
-          maxLength={MAX_CHARS}
-          disabled={!canComment || submitting}
-        />
+          <TextField
+            inputRef={textareaRef}
+            label="Agregar comentario"
+            multiline
+            minRows={4}
+            placeholder={getCommentPlaceholder()}
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            onFocus={() => onComposerExpandedChange(true)}
+            onClick={() => onComposerExpandedChange(true)}
+            onKeyDown={handleKeyDown}
+            onPaste={(event) => void handlePaste(event)}
+            slotProps={{ htmlInput: { maxLength: MAX_CHARS } }}
+            disabled={!canComment || submitting}
+            helperText={`${text.length} / ${MAX_CHARS}`}
+          />
 
-        {composerExpanded && (
-          <div className="attachment-toolbar">
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              className="visually-hidden"
-              onChange={handleFileChange}
-            />
-            <button
-              type="button"
-              className="secondary-action attachment-button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={!canComment || submitting}
-              aria-label="Adjuntar archivos"
-              title="Adjuntar archivos"
+          {composerExpanded && (
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              spacing={1.25}
+              sx={{ alignItems: { xs: "stretch", sm: "center" } }}
             >
-              Adjuntar
-            </button>
-          </div>
-        )}
+              <input ref={fileInputRef} type="file" multiple hidden onChange={handleFileChange} />
+              <Button
+                type="button"
+                variant="outlined"
+                color="inherit"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={!canComment || submitting}
+                startIcon={<AddPhotoAlternateRoundedIcon />}
+              >
+                Adjuntar archivos
+              </Button>
+              <Typography variant="body2" color="text.secondary">
+                Tambien puedes pegar imagenes directamente desde el portapapeles.
+              </Typography>
+            </Stack>
+          )}
 
-        {attachments.length > 0 && (
-          <div className="attachment-draft-list">
-            {attachments.map((attachment) => (
-              <article key={attachment.local_id} className="attachment-draft-card">
-                <div className="attachment-draft-head">
-                  <strong>{attachment.nombre}</strong>
-                  <button type="button" className="text-action" onClick={() => handleRemoveAttachment(attachment.local_id)}>
-                    Quitar
-                  </button>
-                </div>
-                {attachment.content_type.startsWith("image/") ? (
-                  <img className="attachment-preview-image" src={attachment.preview_url} alt={attachment.nombre} />
+          {attachments.length > 0 && (
+            <Box
+              sx={{
+                display: "grid",
+                gap: 1.25,
+                gridTemplateColumns: { xs: "1fr", sm: "repeat(auto-fit, minmax(220px, 1fr))" },
+              }}
+            >
+              {attachments.map((attachment) => (
+                <Card key={attachment.local_id} variant="outlined">
+                  <CardContent sx={{ display: "grid", gap: 1.25 }}>
+                    <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between" }}>
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography noWrap sx={{ fontWeight: 700 }}>
+                          {attachment.nombre}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {formatFileSize(attachment.size_bytes)}
+                        </Typography>
+                      </Box>
+                      <IconButton size="small" onClick={() => handleRemoveAttachment(attachment.local_id)}>
+                        <CloseRoundedIcon fontSize="small" />
+                      </IconButton>
+                    </Stack>
+                    {attachment.content_type.startsWith("image/") ? (
+                      <Box
+                        component="img"
+                        src={attachment.preview_url}
+                        alt={attachment.nombre}
+                        sx={{
+                          width: "100%",
+                          maxHeight: 220,
+                          objectFit: "cover",
+                          borderRadius: 2,
+                          border: "1px solid",
+                          borderColor: "divider",
+                        }}
+                      />
+                    ) : (
+                      <Stack
+                        spacing={1}
+                        sx={{
+                          alignItems: "center",
+                          justifyContent: "center",
+                          minHeight: 120,
+                          borderRadius: 2,
+                          border: "1px dashed",
+                          borderColor: "divider",
+                        }}
+                      >
+                        <InsertDriveFileRoundedIcon color="action" />
+                        <Typography variant="body2" color="text.secondary">
+                          Archivo listo para enviar
+                        </Typography>
+                      </Stack>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </Box>
+          )}
+
+          {composerExpanded && canChangeStatus && (
+            <Stack spacing={1.25}>
+              <Typography variant="subtitle2" color="text.secondary">
+                Cambiar estado
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Usa esta accion solo cuando el comentario explique por que el paso avanza, queda en espera o presenta un problema.
+              </Typography>
+              <ToggleButtonGroup
+                exclusive
+                value={selectedStatus || null}
+                onChange={(_, value: "" | "espera" | "problema" | "completado" | null) => {
+                  onSelectedStatusChange(value ?? "");
+                  setError(null);
+                }}
+                sx={{ flexWrap: "wrap", gap: 1 }}
+              >
+                {stepStatusOptions.map((option) => (
+                  <ToggleButton key={option.value} value={option.value} disabled={submitting}>
+                    {option.label}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+            </Stack>
+          )}
+
+          {isCompleting && composerExpanded && (
+            <Card variant="outlined">
+              <CardContent sx={{ display: "grid", gap: 2 }}>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Al completar este paso
+                </Typography>
+                <ToggleButtonGroup
+                  exclusive
+                  value={completionMode}
+                  onChange={(_, value: "next" | "finish" | null) => {
+                    if (value) {
+                      setCompletionMode(value);
+                    }
+                  }}
+                >
+                  <ToggleButton value="next">Crear siguiente paso</ToggleButton>
+                  <ToggleButton value="finish">Finalizar flow</ToggleButton>
+                </ToggleButtonGroup>
+
+                {completionMode === "next" ? (
+                  <Stack spacing={1.5}>
+                    <Typography variant="body2" color="text.secondary">
+                      Define el proximo paso para que el flujo siga trazable y quede claro que debe hacerse a continuacion.
+                    </Typography>
+                    <Stack direction={{ xs: "column", md: "row" }} spacing={1.25}>
+                      <TextField
+                        label="Siguiente paso *"
+                        value={nextStepName}
+                        onChange={(event) => setNextStepName(event.target.value)}
+                        placeholder="Ej. Verificacion con el solicitante"
+                      />
+                      <Button
+                        type="button"
+                        variant="outlined"
+                        color="inherit"
+                        onClick={() => setShowNextStepDescription((value) => !value)}
+                        sx={{ minWidth: { md: 180 } }}
+                      >
+                        {showNextStepDescription ? "Ocultar detalle" : "Sumar detalle"}
+                      </Button>
+                    </Stack>
+                    {showNextStepDescription && (
+                      <TextField
+                        label="Detalle del siguiente paso"
+                        multiline
+                        minRows={3}
+                        value={nextStepDescription}
+                        onChange={(event) => setNextStepDescription(event.target.value)}
+                        placeholder="Describe que debera hacerse a continuacion..."
+                      />
+                    )}
+                  </Stack>
                 ) : (
-                  <p className="muted">{formatFileSize(attachment.size_bytes)}</p>
+                  <Alert severity="success">
+                    Este paso se cerrara y el workflow quedara finalizado junto con el requerimiento.
+                  </Alert>
                 )}
-              </article>
-            ))}
-          </div>
-        )}
+              </CardContent>
+            </Card>
+          )}
 
-        {composerExpanded && canChangeStatus && (
-          <div className="journal-status-actions">
-            <span className="composer-section-label">Cambiar estado</span>
-            <div className="status-chip-row">
-              {stepStatusOptions.map((option) => {
-                const active = selectedStatus === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    className={active ? "status-chip active" : "status-chip"}
-                    onClick={() => {
-                      onSelectedStatusChange(active ? "" : option.value);
-                      setError(null);
-                    }}
-                    disabled={submitting}
-                  >
-                    <span className={`status-dot ${option.value}`} />
-                    <span>{option.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
+          {error && <Alert severity="error">{error}</Alert>}
 
-        {isCompleting && composerExpanded && (
-          <div className="completion-config">
-            <span className="composer-section-label">Al completar este paso</span>
-            <div className="completion-choice-group">
-              <label className={completionMode === "next" ? "completion-choice active" : "completion-choice"}>
-                <input
-                  type="radio"
-                  name="completion-mode"
-                  value="next"
-                  checked={completionMode === "next"}
-                  onChange={() => setCompletionMode("next")}
-                />
-                <span>Crear siguiente paso</span>
-              </label>
-              <label className={completionMode === "finish" ? "completion-choice active" : "completion-choice"}>
-                <input
-                  type="radio"
-                  name="completion-mode"
-                  value="finish"
-                  checked={completionMode === "finish"}
-                  onChange={() => setCompletionMode("finish")}
-                />
-                <span>Finalizar flow</span>
-              </label>
-            </div>
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={1.5}
+            sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", sm: "center" } }}
+          >
+            <Typography variant="body2" color="text.secondary">
+              Usa <strong>Ctrl + Enter</strong> para enviar mas rapido. Si solo adjuntas evidencia, no hace falta cambiar el estado.
+            </Typography>
+            <Button type="button" variant="contained" onClick={() => void handleSubmit()} disabled={!canSubmit}>
+              {submitting ? "Guardando..." : getSubmitLabel()}
+            </Button>
+          </Stack>
+        </Stack>
+      </Box>
 
-            {completionMode === "next" ? (
-              <div className="completion-next-step">
-                <div className="completion-next-step-main">
-                  <label>
-                    Siguiente paso *
-                    <input
-                      type="text"
-                      value={nextStepName}
-                      onChange={(event) => setNextStepName(event.target.value)}
-                      placeholder="Ej: Verificacion con el solicitante"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="secondary-action compact-action"
-                    onClick={() => setShowNextStepDescription((value) => !value)}
-                  >
-                    {showNextStepDescription ? "Ocultar detalle" : "Sumar detalle"}
-                  </button>
-                </div>
-                {showNextStepDescription && (
-                  <label className="completion-next-step-detail">
-                    Detalle del siguiente paso
-                    <textarea
-                      rows={2}
-                      value={nextStepDescription}
-                      onChange={(event) => setNextStepDescription(event.target.value)}
-                      placeholder="Describe que debera hacerse a continuacion..."
-                    />
-                  </label>
-                )}
-              </div>
-            ) : (
-              <div className="completion-finish-card">
-                <strong>Finalizar workflow</strong>
-                <p>Este paso se cerrara y el requerimiento quedara resuelto.</p>
-              </div>
-            )}
-          </div>
-        )}
+      <Divider />
 
-        {error && <p className="inline-error">{error}</p>}
-
-        <div className="journal-composer-footer composer-footer">
-          <button type="button" className="primary-action" onClick={() => void handleSubmit()} disabled={!canSubmit}>
-            {submitting ? "Guardando..." : getSubmitLabel()}
-          </button>
-        </div>
-      </div>
-
-      <div className="journal-list">
+      <Stack spacing={1.5}>
         {items.length === 0 ? (
-          <div className="journal-empty">
-            <strong>Sin movimientos todavia</strong>
-            <p>Los comentarios, archivos y cambios de estado mas recientes apareceran primero.</p>
-          </div>
+          <Alert severity="info">Sin movimientos todavia. Cuando registres comentarios, adjuntos o cambios de estado apareceran aqui en orden cronologico.</Alert>
         ) : (
           items.map((item) => (
-            <article key={item.id} className="journal-item">
-              <div className="journal-item-head">
-                <span>{formatDate(item.date)}</span>
-                {item.kind === "status" && <StatusBadge value={item.status} />}
-              </div>
-              {item.body && <p>{item.body}</p>}
-              {item.attachments.length > 0 && <AttachmentList attachments={item.attachments} />}
-            </article>
+            <Card key={item.id} variant="outlined">
+              <CardContent sx={{ display: "grid", gap: 1.25 }}>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between" }}>
+                  <Box>
+                    <Typography sx={{ fontWeight: 700 }}>{item.author}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {formatDate(item.date)}
+                    </Typography>
+                  </Box>
+                  {item.kind === "status" && <StatusBadge value={item.status} />}
+                </Stack>
+                {item.body && <Typography variant="body1">{item.body}</Typography>}
+                {item.attachments.length > 0 && <AttachmentList attachments={item.attachments} />}
+              </CardContent>
+            </Card>
           ))
         )}
-      </div>
-    </div>
+      </Stack>
+    </Stack>
   );
 }
 
@@ -429,32 +502,71 @@ type AttachmentListProps = {
 
 function AttachmentList({ attachments }: AttachmentListProps) {
   return (
-    <div className="attachment-list">
+    <Box
+      sx={{
+        display: "grid",
+        gap: 1.25,
+        gridTemplateColumns: { xs: "1fr", sm: "repeat(auto-fit, minmax(220px, 1fr))" },
+      }}
+    >
       {attachments.map((attachment) => {
         const dataUrl = `data:${attachment.content_type};base64,${attachment.content_base64}`;
         const isImage = attachment.content_type.startsWith("image/");
         return (
-          <a
+          <Card
             key={attachment.id}
-            className={isImage ? "attachment-card image" : "attachment-card"}
+            variant="outlined"
+            component="a"
             href={dataUrl}
             download={attachment.nombre}
             target="_blank"
             rel="noreferrer"
+            sx={{ textDecoration: "none" }}
           >
-            {isImage ? (
-              <img className="attachment-preview-image" src={dataUrl} alt={attachment.nombre} />
-            ) : (
-              <div className="attachment-file-icon">FILE</div>
-            )}
-            <div className="attachment-meta">
-              <strong>{attachment.nombre}</strong>
-              <span>{formatFileSize(attachment.size_bytes)}</span>
-            </div>
-          </a>
+            <CardContent sx={{ display: "grid", gap: 1.25 }}>
+              {isImage ? (
+                <Box
+                  component="img"
+                  src={dataUrl}
+                  alt={attachment.nombre}
+                  sx={{
+                    width: "100%",
+                    maxHeight: 220,
+                    objectFit: "cover",
+                    borderRadius: 2,
+                    border: "1px solid",
+                    borderColor: "divider",
+                  }}
+                />
+              ) : (
+                <Stack
+                  spacing={1}
+                  sx={{
+                    alignItems: "center",
+                    justifyContent: "center",
+                    minHeight: 120,
+                    borderRadius: 2,
+                    border: "1px dashed",
+                    borderColor: "divider",
+                  }}
+                >
+                  <AttachmentRoundedIcon color="action" />
+                  <Typography variant="body2" color="text.secondary">
+                    Archivo adjunto
+                  </Typography>
+                </Stack>
+              )}
+              <Box>
+                <Typography sx={{ fontWeight: 700 }}>{attachment.nombre}</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {formatFileSize(attachment.size_bytes)}
+                </Typography>
+              </Box>
+            </CardContent>
+          </Card>
         );
       })}
-    </div>
+    </Box>
   );
 }
 
@@ -464,27 +576,46 @@ type HistoryListProps = {
 
 export function HistoryList({ history }: HistoryListProps) {
   if (history.length === 0) {
-    return <p className="status">Todavia no hay historial registrado.</p>;
+    return <Alert severity="info">Todavia no hay historial registrado.</Alert>;
   }
 
   return (
-    <div className="history-list">
+    <Stack spacing={1.5}>
       {history.map((entry) => (
-        <article key={entry.id} className="history-item">
-          <div className="history-item-head">
-            <strong>{entry.campo === "estado" ? "Cambio de estado" : entry.campo}</strong>
-            <span>{formatDate(entry.fecha)}</span>
-          </div>
-          <div className="status-transition" style={{ marginTop: "0.4rem" }}>
-            {entry.valor_anterior ? <StatusBadge value={entry.valor_anterior} /> : <span className="ghost-badge">vacio</span>}
-            <span className="status-arrow">-&gt;</span>
-            {entry.valor_nuevo ? <StatusBadge value={entry.valor_nuevo} /> : <span className="ghost-badge">vacio</span>}
-          </div>
-          {entry.nota && <blockquote>{entry.nota}</blockquote>}
-          {entry.attachments.length > 0 && <AttachmentList attachments={entry.attachments} />}
-        </article>
+        <Card key={entry.id} variant="outlined">
+          <CardContent sx={{ display: "grid", gap: 1.25 }}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between" }}>
+              <Typography sx={{ fontWeight: 700 }}>{entry.campo === "estado" ? "Cambio de estado" : entry.campo}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {formatDate(entry.fecha)}
+              </Typography>
+            </Stack>
+
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", gap: 1 }}>
+              {entry.valor_anterior ? <StatusBadge value={entry.valor_anterior} /> : <Chip label="vacio" variant="outlined" size="small" />}
+              <Typography color="text.secondary">→</Typography>
+              {entry.valor_nuevo ? <StatusBadge value={entry.valor_nuevo} /> : <Chip label="vacio" variant="outlined" size="small" />}
+            </Stack>
+
+            {entry.nota && (
+              <Box
+                sx={{
+                  p: 1.5,
+                  borderRadius: 2,
+                  borderLeft: "3px solid",
+                  borderColor: "primary.main",
+                  backgroundColor: "rgba(11, 16, 29, 0.62)",
+                }}
+              >
+                <Typography variant="body2">{entry.nota}</Typography>
+              </Box>
+            )}
+
+            {entry.attachments.length > 0 && <AttachmentList attachments={entry.attachments} />}
+          </CardContent>
+        </Card>
       ))}
-    </div>
+    </Stack>
   );
 }
 
