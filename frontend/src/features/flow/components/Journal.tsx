@@ -100,10 +100,6 @@ export function Journal({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<DraftAttachment[]>([]);
-  const [completionMode, setCompletionMode] = useState<"next" | "finish">("next");
-  const [nextStepName, setNextStepName] = useState("");
-  const [nextStepDescription, setNextStepDescription] = useState("");
-  const [showNextStepDescription, setShowNextStepDescription] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const items = useMemo(() => buildJournalItems(history, comments), [history, comments]);
@@ -112,7 +108,6 @@ export function Journal({
   const canComment = step.puede_tener_comentarios;
   const hasAttachments = attachments.length > 0;
   const missingComment = selectedStatus !== "" ? commentTrimmed.length === 0 : commentTrimmed.length === 0 && !hasAttachments;
-  const missingNextStep = isCompleting && completionMode === "next" && nextStepName.trim().length === 0;
   const insufficientLength = selectedStatus !== "" && commentTrimmed.length < 3;
 
   useEffect(() => {
@@ -132,7 +127,7 @@ export function Journal({
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [onComposerExpandedChange]);
 
-  const canSubmit = canComment && !missingComment && !missingNextStep && !insufficientLength && !submitting;
+  const canSubmit = canComment && !missingComment && !insufficientLength && !submitting;
 
   async function readFileAsAttachment(file: File): Promise<DraftAttachment> {
     if (file.size > MAX_ATTACHMENT_BYTES) {
@@ -190,11 +185,6 @@ export function Journal({
       return;
     }
 
-    if (isCompleting && completionMode === "next" && !nextStepName.trim()) {
-      setError("Debes indicar cual sera el siguiente paso antes de completar.");
-      return;
-    }
-
     try {
       setSubmitting(true);
       setError(null);
@@ -207,22 +197,12 @@ export function Journal({
           size_bytes: item.size_bytes,
           content_base64: item.content_base64,
         })),
-        siguiente_paso:
-          isCompleting && completionMode === "next"
-            ? {
-                nombre: nextStepName.trim(),
-                descripcion: nextStepDescription.trim() || null,
-              }
-            : null,
-        finalizar_workflow: isCompleting && completionMode === "finish",
+        siguiente_paso: null,
+        finalizar_workflow: false,
       });
       setText("");
       setAttachments([]);
       onSelectedStatusChange("");
-      setCompletionMode("next");
-      setNextStepName("");
-      setNextStepDescription("");
-      setShowNextStepDescription(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -263,11 +243,8 @@ export function Journal({
   }
 
   function getSubmitLabel() {
-    if (selectedStatus === "completado" && completionMode === "finish") {
-      return "Completar y finalizar";
-    }
     if (selectedStatus === "completado") {
-      return "Completar y crear siguiente paso";
+      return "Completar paso";
     }
     if (selectedStatus) {
       return "Guardar comentario y cambiar estado";
@@ -451,57 +428,9 @@ export function Journal({
                 <Typography variant="subtitle2" color="text.secondary">
                   Al completar este paso
                 </Typography>
-                <ToggleButtonGroup
-                  exclusive
-                  value={completionMode}
-                  onChange={(_, value: "next" | "finish" | null) => {
-                    if (value) {
-                      setCompletionMode(value);
-                    }
-                  }}
-                >
-                  <ToggleButton value="next">Crear siguiente paso</ToggleButton>
-                  <ToggleButton value="finish">Finalizar flow</ToggleButton>
-                </ToggleButtonGroup>
-
-                {completionMode === "next" ? (
-                  <Stack spacing={1.5}>
-                    <Typography variant="body2" color="text.secondary">
-                      Define el proximo paso para que el flujo siga trazable y quede claro que debe hacerse a continuacion.
-                    </Typography>
-                    <Stack direction={{ xs: "column", md: "row" }} spacing={1.25}>
-                      <TextField
-                        label="Siguiente paso *"
-                        value={nextStepName}
-                        onChange={(event) => setNextStepName(event.target.value)}
-                        placeholder="Ej. Verificacion con el solicitante"
-                      />
-                      <Button
-                        type="button"
-                        variant="outlined"
-                        color="inherit"
-                        onClick={() => setShowNextStepDescription((value) => !value)}
-                        sx={{ minWidth: { md: 180 } }}
-                      >
-                        {showNextStepDescription ? "Ocultar detalle" : "Sumar detalle"}
-                      </Button>
-                    </Stack>
-                    {showNextStepDescription && (
-                      <TextField
-                        label="Detalle del siguiente paso"
-                        multiline
-                        minRows={3}
-                        value={nextStepDescription}
-                        onChange={(event) => setNextStepDescription(event.target.value)}
-                        placeholder="Describe que debera hacerse a continuacion..."
-                      />
-                    )}
-                  </Stack>
-                ) : (
-                  <Alert severity="success">
-                    Este paso se cerrara y el workflow quedara finalizado junto con el requerimiento.
-                  </Alert>
-                )}
+                <Alert severity="info">
+                  El paso se completara y el workflow avanzara automaticamente segun la plantilla y dependencias.
+                </Alert>
               </CardContent>
             </Card>
           )}

@@ -33,6 +33,7 @@ def session_scope() -> Generator[Session, None, None]:
 
 def init_database() -> None:
     Base.metadata.create_all(bind=engine)
+    _migrate_workflow_schema()
     _seed_default_workflow_template()
 
 
@@ -46,12 +47,14 @@ def _seed_default_workflow_template() -> None:
     with session_scope() as session:
         existing = session.get(WorkflowTemplateModel, DEFAULT_WORKFLOW_TEMPLATE_ID)
         if existing is not None:
+            _backfill_default_template_steps(existing)
             return
 
         fallback = session.scalar(
             select(WorkflowTemplateModel).where(WorkflowTemplateModel.nombre == DEFAULT_WORKFLOW_TEMPLATE_NAME)
         )
         if fallback is not None:
+            _backfill_default_template_steps(fallback)
             return
 
         template = WorkflowTemplateModel(
@@ -61,6 +64,8 @@ def _seed_default_workflow_template() -> None:
             steps=[
                 WorkflowTemplateStepModel(
                     id=DEFAULT_TEMPLATE_STEP_IDS["diagnostico"],
+                    codigo="diagnostico",
+                    depends_on=[],
                     nombre="Diagnostico",
                     descripcion="Analizar el disparador y definir alcance inicial.",
                     orden=1,
@@ -70,6 +75,8 @@ def _seed_default_workflow_template() -> None:
                 ),
                 WorkflowTemplateStepModel(
                     id=DEFAULT_TEMPLATE_STEP_IDS["ejecucion"],
+                    codigo="ejecucion",
+                    depends_on=["diagnostico"],
                     nombre="Ejecucion",
                     descripcion="Implementar o resolver la accion principal del flujo.",
                     orden=2,
@@ -79,6 +86,8 @@ def _seed_default_workflow_template() -> None:
                 ),
                 WorkflowTemplateStepModel(
                     id=DEFAULT_TEMPLATE_STEP_IDS["verificacion_final"],
+                    codigo="verificacion_final",
+                    depends_on=["ejecucion"],
                     nombre="Verificacion final",
                     descripcion="Confirmar resultado y cierre del caso.",
                     orden=3,
@@ -89,3 +98,36 @@ def _seed_default_workflow_template() -> None:
             ],
         )
         session.add(template)
+
+
+def _backfill_default_template_steps(template: WorkflowTemplateModel) -> None:
+    ordered_steps = sorted(template.steps, key=lambda item: item.orden)
+    if not ordered_steps:
+        return
+
+    previous_code: str | None = None
+    for step in ordered_steps:
+        step.codigo = step.codigo or step.nombre.strip().lower().replace(" ", "_")
+        # Compatibilidad legacy:
+        # - versiones viejas pueden tener depends_on = NULL
+        # - migraciones intermedias pueden dejar depends_on = [] en todos los pasos
+        # Para plantilla lineal base, los pasos posteriores al primero deben depender del anterior.
+        if step.depends_on is None or (previous_code and step.depends_on == []):
+            step.depends_on = [previous_code] if previous_code else []
+        previous_code = step.codigo
+
+
+def _migrate_workflow_schema() -> None:
+    is_postgres = engine.url.get_backend_name().startswith("postgres")
+    empty_json_literal = "'[]'::json" if is_postgres else "'[]'"
+    migration_statements = [
+        "ALTER TABLE workflow_template_steps ADD COLUMN IF NOT EXISTS codigo VARCHAR(120)",
+        "ALTER TABLE workflow_template_steps ADD COLUMN IF NOT EXISTS depends_on JSON",
+        "ALTER TABLE steps ADD COLUMN IF NOT EXISTS codigo VARCHAR(120)",
+        "ALTER TABLE steps ADD COLUMN IF NOT EXISTS depends_on JSON",
+        f"UPDATE workflow_template_steps SET depends_on = {empty_json_literal} WHERE depends_on IS NULL",
+        f"UPDATE steps SET depends_on = {empty_json_literal} WHERE depends_on IS NULL",
+    ]
+    with engine.begin() as connection:
+        for statement in migration_statements:
+            connection.execute(text(statement))

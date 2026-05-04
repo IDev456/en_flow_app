@@ -40,6 +40,7 @@ export type WorkflowSummary = {
   workflow_template_id: string;
   workflow_template_nombre: string;
   estado: WorkflowStatus;
+  pasos_activos: number[];
   paso_actual: number | null;
   total_pasos: number;
   fecha_inicio: string;
@@ -52,6 +53,8 @@ export type Step = {
   id: string;
   workflow_id: string;
   step_template_id: string | null;
+  codigo: string | null;
+  depends_on: string[];
   nombre: string;
   descripcion: string | null;
   orden: number;
@@ -134,7 +137,7 @@ export type StepCompleteInput = {
     asignado_a?: string | null;
     fecha_vencimiento?: string | null;
   } | null;
-  finalizar_workflow: boolean;
+  finalizar_workflow?: boolean;
 };
 
 export type StepStatusUpdateInput = {

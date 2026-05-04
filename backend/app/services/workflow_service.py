@@ -1,4 +1,4 @@
-from datetime import timezone
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.core.errors import BusinessRuleError, EntityNotFoundError
@@ -22,6 +22,8 @@ from app.schemas.workflow import (
     WorkflowSummary,
     WorkflowTemplatePublic,
 )
+
+OPEN_STEP_STATUSES = {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA}
 
 
 class WorkflowService:
@@ -56,10 +58,6 @@ class WorkflowService:
         if not payload.primer_paso.nombre.strip():
             raise BusinessRuleError("El primer paso es obligatorio para iniciar el workflow")
 
-        active_workflow = self._find_open_workflow(trigger.workflow_ids)
-        if active_workflow is not None:
-            raise BusinessRuleError("El trigger ya tiene un workflow activo")
-
         template = (
             self.repository.get_workflow_template(payload.workflow_template_id)
             if payload.workflow_template_id
@@ -69,14 +67,7 @@ class WorkflowService:
             raise EntityNotFoundError("Workflow template not found")
 
         workflow = self.repository.create_workflow(trigger_id, template, payload)
-        updated_trigger = trigger.model_copy(
-            update={
-                "estado_general": TriggerStatus.EN_PROCESO,
-                "fecha_actualizacion": utc_now(),
-                "workflow_activo_id": workflow.id,
-            }
-        )
-        self.repository.save_trigger(updated_trigger)
+        self._reconcile_trigger_status(trigger_id, utc_now(), preferred_workflow_id=workflow.id)
         return workflow
 
     def list_workflows(self) -> list[WorkflowSummary]:
@@ -100,25 +91,27 @@ class WorkflowService:
         if workflow.estado == WorkflowStatus.FINALIZADO:
             raise BusinessRuleError("No se pueden agregar pasos a un workflow finalizado")
 
-        current_open_step = next(
-            (step for step in workflow.steps if step.estado in {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA}),
-            None,
-        )
-        if current_open_step is not None:
-            raise BusinessRuleError("No se puede crear un nuevo paso mientras el actual no este completado")
-
         steps = workflow.steps
         next_order = max((step.orden for step in steps), default=0) + 1
-        created_step = self.repository.create_step(workflow_id, payload, next_order, StepStatus.ACTIVO)
+        created_step = self.repository.create_step(
+            workflow_id,
+            payload,
+            next_order,
+            StepStatus.ACTIVO,
+            codigo=f"manual_{created_step_id_suffix()}",
+            depends_on=[],
+        )
         updated_workflow = workflow.model_copy(
             update={
                 "estado": WorkflowStatus.EN_PROCESO,
-                "paso_actual": created_step.orden,
-                "total_pasos": max(workflow.total_pasos, created_step.orden),
+                "pasos_activos": sorted([*workflow.pasos_activos, created_step.orden]),
+                "paso_actual": min([*workflow.pasos_activos, created_step.orden], default=created_step.orden),
+                "total_pasos": len(steps) + 1,
             }
         )
         self.repository.save_workflow(updated_workflow)
         self._record_history(created_step.id, "estado", None, StepStatus.ACTIVO, "sistema")
+        self._reconcile_trigger_status(workflow.trigger_id, utc_now(), preferred_workflow_id=workflow.id)
         return created_step
 
     def get_step(self, step_id: str) -> StepInstancePublic:
@@ -167,18 +160,13 @@ class WorkflowService:
 
     def complete_step(self, step_id: str, payload: StepCompletePayload) -> StepInstancePublic:
         step = self.get_step(step_id)
-        if step.estado not in {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA}:
+        if step.estado not in OPEN_STEP_STATUSES:
             raise BusinessRuleError("Solo se puede completar un step abierto")
 
         if len(payload.comentario.strip()) < 3:
             raise BusinessRuleError("Completar un paso requiere un comentario justificando el cierre")
 
-        has_next_step = payload.siguiente_paso is not None
-        if payload.finalizar_workflow == has_next_step:
-            raise BusinessRuleError("Debes definir el siguiente paso o indicar que el workflow finaliza")
-
         workflow = self.get_workflow(step.workflow_id)
-        trigger = self.get_trigger(workflow.trigger_id)
         now = utc_now()
 
         completed_step = step.model_copy(
@@ -206,50 +194,8 @@ class WorkflowService:
         if step.observaciones != payload.observaciones:
             self._record_history(completed_step.id, "observaciones", step.observaciones, payload.observaciones, payload.usuario)
 
-        if payload.siguiente_paso is not None:
-            next_order = max((item.orden for item in workflow.steps), default=0) + 1
-            next_step = self.repository.create_step(
-                workflow.id,
-                payload.siguiente_paso,
-                next_order,
-                StepStatus.ACTIVO,
-            )
-            self._record_history(next_step.id, "estado", None, StepStatus.ACTIVO, payload.usuario)
-            updated_workflow = workflow.model_copy(
-                update={
-                    "estado": WorkflowStatus.EN_PROCESO,
-                    "paso_actual": next_step.orden,
-                    "total_pasos": len(workflow.steps) + 1,
-                }
-            )
-            self.repository.save_workflow(updated_workflow)
-
-            updated_trigger = trigger.model_copy(
-                update={
-                    "estado_general": TriggerStatus.EN_PROCESO,
-                    "fecha_actualizacion": now,
-                    "workflow_activo_id": workflow.id,
-                }
-            )
-            self.repository.save_trigger(updated_trigger)
-        else:
-            updated_workflow = workflow.model_copy(
-                update={
-                    "estado": WorkflowStatus.FINALIZADO,
-                    "paso_actual": None,
-                    "fecha_fin": now,
-                    "total_pasos": len(workflow.steps),
-                }
-            )
-            self.repository.save_workflow(updated_workflow)
-            updated_trigger = trigger.model_copy(
-                update={
-                    "estado_general": TriggerStatus.RESUELTO,
-                    "fecha_actualizacion": now,
-                    "workflow_activo_id": None,
-                }
-            )
-            self.repository.save_trigger(updated_trigger)
+        self._activate_available_steps(workflow.id, payload.usuario)
+        self._sync_workflow_and_trigger_status(workflow.id, now)
 
         return completed_step
 
@@ -270,30 +216,136 @@ class WorkflowService:
     def list_pending_steps(self) -> list[StepInstancePublic]:
         return self.repository.list_pending_steps()
 
-    def _find_open_workflow(self, workflow_ids: list[str]) -> WorkflowSummary | None:
-        for workflow_id in workflow_ids:
+    def _activate_available_steps(self, workflow_id: str, actor: str) -> list[StepInstancePublic]:
+        workflow = self.get_workflow(workflow_id)
+        template = self.repository.get_workflow_template(workflow.workflow_template_id)
+        if template is None:
+            raise EntityNotFoundError("Workflow template not found")
+
+        existing_steps = workflow.steps
+        existing_by_code = {
+            step.codigo: step
+            for step in existing_steps
+            if step.codigo is not None
+        }
+        completed_codes = {
+            step.codigo
+            for step in existing_steps
+            if step.codigo is not None and step.estado == StepStatus.COMPLETADO
+        }
+        created_steps: list[StepInstancePublic] = []
+
+        for template_step in sorted(template.steps, key=lambda item: (item.orden, item.codigo, item.id)):
+            if template_step.codigo in existing_by_code:
+                continue
+            if not set(template_step.depends_on).issubset(completed_codes):
+                continue
+
+            step_payload = StepCreate(
+                nombre=template_step.nombre,
+                descripcion=template_step.descripcion,
+                tipo=template_step.tipo,
+                requiere_aprobacion=template_step.requiere_aprobacion,
+                puede_tener_comentarios=template_step.puede_tener_comentarios,
+                asignado_a=None,
+                fecha_vencimiento=None,
+            )
+            created_step = self.repository.create_step(
+                workflow_id,
+                step_payload,
+                template_step.orden,
+                StepStatus.ACTIVO,
+                step_template_id=template_step.id,
+                codigo=template_step.codigo,
+                depends_on=template_step.depends_on,
+            )
+            self._record_history(created_step.id, "estado", None, StepStatus.ACTIVO, actor)
+            created_steps.append(created_step)
+            existing_by_code[template_step.codigo] = created_step
+            completed_codes = {
+                step.codigo
+                for step in [*existing_steps, *created_steps]
+                if step.codigo is not None and step.estado == StepStatus.COMPLETADO
+            }
+
+        return created_steps
+
+    def _sync_workflow_and_trigger_status(self, workflow_id: str, now: datetime) -> None:
+        workflow = self.get_workflow(workflow_id)
+        template = self.repository.get_workflow_template(workflow.workflow_template_id)
+        if template is None:
+            raise EntityNotFoundError("Workflow template not found")
+
+        open_steps = [step for step in workflow.steps if step.estado in OPEN_STEP_STATUSES]
+        active_orders = sorted(step.orden for step in open_steps)
+        template_codes = {step.codigo for step in template.steps}
+        completed_template_codes = {
+            step.codigo
+            for step in workflow.steps
+            if step.codigo in template_codes and step.estado == StepStatus.COMPLETADO
+        }
+        all_template_steps_completed = template_codes.issubset(completed_template_codes)
+
+        if all_template_steps_completed and not open_steps:
+            workflow_update = workflow.model_copy(
+                update={
+                    "estado": WorkflowStatus.FINALIZADO,
+                    "pasos_activos": [],
+                    "paso_actual": None,
+                    "fecha_fin": now,
+                    "total_pasos": len(workflow.steps),
+                }
+            )
+        else:
+            workflow_update = workflow.model_copy(
+                update={
+                    "estado": WorkflowStatus.EN_PROCESO if open_steps else WorkflowStatus.PENDIENTE,
+                    "pasos_activos": active_orders,
+                    "paso_actual": active_orders[0] if active_orders else None,
+                    "fecha_fin": None,
+                    "total_pasos": len(workflow.steps),
+                }
+            )
+
+        self.repository.save_workflow(workflow_update)
+        self._reconcile_trigger_status(workflow.trigger_id, now, preferred_workflow_id=workflow.id)
+
+    def _reconcile_trigger_status(
+        self,
+        trigger_id: str,
+        now: datetime,
+        *,
+        preferred_workflow_id: str | None = None,
+    ) -> None:
+        trigger = self.get_trigger(trigger_id)
+        open_workflows: list[WorkflowDetail] = []
+        for workflow_id in trigger.workflow_ids:
             workflow = self.repository.get_workflow(workflow_id)
-            if workflow and workflow.estado in {WorkflowStatus.PENDIENTE, WorkflowStatus.EN_PROCESO}:
-                return workflow
-        return None
+            if workflow is None:
+                continue
+            if workflow.estado in {WorkflowStatus.PENDIENTE, WorkflowStatus.EN_PROCESO}:
+                open_workflows.append(workflow)
 
-    def _ensure_previous_step_completed(self, steps: list[StepInstancePublic], step_to_activate: StepInstancePublic) -> None:
-        previous_step = next((step for step in steps if step.orden == step_to_activate.orden - 1), None)
-        if previous_step and previous_step.estado != StepStatus.COMPLETADO:
-            raise BusinessRuleError("No se puede activar un step si el anterior no fue completado")
-
-    def _ensure_can_activate(self, steps: list[StepInstancePublic], step_to_activate: StepInstancePublic) -> None:
-        self._ensure_previous_step_completed(steps, step_to_activate)
-        concurrent_step = next(
-            (
-                step
-                for step in steps
-                if step.id != step_to_activate.id and step.estado in {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA}
-            ),
-            None,
-        )
-        if concurrent_step is not None:
-            raise BusinessRuleError("Solo puede haber un step abierto al mismo tiempo")
+        if open_workflows:
+            selected_workflow_id = preferred_workflow_id
+            if not selected_workflow_id or all(item.id != selected_workflow_id for item in open_workflows):
+                selected_workflow_id = max(open_workflows, key=lambda item: item.fecha_inicio).id
+            trigger_update = trigger.model_copy(
+                update={
+                    "estado_general": TriggerStatus.EN_PROCESO,
+                    "fecha_actualizacion": now,
+                    "workflow_activo_id": selected_workflow_id,
+                }
+            )
+        else:
+            trigger_update = trigger.model_copy(
+                update={
+                    "estado_general": TriggerStatus.RESUELTO,
+                    "fecha_actualizacion": now,
+                    "workflow_activo_id": None,
+                }
+            )
+        self.repository.save_trigger(trigger_update)
 
     def _record_history(
         self,
@@ -335,3 +387,7 @@ class WorkflowService:
         if hasattr(value, "astimezone"):
             return value.astimezone(timezone.utc).isoformat()  # type: ignore[union-attr]
         return str(value)
+
+
+def created_step_id_suffix() -> str:
+    return str(uuid4()).split("-", maxsplit=1)[0]

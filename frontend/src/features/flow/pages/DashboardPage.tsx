@@ -109,7 +109,7 @@ export function DashboardPage() {
                         <Box>
                           <Typography sx={{ fontWeight: 700 }}>{workflow.workflow_template_nombre}</Typography>
                           <Typography variant="body2" color="text.secondary">
-                            Paso actual: {workflow.paso_actual ?? "sin paso activo"}
+                            Pasos activos: {workflow.pasos_activos.length > 0 ? workflow.pasos_activos.join(", ") : "sin pasos activos"}
                           </Typography>
                         </Box>
                         <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>

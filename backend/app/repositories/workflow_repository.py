@@ -41,6 +41,48 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+OPEN_STEP_STATUSES = {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA}
+
+
+def _sort_template_steps(steps: list[StepTemplatePublic]) -> list[StepTemplatePublic]:
+    return sorted(steps, key=lambda item: (item.orden, item.codigo, item.id))
+
+
+def _sort_step_instances(steps: list[StepInstancePublic]) -> list[StepInstancePublic]:
+    return sorted(steps, key=lambda item: (item.orden, item.codigo or "", item.id))
+
+
+def _active_step_orders(steps: list[StepInstancePublic]) -> list[int]:
+    return [step.orden for step in _sort_step_instances(steps) if step.estado in OPEN_STEP_STATUSES]
+
+
+def _normalize_template_steps(steps: list[StepTemplatePublic]) -> list[StepTemplatePublic]:
+    ordered = _sort_template_steps(steps)
+    if len(ordered) <= 1:
+        return ordered
+
+    # Legacy guard:
+    # if all dependencies are empty and template looks strictly linear by orden,
+    # infer dependencia del paso anterior para evitar activar todo al inicio.
+    all_empty_dependencies = all(len(step.depends_on) == 0 for step in ordered)
+    order_values = [step.orden for step in ordered]
+    strictly_increasing_orders = all(curr > prev for prev, curr in zip(order_values, order_values[1:]))
+    unique_orders = len(set(order_values)) == len(order_values)
+
+    if not (all_empty_dependencies and strictly_increasing_orders and unique_orders):
+        return ordered
+
+    normalized: list[StepTemplatePublic] = []
+    previous_code: str | None = None
+    for step in ordered:
+        depends_on = [previous_code] if previous_code else []
+        normalized_step = step.model_copy(update={"depends_on": depends_on})
+        normalized.append(normalized_step)
+        previous_code = normalized_step.codigo
+
+    return normalized
+
+
 class WorkflowRepository(ABC):
     @abstractmethod
     def list_triggers(self) -> list[TriggerDetail]:
@@ -98,6 +140,10 @@ class WorkflowRepository(ABC):
         payload: StepCreate,
         orden: int,
         estado: StepStatus = StepStatus.ACTIVO,
+        *,
+        step_template_id: str | None = None,
+        codigo: str | None = None,
+        depends_on: list[str] | None = None,
     ) -> StepInstancePublic:
         raise NotImplementedError
 
@@ -157,6 +203,8 @@ class InMemoryWorkflowRepository(WorkflowRepository):
     def _seed_templates(self) -> None:
         diagnostico = StepTemplatePublic(
             id=str(uuid4()),
+            codigo="diagnostico",
+            depends_on=[],
             nombre="Diagnostico",
             descripcion="Analizar el disparador y definir alcance inicial.",
             orden=1,
@@ -166,6 +214,8 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         )
         ejecucion = StepTemplatePublic(
             id=str(uuid4()),
+            codigo="ejecucion",
+            depends_on=["diagnostico"],
             nombre="Ejecucion",
             descripcion="Implementar o resolver la accion principal del flujo.",
             orden=2,
@@ -175,6 +225,8 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         )
         verificacion = StepTemplatePublic(
             id=str(uuid4()),
+            codigo="verificacion_final",
+            depends_on=["ejecucion"],
             nombre="Verificacion final",
             descripcion="Confirmar resultado y cierre del caso.",
             orden=3,
@@ -207,9 +259,22 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         if trigger is None:
             return None
 
+        workflow_ids = list(self._workflow_ids_by_trigger.get(trigger_id, []))
+        workflow_ids_sorted = [
+            workflow_id
+            for workflow_id, _ in sorted(
+                (
+                    (workflow_id, self._workflows.get(workflow_id))
+                    for workflow_id in workflow_ids
+                ),
+                key=lambda item: item[1].fecha_inicio if item[1] is not None else datetime.min.replace(tzinfo=timezone.utc),
+                reverse=True,
+            )
+        ]
+
         return TriggerDetail(
             **trigger.model_dump(exclude={"workflow_ids"}),
-            workflow_ids=list(self._workflow_ids_by_trigger.get(trigger_id, [])),
+            workflow_ids=workflow_ids_sorted,
         )
 
     def create_trigger(self, payload: TriggerCreate) -> TriggerPublic:
@@ -252,14 +317,36 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         return normalized
 
     def list_workflows(self) -> list[WorkflowSummary]:
-        return sorted(self._workflows.values(), key=lambda item: item.fecha_inicio, reverse=True)
+        items: list[WorkflowSummary] = []
+        for workflow in sorted(self._workflows.values(), key=lambda item: item.fecha_inicio, reverse=True):
+            steps = self.list_workflow_steps(workflow.id)
+            active_orders = _active_step_orders(steps)
+            items.append(
+                workflow.model_copy(
+                    update={
+                        "pasos_activos": active_orders,
+                        "paso_actual": active_orders[0] if active_orders else None,
+                        "total_pasos": len(steps),
+                    }
+                )
+            )
+        return items
 
     def get_workflow(self, workflow_id: str) -> WorkflowDetail | None:
         workflow = self._workflows.get(workflow_id)
         if workflow is None:
             return None
 
-        return WorkflowDetail(**workflow.model_dump(exclude={"steps"}), steps=self.list_workflow_steps(workflow_id))
+        steps = self.list_workflow_steps(workflow_id)
+        active_orders = _active_step_orders(steps)
+        summary = workflow.model_copy(
+            update={
+                "pasos_activos": active_orders,
+                "paso_actual": active_orders[0] if active_orders else None,
+                "total_pasos": len(steps),
+            }
+        )
+        return WorkflowDetail(**summary.model_dump(exclude={"steps"}), steps=steps)
 
     def create_workflow(
         self,
@@ -268,15 +355,17 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         payload: WorkflowInstanceBase,
     ) -> WorkflowDetail:
         now = utc_now()
-        ordered_templates = sorted(template.steps, key=lambda item: item.orden)
+        ordered_templates = _normalize_template_steps(template.steps)
+        root_templates = [step for step in ordered_templates if not step.depends_on]
         workflow = WorkflowSummary(
             id=str(uuid4()),
             trigger_id=trigger_id,
             workflow_template_id=template.id,
             workflow_template_nombre=template.nombre,
-            estado=WorkflowStatus.EN_PROCESO if ordered_templates else WorkflowStatus.FINALIZADO,
-            paso_actual=ordered_templates[0].orden if ordered_templates else None,
-            total_pasos=1 if ordered_templates else 0,
+            estado=WorkflowStatus.EN_PROCESO if root_templates else WorkflowStatus.FINALIZADO,
+            pasos_activos=[step.orden for step in root_templates],
+            paso_actual=root_templates[0].orden if root_templates else None,
+            total_pasos=len(root_templates),
             fecha_inicio=now,
             fecha_fin=None,
             objetivo_final=payload.objetivo_final,
@@ -286,41 +375,51 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         self._step_ids_by_workflow[workflow.id] = []
         self._workflow_ids_by_trigger.setdefault(trigger_id, []).append(workflow.id)
 
-        if ordered_templates:
+        if root_templates:
             first_step_override = getattr(payload, "primer_paso", None)
-            first_template_step = ordered_templates[0]
-            step = StepInstancePublic(
-                id=str(uuid4()),
-                workflow_id=workflow.id,
-                step_template_id=first_template_step.id,
-                nombre=(
-                    first_step_override.nombre
-                    if first_step_override and first_step_override.nombre
-                    else first_template_step.nombre
-                ),
-                descripcion=(
-                    first_step_override.descripcion
-                    if first_step_override and first_step_override.descripcion is not None
-                    else first_template_step.descripcion
-                ),
-                orden=first_template_step.orden,
-                tipo=first_template_step.tipo,
-                requiere_aprobacion=first_template_step.requiere_aprobacion,
-                puede_tener_comentarios=first_template_step.puede_tener_comentarios,
-                estado=StepStatus.ACTIVO,
-                fecha_estado_actual=now,
-                asignado_a=first_step_override.asignado_a if first_step_override else None,
-                fecha_creacion=now,
-                fecha_inicio=now,
-                fecha_vencimiento=first_step_override.fecha_vencimiento if first_step_override else None,
-                fecha_cierre=None,
-                resultado=None,
-                observaciones=None,
-            )
-            self._steps[step.id] = step
-            self._step_ids_by_workflow[workflow.id].append(step.id)
-            self._comments_by_step[step.id] = []
-            self._history_by_step[step.id] = []
+            override_applied = False
+            for template_step in root_templates:
+                should_apply_override = bool(first_step_override and not override_applied)
+                step = StepInstancePublic(
+                    id=str(uuid4()),
+                    workflow_id=workflow.id,
+                    step_template_id=template_step.id,
+                    codigo=template_step.codigo,
+                    depends_on=list(template_step.depends_on),
+                    nombre=(
+                        first_step_override.nombre
+                        if should_apply_override and first_step_override and first_step_override.nombre
+                        else template_step.nombre
+                    ),
+                    descripcion=(
+                        first_step_override.descripcion
+                        if should_apply_override and first_step_override and first_step_override.descripcion is not None
+                        else template_step.descripcion
+                    ),
+                    orden=template_step.orden,
+                    tipo=template_step.tipo,
+                    requiere_aprobacion=template_step.requiere_aprobacion,
+                    puede_tener_comentarios=template_step.puede_tener_comentarios,
+                    estado=StepStatus.ACTIVO,
+                    fecha_estado_actual=now,
+                    asignado_a=first_step_override.asignado_a if should_apply_override and first_step_override else None,
+                    fecha_creacion=now,
+                    fecha_inicio=now,
+                    fecha_vencimiento=(
+                        first_step_override.fecha_vencimiento
+                        if should_apply_override and first_step_override
+                        else None
+                    ),
+                    fecha_cierre=None,
+                    resultado=None,
+                    observaciones=None,
+                )
+                if should_apply_override:
+                    override_applied = True
+                self._steps[step.id] = step
+                self._step_ids_by_workflow[workflow.id].append(step.id)
+                self._comments_by_step[step.id] = []
+                self._history_by_step[step.id] = []
 
         return self.get_workflow(workflow.id)  # type: ignore[return-value]
 
@@ -332,7 +431,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
     def list_workflow_steps(self, workflow_id: str) -> list[StepInstancePublic]:
         step_ids = self._step_ids_by_workflow.get(workflow_id, [])
         steps = [self._enrich_step(self._steps[step_id]) for step_id in step_ids]
-        return sorted(steps, key=lambda item: item.orden)
+        return _sort_step_instances(steps)
 
     def get_step(self, step_id: str) -> StepInstancePublic | None:
         step = self._steps.get(step_id)
@@ -346,12 +445,18 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         payload: StepCreate,
         orden: int,
         estado: StepStatus = StepStatus.ACTIVO,
+        *,
+        step_template_id: str | None = None,
+        codigo: str | None = None,
+        depends_on: list[str] | None = None,
     ) -> StepInstancePublic:
         now = utc_now()
         step = StepInstancePublic(
             id=str(uuid4()),
             workflow_id=workflow_id,
-            step_template_id=None,
+            step_template_id=step_template_id,
+            codigo=codigo,
+            depends_on=list(depends_on or []),
             nombre=payload.nombre,
             descripcion=payload.descripcion,
             orden=orden,
@@ -401,12 +506,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         return list(self._history_by_step.get(step_id, []))
 
     def list_pending_steps(self) -> list[StepInstancePublic]:
-        visible_statuses = {
-            StepStatus.ACTIVO,
-            StepStatus.ESPERA,
-            StepStatus.PROBLEMA,
-        }
-        steps = [step for step in self._steps.values() if step.estado in visible_statuses]
+        steps = [step for step in self._steps.values() if step.estado in OPEN_STEP_STATUSES]
         return sorted(steps, key=lambda item: (item.estado != StepStatus.ACTIVO, item.workflow_id, item.orden))
 
     def list_active_workflows(self) -> list[WorkflowSummary]:
@@ -598,7 +698,9 @@ class PostgresWorkflowRepository(WorkflowRepository):
     def list_workflows(self) -> list[WorkflowSummary]:
         with session_scope() as session:
             workflows = session.scalars(
-                select(WorkflowModel).order_by(WorkflowModel.fecha_inicio.desc())
+                select(WorkflowModel)
+                .options(selectinload(WorkflowModel.steps))
+                .order_by(WorkflowModel.fecha_inicio.desc())
             ).all()
             return [self._workflow_to_summary(workflow) for workflow in workflows]
 
@@ -623,49 +725,56 @@ class PostgresWorkflowRepository(WorkflowRepository):
         payload: WorkflowInstanceBase,
     ) -> WorkflowDetail:
         now = utc_now()
-        ordered_templates = sorted(template.steps, key=lambda item: item.orden)
+        ordered_templates = _normalize_template_steps(template.steps)
+        root_templates = [step for step in ordered_templates if not step.depends_on]
         workflow = WorkflowModel(
             id=str(uuid4()),
             trigger_id=trigger_id,
             workflow_template_id=template.id,
             workflow_template_nombre=template.nombre,
-            estado=WorkflowStatus.EN_PROCESO.value if ordered_templates else WorkflowStatus.FINALIZADO.value,
-            paso_actual=ordered_templates[0].orden if ordered_templates else None,
-            total_pasos=1 if ordered_templates else 0,
+            estado=WorkflowStatus.EN_PROCESO.value if root_templates else WorkflowStatus.FINALIZADO.value,
+            paso_actual=root_templates[0].orden if root_templates else None,
+            total_pasos=len(root_templates),
             fecha_inicio=now,
             fecha_fin=None,
             objetivo_final=payload.objetivo_final,
             resolucion_esperada=payload.resolucion_esperada,
         )
 
-        if ordered_templates:
+        if root_templates:
             first_step_override = getattr(payload, "primer_paso", None)
-            first_template_step = ordered_templates[0]
-            workflow.steps.append(
-                StepModel(
-                    id=str(uuid4()),
-                    step_template_id=first_template_step.id,
-                    nombre=first_step_override.nombre if first_step_override and first_step_override.nombre else first_template_step.nombre,
-                    descripcion=(
-                        first_step_override.descripcion
-                        if first_step_override and first_step_override.descripcion is not None
-                        else first_template_step.descripcion
-                    ),
-                    orden=first_template_step.orden,
-                    tipo=first_template_step.tipo,
-                    requiere_aprobacion=first_template_step.requiere_aprobacion,
-                    puede_tener_comentarios=first_template_step.puede_tener_comentarios,
-                    estado=StepStatus.ACTIVO.value,
-                    fecha_estado_actual=now,
-                    asignado_a=first_step_override.asignado_a if first_step_override else None,
-                    fecha_creacion=now,
-                    fecha_inicio=now,
-                    fecha_vencimiento=first_step_override.fecha_vencimiento if first_step_override else None,
-                    fecha_cierre=None,
-                    resultado=None,
-                    observaciones=None,
+            override_applied = False
+            for template_step in root_templates:
+                use_override = bool(first_step_override and not override_applied)
+                workflow.steps.append(
+                    StepModel(
+                        id=str(uuid4()),
+                        step_template_id=template_step.id,
+                        codigo=template_step.codigo,
+                        depends_on=list(template_step.depends_on),
+                        nombre=first_step_override.nombre if use_override and first_step_override and first_step_override.nombre else template_step.nombre,
+                        descripcion=(
+                            first_step_override.descripcion
+                            if use_override and first_step_override and first_step_override.descripcion is not None
+                            else template_step.descripcion
+                        ),
+                        orden=template_step.orden,
+                        tipo=template_step.tipo,
+                        requiere_aprobacion=template_step.requiere_aprobacion,
+                        puede_tener_comentarios=template_step.puede_tener_comentarios,
+                        estado=StepStatus.ACTIVO.value,
+                        fecha_estado_actual=now,
+                        asignado_a=first_step_override.asignado_a if use_override and first_step_override else None,
+                        fecha_creacion=now,
+                        fecha_inicio=now,
+                        fecha_vencimiento=first_step_override.fecha_vencimiento if use_override and first_step_override else None,
+                        fecha_cierre=None,
+                        resultado=None,
+                        observaciones=None,
+                    )
                 )
-            )
+                if use_override:
+                    override_applied = True
 
         with session_scope() as session:
             session.add(workflow)
@@ -707,7 +816,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
                 select(StepModel)
                 .options(selectinload(StepModel.comments), selectinload(StepModel.history_entries))
                 .where(StepModel.workflow_id == workflow_id)
-                .order_by(StepModel.orden.asc())
+                .order_by(StepModel.orden.asc(), StepModel.codigo.asc(), StepModel.id.asc())
             ).all()
             return [self._step_to_public(step) for step in steps]
 
@@ -728,12 +837,18 @@ class PostgresWorkflowRepository(WorkflowRepository):
         payload: StepCreate,
         orden: int,
         estado: StepStatus = StepStatus.ACTIVO,
+        *,
+        step_template_id: str | None = None,
+        codigo: str | None = None,
+        depends_on: list[str] | None = None,
     ) -> StepInstancePublic:
         now = utc_now()
         step = StepModel(
             id=str(uuid4()),
             workflow_id=workflow_id,
-            step_template_id=None,
+            step_template_id=step_template_id,
+            codigo=codigo,
+            depends_on=list(depends_on or []),
             nombre=payload.nombre,
             descripcion=payload.descripcion,
             orden=orden,
@@ -768,6 +883,8 @@ class PostgresWorkflowRepository(WorkflowRepository):
 
             existing.workflow_id = step.workflow_id
             existing.step_template_id = step.step_template_id
+            existing.codigo = step.codigo
+            existing.depends_on = list(step.depends_on)
             existing.nombre = step.nombre
             existing.descripcion = step.descripcion
             existing.orden = step.orden
@@ -857,7 +974,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             steps = session.scalars(
                 select(StepModel)
                 .options(selectinload(StepModel.comments), selectinload(StepModel.history_entries))
-                .where(StepModel.estado.in_([StepStatus.ACTIVO.value, StepStatus.ESPERA.value, StepStatus.PROBLEMA.value]))
+                .where(StepModel.estado.in_([status.value for status in OPEN_STEP_STATUSES]))
                 .order_by(StepModel.estado != StepStatus.ACTIVO.value, StepModel.workflow_id.asc(), StepModel.orden.asc())
             ).all()
             return [self._step_to_public(step) for step in steps]
@@ -866,6 +983,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
         with session_scope() as session:
             workflows = session.scalars(
                 select(WorkflowModel)
+                .options(selectinload(WorkflowModel.steps))
                 .where(WorkflowModel.estado.in_([WorkflowStatus.PENDIENTE.value, WorkflowStatus.EN_PROCESO.value]))
                 .order_by(WorkflowModel.fecha_inicio.desc())
             ).all()
@@ -927,14 +1045,17 @@ class PostgresWorkflowRepository(WorkflowRepository):
         )
 
     def _workflow_to_summary(self, workflow: WorkflowModel) -> WorkflowSummary:
+        steps = _sort_step_instances([self._step_to_public(item) for item in workflow.steps])
+        active_orders = _active_step_orders(steps)
         return WorkflowSummary(
             id=workflow.id,
             trigger_id=workflow.trigger_id,
             workflow_template_id=workflow.workflow_template_id,
             workflow_template_nombre=workflow.workflow_template_nombre,
             estado=WorkflowStatus(workflow.estado),
-            paso_actual=workflow.paso_actual,
-            total_pasos=workflow.total_pasos,
+            pasos_activos=active_orders,
+            paso_actual=active_orders[0] if active_orders else None,
+            total_pasos=len(steps) if steps else workflow.total_pasos,
             fecha_inicio=workflow.fecha_inicio,
             fecha_fin=workflow.fecha_fin,
             objetivo_final=workflow.objetivo_final,
@@ -942,9 +1063,18 @@ class PostgresWorkflowRepository(WorkflowRepository):
         )
 
     def _workflow_to_detail(self, workflow: WorkflowModel) -> WorkflowDetail:
+        steps = _sort_step_instances([self._step_to_public(step) for step in workflow.steps])
+        active_orders = _active_step_orders(steps)
+        summary = self._workflow_to_summary(workflow).model_copy(
+            update={
+                "pasos_activos": active_orders,
+                "paso_actual": active_orders[0] if active_orders else None,
+                "total_pasos": len(steps),
+            }
+        )
         return WorkflowDetail(
-            **self._workflow_to_summary(workflow).model_dump(),
-            steps=[self._step_to_public(step) for step in sorted(workflow.steps, key=lambda item: item.orden)],
+            **summary.model_dump(),
+            steps=steps,
         )
 
     def _step_to_public(self, step: StepModel) -> StepInstancePublic:
@@ -965,6 +1095,8 @@ class PostgresWorkflowRepository(WorkflowRepository):
             id=step.id,
             workflow_id=step.workflow_id,
             step_template_id=step.step_template_id,
+            codigo=step.codigo,
+            depends_on=list(step.depends_on or []),
             nombre=step.nombre,
             descripcion=step.descripcion,
             orden=step.orden,
@@ -1011,24 +1143,33 @@ class PostgresWorkflowRepository(WorkflowRepository):
         )
 
     def _template_to_public(self, template: WorkflowTemplateModel) -> WorkflowTemplatePublic:
+        ordered_steps = sorted(template.steps, key=lambda item: item.orden)
+        fallback_codes = [step.nombre.strip().lower().replace(" ", "_") for step in ordered_steps]
+        step_items = [
+            StepTemplatePublic(
+                id=step.id,
+                codigo=(step.codigo or fallback_codes[index]),
+                depends_on=(
+                    list(step.depends_on)
+                    if step.depends_on is not None
+                    else ([fallback_codes[index - 1]] if index > 0 else [])
+                ),
+                nombre=step.nombre,
+                descripcion=step.descripcion,
+                orden=step.orden,
+                tipo=step.tipo,
+                requiere_aprobacion=step.requiere_aprobacion,
+                puede_tener_comentarios=step.puede_tener_comentarios,
+                condicion_para_activarse=step.condicion_para_activarse,
+                condicion_para_cerrarse=step.condicion_para_cerrarse,
+            )
+            for index, step in enumerate(ordered_steps)
+        ]
         return WorkflowTemplatePublic(
             id=template.id,
             nombre=template.nombre,
             descripcion=template.descripcion,
-            steps=[
-                StepTemplatePublic(
-                    id=step.id,
-                    nombre=step.nombre,
-                    descripcion=step.descripcion,
-                    orden=step.orden,
-                    tipo=step.tipo,
-                    requiere_aprobacion=step.requiere_aprobacion,
-                    puede_tener_comentarios=step.puede_tener_comentarios,
-                    condicion_para_activarse=step.condicion_para_activarse,
-                    condicion_para_cerrarse=step.condicion_para_cerrarse,
-                )
-                for step in sorted(template.steps, key=lambda item: item.orden)
-            ],
+            steps=_normalize_template_steps(step_items),
         )
 
     def _deserialize_attachments(self, attachments: list[dict] | None) -> list[AttachmentPublic]:

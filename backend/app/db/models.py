@@ -67,6 +67,8 @@ class WorkflowTemplateStepModel(Base):
         ForeignKey("workflow_templates.id", ondelete="CASCADE"),
         nullable=False,
     )
+    codigo: Mapped[str | None] = mapped_column(String(120))
+    depends_on: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     nombre: Mapped[str] = mapped_column(String(120), nullable=False)
     descripcion: Mapped[str | None] = mapped_column(Text)
     orden: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -115,6 +117,8 @@ class StepModel(Base):
         String(36),
         ForeignKey("workflow_template_steps.id", ondelete="SET NULL"),
     )
+    codigo: Mapped[str | None] = mapped_column(String(120))
+    depends_on: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     nombre: Mapped[str] = mapped_column(String(120), nullable=False)
     descripcion: Mapped[str | None] = mapped_column(Text)
     orden: Mapped[int] = mapped_column(Integer, nullable=False)

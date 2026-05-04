@@ -26,8 +26,10 @@ export function TriggerDetailPage() {
   const [trigger, setTrigger] = useState<TriggerDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [startError, setStartError] = useState<string | null>(null);
-  const [firstDescription, setFirstDescription] = useState("");
+  const [newWorkflowFirstDescription, setNewWorkflowFirstDescription] = useState("");
+  const [newWorkflowError, setNewWorkflowError] = useState<string | null>(null);
+  const [newWorkflowSuccess, setNewWorkflowSuccess] = useState<string | null>(null);
+  const [creatingWorkflow, setCreatingWorkflow] = useState(false);
   const navigate = useNavigate();
 
   function getPrimaryDetail(currentTrigger: TriggerDetail) {
@@ -46,7 +48,7 @@ export function TriggerDetailPage() {
     try {
       setLoading(true);
       setError(null);
-      setStartError(null);
+      setNewWorkflowError(null);
       setTrigger(await getTrigger(triggerId));
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cargar el disparador");
@@ -55,29 +57,36 @@ export function TriggerDetailPage() {
     }
   }
 
-  async function handleStartWorkflow() {
+  async function handleCreateWorkflow() {
     if (!trigger) return;
 
-    if (!firstDescription.trim()) {
-      setStartError("Debes definir la descripcion del primer paso");
+    if (!newWorkflowFirstDescription.trim()) {
+      setNewWorkflowError("Debes indicar la descripcion del primer paso.");
       return;
     }
 
     try {
-      setStartError(null);
-      const workflow = await startWorkflow(trigger.id, {
+      setCreatingWorkflow(true);
+      setNewWorkflowError(null);
+      setNewWorkflowSuccess(null);
+      const newWorkflow = await startWorkflow(trigger.id, {
         objetivo_final: trigger.descripcion ?? "Gestionar requerimiento",
         resolucion_esperada: "Flujo completado con validacion final",
         primer_paso: {
           nombre: "Paso inicial",
-          descripcion: firstDescription.trim() || null,
+          descripcion: newWorkflowFirstDescription.trim(),
           asignado_a: DEFAULT_ACTOR,
           fecha_vencimiento: null,
         },
       });
-      navigate(`/workflows/${workflow.id}`);
+      setNewWorkflowSuccess("Nuevo workflow asociado creado.");
+      setNewWorkflowFirstDescription("");
+      await loadTrigger();
+      navigate(`/workflows/${newWorkflow.id}`);
     } catch (err) {
-      setStartError(err instanceof Error ? err.message : "No se pudo iniciar el workflow");
+      setNewWorkflowError(err instanceof Error ? err.message : "No se pudo crear el nuevo workflow");
+    } finally {
+      setCreatingWorkflow(false);
     }
   }
 
@@ -168,15 +177,15 @@ export function TriggerDetailPage() {
           <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
             <Stack spacing={2.5}>
               <Stack spacing={0.75}>
-                <Typography variant="h5">Workflow asociado</Typography>
+                <Typography variant="h5">Workflows asociados</Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Define el primer paso o abre el flujo actual para seguir operando.
+                  Inicia un workflow o crea uno paralelo sobre este mismo disparador.
                 </Typography>
               </Stack>
 
               {trigger.workflow_activo_id ? (
                 <Stack spacing={2}>
-                  <Alert severity="info">Hay un workflow activo asociado a este requerimiento.</Alert>
+                  <Alert severity="info">Hay al menos un workflow activo asociado a este requerimiento.</Alert>
                   <Button
                     component={RouterLink}
                     to={`/workflows/${trigger.workflow_activo_id}`}
@@ -188,32 +197,34 @@ export function TriggerDetailPage() {
                 </Stack>
               ) : (
                 <Stack spacing={2}>
-                  <Typography color="text.secondary">
-                    Todavia no hay workflow activo. Define el primer paso para iniciarlo.
-                  </Typography>
-                  {trigger.estado_general !== "resuelto" && (
-                    <>
-                      <TextField
-                        label="Descripcion del primer paso *"
-                        multiline
-                        minRows={4}
-                        value={firstDescription}
-                        onChange={(event) => setFirstDescription(event.target.value)}
-                      />
-                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
-                        <Button
-                          variant="contained"
-                          startIcon={<PlayCircleOutlineRoundedIcon />}
-                          onClick={() => void handleStartWorkflow()}
-                        >
-                          Iniciar workflow
-                        </Button>
-                      </Stack>
-                      {startError && <Alert severity="error">{startError}</Alert>}
-                    </>
-                  )}
+                  <Typography color="text.secondary">No hay workflow activo en este momento.</Typography>
                 </Stack>
               )}
+
+              <Stack spacing={1.25}>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Crear nuevo workflow asociado
+                </Typography>
+                <TextField
+                  label="Descripcion del primer paso *"
+                  multiline
+                  minRows={3}
+                  value={newWorkflowFirstDescription}
+                  onChange={(event) => setNewWorkflowFirstDescription(event.target.value)}
+                  disabled={creatingWorkflow}
+                />
+                <Button
+                  variant="outlined"
+                  color="inherit"
+                  startIcon={<PlayCircleOutlineRoundedIcon />}
+                  onClick={() => void handleCreateWorkflow()}
+                  disabled={creatingWorkflow}
+                >
+                  {creatingWorkflow ? "Creando workflow..." : "Crear nuevo workflow"}
+                </Button>
+                {newWorkflowError && <Alert severity="error">{newWorkflowError}</Alert>}
+                {newWorkflowSuccess && <Alert severity="success">{newWorkflowSuccess}</Alert>}
+              </Stack>
 
               {trigger.workflow_ids.length > 0 && (
                 <Stack spacing={1.25}>

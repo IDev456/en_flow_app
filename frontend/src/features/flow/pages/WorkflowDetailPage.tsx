@@ -70,10 +70,11 @@ export function WorkflowDetailPage() {
       const workflowData = await getWorkflow(workflowId);
       setWorkflow(workflowData);
       const stepExistsInWorkflow = workflowData.steps.some((step) => step.id === selectedStepId);
+      const openStatuses = new Set(["activo", "espera", "problema"]);
       const nextSelectedStepId =
         preferredStepId ??
         (stepExistsInWorkflow ? selectedStepId : null) ??
-        workflowData.steps.find((step) => step.estado === "activo")?.id ??
+        workflowData.steps.find((step) => openStatuses.has(step.estado))?.id ??
         workflowData.steps[0]?.id ??
         null;
       setSelectedStepId(nextSelectedStepId);
@@ -132,7 +133,7 @@ export function WorkflowDetailPage() {
         finalizar_workflow: Boolean(input.finalizar_workflow),
       });
       const currentWorkflow = await getWorkflow(workflowId);
-      const nextActiveStep = currentWorkflow.steps.find((step) => step.estado === "activo");
+      const nextActiveStep = currentWorkflow.steps.find((step) => ["activo", "espera", "problema"].includes(step.estado));
       await refreshAfterStepChange(nextActiveStep?.id ?? selectedStepId);
       return;
     }
@@ -173,8 +174,15 @@ export function WorkflowDetailPage() {
   }
 
   const selectedStep: Step | null = workflow.steps.find((step) => step.id === selectedStepId) ?? workflow.steps[0] ?? null;
-  const activeStep: Step | null = workflow.steps.find((step) => step.estado !== "completado") ?? null;
-  const workflowHeaderStatus = workflow.estado === "en_proceso" && activeStep ? activeStep.estado : workflow.estado;
+  const openSteps = workflow.steps.filter((step) => ["activo", "espera", "problema"].includes(step.estado));
+  const workflowHeaderStatus =
+    workflow.estado === "en_proceso"
+      ? (openSteps.some((step) => step.estado === "problema")
+          ? "problema"
+          : openSteps.some((step) => step.estado === "espera")
+            ? "espera"
+            : openSteps[0]?.estado ?? workflow.estado)
+      : workflow.estado;
 
   return (
     <Stack spacing={3}>
@@ -210,6 +218,9 @@ export function WorkflowDetailPage() {
                 )}
                 {workflow.fecha_fin && <Typography variant="body2">Cierre: {formatDate(workflow.fecha_fin)}</Typography>}
                 {workflow.objetivo_final && <Typography variant="body2">Objetivo: {workflow.objetivo_final}</Typography>}
+                <Typography variant="body2">
+                  Pasos activos: {workflow.pasos_activos.length > 0 ? workflow.pasos_activos.join(", ") : "sin pasos activos"}
+                </Typography>
               </Stack>
             )}
           </Stack>

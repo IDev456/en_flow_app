@@ -51,6 +51,8 @@ class TriggerDetail(TriggerPublic):
 
 
 class StepTemplateBase(BaseModel):
+    codigo: str = Field(min_length=1, max_length=120)
+    depends_on: list[str] = Field(default_factory=list)
     nombre: str = Field(min_length=1, max_length=120)
     descripcion: str | None = Field(default=None, max_length=1000)
     orden: int = Field(ge=1)
@@ -95,6 +97,7 @@ class WorkflowSummary(WorkflowInstanceBase):
     workflow_template_id: str
     workflow_template_nombre: str
     estado: WorkflowStatus
+    pasos_activos: list[int] = Field(default_factory=list)
     paso_actual: int | None = None
     total_pasos: int = Field(default=0, ge=0)
     fecha_inicio: datetime
@@ -102,6 +105,8 @@ class WorkflowSummary(WorkflowInstanceBase):
 
 
 class StepInstanceBase(BaseModel):
+    codigo: str | None = Field(default=None, max_length=120)
+    depends_on: list[str] = Field(default_factory=list)
     nombre: str = Field(min_length=1, max_length=120)
     descripcion: str | None = Field(default=None, max_length=1000)
     orden: int = Field(ge=1)
@@ -167,6 +172,7 @@ class StepCompletePayload(BaseModel):
     comentario: str = Field(min_length=3, max_length=1000)
     resultado: str | None = Field(default=None, max_length=1000)
     observaciones: str | None = Field(default=None, max_length=1000)
+    # Compatibilidad: la logica DAG prioriza auto-activacion por plantilla.
     siguiente_paso: StepCreate | None = None
     finalizar_workflow: bool = False
     attachments: list[AttachmentBase] = Field(default_factory=list)

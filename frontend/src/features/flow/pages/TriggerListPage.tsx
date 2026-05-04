@@ -9,7 +9,9 @@ import {
   Chip,
   CircularProgress,
   InputAdornment,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Table,
   TableBody,
@@ -31,10 +33,12 @@ import type { TriggerDetail, WorkflowDetail } from "../types";
 import { formatDate, getStatusTone } from "../utils";
 
 type TriggerFilter = "all" | "in_progress" | "waiting" | "problem" | "done" | "without_flow";
+type FlowStateBucket = "in_progress" | "waiting" | "problem" | "done";
 
 export function TriggerListPage() {
   const [triggers, setTriggers] = useState<TriggerDetail[]>([]);
   const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
+  const [selectedWorkflowByTrigger, setSelectedWorkflowByTrigger] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<TriggerFilter>("all");
   const [loading, setLoading] = useState(true);
@@ -52,6 +56,14 @@ export function TriggerListPage() {
       setError(null);
       const triggerData = await listTriggers();
       setTriggers(triggerData);
+      setSelectedWorkflowByTrigger((current) => {
+        const next: Record<string, string> = {};
+        for (const trigger of triggerData) {
+          const preferred = current[trigger.id] || trigger.workflow_activo_id || trigger.workflow_ids[0] || "";
+          next[trigger.id] = preferred;
+        }
+        return next;
+      });
 
       const workflowIds = [...new Set(triggerData.flatMap((trigger) => trigger.workflow_ids))];
       const details = await Promise.all(workflowIds.map((workflowId) => getWorkflow(workflowId)));
@@ -64,18 +76,17 @@ export function TriggerListPage() {
   }
 
   function getWorkflowIdForTrigger(trigger: TriggerDetail) {
+    const selectedId = selectedWorkflowByTrigger[trigger.id];
+    if (selectedId && trigger.workflow_ids.includes(selectedId)) {
+      return selectedId;
+    }
     if (trigger.workflow_activo_id) {
       return trigger.workflow_activo_id;
     }
-
-    if (trigger.workflow_ids.length === 0) {
-      return null;
-    }
-
-    return trigger.workflow_ids[trigger.workflow_ids.length - 1];
+    return trigger.workflow_ids[0] ?? null;
   }
 
-  async function handleOpen(trigger: TriggerDetail) {
+  function handleOpen(trigger: TriggerDetail) {
     const workflowId = getWorkflowIdForTrigger(trigger);
     if (workflowId) {
       navigate(`/workflows/${workflowId}`);
@@ -83,6 +94,13 @@ export function TriggerListPage() {
     }
 
     navigate(`/triggers/${trigger.id}`);
+  }
+
+  function handleSelectWorkflow(trigger: TriggerDetail, workflowId: string) {
+    setSelectedWorkflowByTrigger((current) => ({
+      ...current,
+      [trigger.id]: workflowId,
+    }));
   }
 
   function getWorkflowForTrigger(trigger: TriggerDetail) {
@@ -107,12 +125,35 @@ export function TriggerListPage() {
     }
 
     if (workflow.estado === "en_proceso") {
-      const currentStep = workflow.steps.find((step) => step.estado !== "completado");
-      if (currentStep?.estado === "problema") return "problema";
-      if (currentStep?.estado === "espera") return "espera";
+      const openSteps = workflow.steps.filter((step) => step.estado !== "completado");
+      if (openSteps.some((step) => step.estado === "problema")) return "problema";
+      if (openSteps.some((step) => step.estado === "espera")) return "espera";
     }
 
     return workflow.estado;
+  }
+
+  function getWorkflowStateBucket(workflow: WorkflowDetail): FlowStateBucket {
+    if (workflow.estado === "finalizado" || workflow.estado === "cancelado") {
+      return "done";
+    }
+    if (workflow.estado === "en_proceso") {
+      const openSteps = workflow.steps.filter((step) => step.estado !== "completado");
+      if (openSteps.some((step) => step.estado === "problema")) return "problem";
+      if (openSteps.some((step) => step.estado === "espera")) return "waiting";
+      return "in_progress";
+    }
+    return "in_progress";
+  }
+
+  function getWorkflowPanoramaForTrigger(trigger: TriggerDetail): Record<FlowStateBucket, number> {
+    const summary: Record<FlowStateBucket, number> = { in_progress: 0, waiting: 0, problem: 0, done: 0 };
+    for (const workflowId of trigger.workflow_ids) {
+      const workflow = workflowsById[workflowId];
+      if (!workflow) continue;
+      summary[getWorkflowStateBucket(workflow)] += 1;
+    }
+    return summary;
   }
 
   async function handleDeleteTrigger(trigger: TriggerDetail) {
@@ -182,12 +223,24 @@ export function TriggerListPage() {
   const completedCount = stateCounts.done;
   const withoutWorkflowCount = stateCounts.without_flow;
   const totalCreatedSteps = triggers.reduce((sum, trigger) => sum + (getWorkflowForTrigger(trigger)?.steps.length ?? 0), 0);
+  const workflows = Object.values(workflowsById);
+  const flowStateCounts = workflows.reduce<Record<FlowStateBucket, number>>(
+    (acc, workflow) => {
+      acc[getWorkflowStateBucket(workflow)] += 1;
+      return acc;
+    },
+    { in_progress: 0, waiting: 0, problem: 0, done: 0 }
+  );
 
   const kpis = [
     { label: "Activos", value: activeCount, helper: "Requerimientos con flujo en curso" },
     { label: "Completados", value: completedCount, helper: "Casos cerrados correctamente" },
     { label: "Sin flujo", value: withoutWorkflowCount, helper: "Requieren definir paso inicial" },
     { label: "Pasos creados", value: totalCreatedSteps, helper: "Total generado entre todos los requerimientos" },
+    { label: "Flows en proceso", value: flowStateCounts.in_progress, helper: "Workflows avanzando" },
+    { label: "Flows en espera", value: flowStateCounts.waiting, helper: "Workflows bloqueados en espera" },
+    { label: "Flows con problema", value: flowStateCounts.problem, helper: "Workflows con incidencia" },
+    { label: "Flows completados", value: flowStateCounts.done, helper: "Workflows finalizados o cancelados" },
   ];
 
   return (
@@ -266,7 +319,8 @@ export function TriggerListPage() {
 
             {!loading && !error && (
               <Typography variant="body2" color="text.secondary">
-                {filtered.length} {filtered.length === 1 ? "resultado" : "resultados"}. Haz click en un requerimiento para abrir su flujo activo o revisar el detalle si aun no tiene workflow.
+                {filtered.length} {filtered.length === 1 ? "resultado" : "resultados"}. Si un requerimiento tiene mas de un
+                workflow, selecciona cual abrir desde la lista.
               </Typography>
             )}
 
@@ -299,9 +353,11 @@ export function TriggerListPage() {
                   <Table sx={{ tableLayout: "fixed", width: "100%" }}>
                     <TableHead>
                       <TableRow>
-                        <TableCell sx={{ width: "58%" }}>Detalle</TableCell>
-                        <TableCell sx={{ width: "16%" }}>Solicitante</TableCell>
-                        <TableCell sx={{ width: "10%" }}>Pasos</TableCell>
+                        <TableCell sx={{ width: "40%" }}>Detalle</TableCell>
+                        <TableCell sx={{ width: "20%" }}>Workflow</TableCell>
+                        <TableCell sx={{ width: "14%" }}>Panorama flows</TableCell>
+                        <TableCell sx={{ width: "14%" }}>Solicitante</TableCell>
+                        <TableCell sx={{ width: "6%" }}>Pasos</TableCell>
                         <TableCell align="right">Estado</TableCell>
                       </TableRow>
                     </TableHead>
@@ -310,6 +366,7 @@ export function TriggerListPage() {
                         const workflow = getWorkflowForTrigger(trigger);
                         const stepCount = workflow?.steps.length ?? 0;
                         const displayStatus = getDisplayStatus(trigger);
+                        const panorama = getWorkflowPanoramaForTrigger(trigger);
 
                         return (
                           <TableRow
@@ -331,6 +388,38 @@ export function TriggerListPage() {
                                   </Typography>
                                 </Stack>
                               </Box>
+                            </TableCell>
+                            <TableCell onClick={(event) => event.stopPropagation()}>
+                              {trigger.workflow_ids.length > 0 ? (
+                                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                                  <Select
+                                    size="small"
+                                    value={getWorkflowIdForTrigger(trigger) ?? ""}
+                                    onChange={(event) => handleSelectWorkflow(trigger, String(event.target.value))}
+                                    sx={{ minWidth: 150 }}
+                                  >
+                                    {trigger.workflow_ids.map((workflowId, index) => (
+                                      <MenuItem key={workflowId} value={workflowId}>
+                                        {`Workflow ${trigger.workflow_ids.length - index}`}
+                                        {workflowId === trigger.workflow_activo_id ? " (activo)" : ""}
+                                      </MenuItem>
+                                    ))}
+                                  </Select>
+                                </Stack>
+                              ) : (
+                                <Typography variant="body2" color="text.secondary">
+                                  Sin workflow
+                                </Typography>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", gap: 0.5 }}>
+                                {panorama.in_progress > 0 && <Chip size="small" label={`proceso ${panorama.in_progress}`} />}
+                                {panorama.waiting > 0 && <Chip size="small" color="warning" label={`espera ${panorama.waiting}`} />}
+                                {panorama.problem > 0 && <Chip size="small" color="error" label={`problema ${panorama.problem}`} />}
+                                {panorama.done > 0 && <Chip size="small" color="success" label={`ok ${panorama.done}`} />}
+                                {trigger.workflow_ids.length === 0 && <Chip size="small" variant="outlined" label="sin flow" />}
+                              </Stack>
                             </TableCell>
                             <TableCell>{getSecondaryRequester(trigger)}</TableCell>
                             <TableCell>{stepCount === 1 ? "1 paso" : `${stepCount} pasos`}</TableCell>
@@ -354,12 +443,13 @@ export function TriggerListPage() {
                     const workflow = getWorkflowForTrigger(trigger);
                     const stepCount = workflow?.steps.length ?? 0;
                     const displayStatus = getDisplayStatus(trigger);
+                    const panorama = getWorkflowPanoramaForTrigger(trigger);
 
                     return (
                       <Card
                         key={trigger.id}
                         className="hover-entity-parent"
-                        sx={{ cursor: "pointer", position: "relative" }}
+                        sx={{ position: "relative", cursor: "pointer" }}
                         onClick={() => void handleOpen(trigger)}
                       >
                         <HoverEntityActions
@@ -382,7 +472,29 @@ export function TriggerListPage() {
                               {isWithoutWorkflow(trigger) && (
                                 <Chip label="sin flujo" size="small" variant="outlined" />
                               )}
+                              {panorama.in_progress > 0 && <Chip size="small" label={`proceso ${panorama.in_progress}`} />}
+                              {panorama.waiting > 0 && <Chip size="small" color="warning" label={`espera ${panorama.waiting}`} />}
+                              {panorama.problem > 0 && <Chip size="small" color="error" label={`problema ${panorama.problem}`} />}
+                              {panorama.done > 0 && <Chip size="small" color="success" label={`ok ${panorama.done}`} />}
                             </Stack>
+
+                            {trigger.workflow_ids.length > 0 ? (
+                              <Stack spacing={1} onClick={(event) => event.stopPropagation()}>
+                                <Select
+                                  size="small"
+                                  value={getWorkflowIdForTrigger(trigger) ?? ""}
+                                  onChange={(event) => handleSelectWorkflow(trigger, String(event.target.value))}
+                                  fullWidth
+                                >
+                                  {trigger.workflow_ids.map((workflowId, index) => (
+                                    <MenuItem key={workflowId} value={workflowId}>
+                                      {`Workflow ${trigger.workflow_ids.length - index}`}
+                                      {workflowId === trigger.workflow_activo_id ? " (activo)" : ""}
+                                    </MenuItem>
+                                  ))}
+                                </Select>
+                              </Stack>
+                            ) : null}
                           </Stack>
                         </CardContent>
                       </Card>
