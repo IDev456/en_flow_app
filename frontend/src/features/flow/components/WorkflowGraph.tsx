@@ -8,14 +8,12 @@ import {
   ButtonBase,
   Card,
   Chip,
-  Divider,
   Stack,
   Typography,
 } from "@mui/material";
 
 import type { Step } from "../types";
 import { formatDate, formatElapsedTime, getStatusTone, humanizeStatus } from "../utils";
-import { StatusBadge } from "./StatusBadge";
 import type { WorkflowVariant } from "./WorkflowVariantSwitcher";
 
 type WorkflowGraphProps = {
@@ -54,11 +52,11 @@ function renderLatestStepMovement(step: Step) {
     );
   }
 
-  return (
-    <Typography variant="body2" color={step.ultimo_comentario?.trim() ? "text.primary" : "text.secondary"}>
-      {step.ultimo_comentario?.trim() || "Sin comentarios todavia"}
-    </Typography>
-  );
+  const fallbackText =
+    step.ultimo_comentario?.trim() ||
+    (step.orden === 1 && step.descripcion?.trim() ? step.descripcion.trim() : "Sin comentarios todavia");
+
+  return <Typography variant="body2" color={fallbackText === "Sin comentarios todavia" ? "text.secondary" : "text.primary"}>{fallbackText}</Typography>;
 }
 
 function getStepStateColors(theme: Theme, status: Step["estado"]) {
@@ -166,7 +164,9 @@ function VerticalWorkflowGraph({
         <Stack spacing={2}>
           {orderedSteps.map((step, index) => {
             const isSelected = selectedStepId === step.id;
-            const waitingElapsed = step.estado === "espera" ? formatElapsedTime(step.fecha_estado_actual) : null;
+            const lastCommentAt = step.ultimo_comentario_fecha;
+            const lastCommentElapsed = formatElapsedTime(lastCommentAt);
+            const stateElapsed = formatElapsedTime(step.fecha_estado_actual);
             const isLast = index === orderedSteps.length - 1;
             const isFirst = index === 0;
             const stateColors = getStepStateColors(theme, step.estado);
@@ -260,48 +260,41 @@ function VerticalWorkflowGraph({
                     {shouldExpand ? (
                       <Box sx={{ p: 2.25 }}>
                         <Stack spacing={1.25}>
-                          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} sx={{ justifyContent: "space-between" }}>
+                          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
                             <Box>
-                              {step.estado === "activo" && (
-                                <Typography variant="overline" color="primary.light">
-                                  Paso actual
-                                </Typography>
-                              )}
                               <Typography variant="h6" sx={{ mt: 1 }}>
                                 {step.nombre}
                               </Typography>
                             </Box>
-                            <StatusBadge value={step.estado} />
                           </Stack>
 
-                          {step.descripcion && (
-                            <Typography variant="body2" color="text.secondary">
-                              {step.descripcion}
+                          <Box>
+                            <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 0.75 }}>
+                              Ultimo comentario
                             </Typography>
-                          )}
-
-                          <Stack spacing={0.5}>
-                            <Typography variant="body2" color="text.secondary">
-                              Creado: {formatDate(step.fecha_creacion)}
-                            </Typography>
-                            {step.fecha_inicio && (
-                              <Typography variant="body2" color="text.secondary">
-                                Inicio: {formatDate(step.fecha_inicio)}
+                            {renderLatestStepMovement(step)}
+                            <Stack direction="row" spacing={1} sx={{ mt: 0.75, flexWrap: "wrap", gap: 1 }}>
+                              <Typography variant="caption" color="text.secondary">
+                                {lastCommentAt ? `Fecha: ${formatDate(lastCommentAt)}` : "Fecha: sin registro"}
                               </Typography>
-                            )}
-                            {waitingElapsed && (
-                              <Typography variant="body2" color="warning.light">
-                                En espera {waitingElapsed}
-                              </Typography>
-                            )}
-                          </Stack>
+                              {lastCommentElapsed && (
+                                <Typography variant="caption" color="text.secondary">
+                                  {lastCommentElapsed}
+                                </Typography>
+                              )}
+                              {stateElapsed && (
+                                <Typography variant="caption" color="text.secondary">
+                                  Estado actual: {stateElapsed}
+                                </Typography>
+                              )}
+                            </Stack>
+                          </Box>
                         </Stack>
                       </Box>
                     ) : (
                       <Box sx={{ p: 1.75 }}>
                         <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} sx={{ justifyContent: "space-between", alignItems: { sm: "center" } }}>
                           <Typography variant="h6">{step.nombre}</Typography>
-                          <StatusBadge value={step.estado} />
                         </Stack>
                       </Box>
                     )}
@@ -393,8 +386,9 @@ function GitLogWorkflowGraph({
 
         {orderedSteps.map((step) => {
           const isSelected = selectedStepId === step.id;
-          const waitingElapsed = step.estado === "espera" ? formatElapsedTime(step.fecha_estado_actual) : null;
-          const createdElapsed = formatElapsedTime(step.fecha_creacion);
+          const lastCommentAt = step.ultimo_comentario_fecha;
+          const lastCommentElapsed = formatElapsedTime(lastCommentAt);
+          const stateElapsed = formatElapsedTime(step.fecha_estado_actual);
           return (
             <Card
               key={step.id}
@@ -414,43 +408,32 @@ function GitLogWorkflowGraph({
                 sx={{ p: 2.25, display: "block", width: "100%", textAlign: "left" }}
               >
                 <Stack spacing={1.25}>
-                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} sx={{ justifyContent: "space-between" }}>
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
                     <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", gap: 1 }}>
                       <Chip label={`P${step.orden.toString().padStart(2, "0")}`} size="small" variant="outlined" />
                       <Typography variant="h6">{step.nombre}</Typography>
                     </Stack>
-                    <StatusBadge value={step.estado} />
-                  </Stack>
-                  {step.descripcion && (
-                    <Typography variant="body2" color="text.secondary">
-                      {step.descripcion}
-                    </Typography>
-                  )}
-                  <Stack spacing={0.5}>
-                    <Typography variant="body2" color="text.secondary">
-                      Creado: {formatDate(step.fecha_creacion)}
-                    </Typography>
-                    {createdElapsed && (
-                      <Typography variant="body2" color="text.secondary">
-                        {createdElapsed}
-                      </Typography>
-                    )}
-                    {waitingElapsed && (
-                      <Typography variant="body2" color="warning.light">
-                        En espera {waitingElapsed}
-                      </Typography>
-                    )}
-                    {step.fecha_vencimiento && (
-                      <Typography variant="body2" color="text.secondary">
-                        Vence: {formatDate(step.fecha_vencimiento)}
-                      </Typography>
-                    )}
                   </Stack>
                   <Box>
                     <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 0.75 }}>
-                      Ultimo movimiento
+                      Ultimo comentario
                     </Typography>
                     {renderLatestStepMovement(step)}
+                    <Stack direction="row" spacing={1} sx={{ mt: 0.75, flexWrap: "wrap", gap: 1 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        {lastCommentAt ? `Fecha: ${formatDate(lastCommentAt)}` : "Fecha: sin registro"}
+                      </Typography>
+                      {lastCommentElapsed && (
+                        <Typography variant="caption" color="text.secondary">
+                          {lastCommentElapsed}
+                        </Typography>
+                      )}
+                      {stateElapsed && (
+                        <Typography variant="caption" color="text.secondary">
+                          Estado actual: {stateElapsed}
+                        </Typography>
+                      )}
+                    </Stack>
                   </Box>
                 </Stack>
               </ButtonBase>

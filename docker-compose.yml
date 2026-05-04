@@ -6,8 +6,8 @@ services:
       POSTGRES_DB: enflow
       POSTGRES_USER: enflow
       POSTGRES_PASSWORD: enflow
-    ports:
-      - "5432:5432"
+    # ports:
+    #   - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -31,7 +31,7 @@ services:
     volumes:
       - ./backend:/app
     ports:
-      - "8000:8000"
+      - "8001:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -43,7 +43,8 @@ services:
     command: npm run dev
     working_dir: /app
     environment:
-      VITE_API_URL: http://localhost:8000/api/v1
+      VITE_API_URL: /api/v1
+      VITE_DEV_PROXY_TARGET: http://backend:8000
       CHOKIDAR_USEPOLLING: "true"
     volumes:
       - ./frontend:/app

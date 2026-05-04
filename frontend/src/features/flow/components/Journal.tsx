@@ -19,6 +19,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 
 import type { Attachment, AttachmentInput, Step, StepComment, StepHistoryEntry, StepJournalEntryInput } from "../types";
 import { buildJournalItems, formatDate, stepStatusOptions } from "../utils";
@@ -44,6 +45,43 @@ type DraftAttachment = AttachmentInput & {
 
 const MAX_CHARS = 1000;
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+const SHAPE_RADIUS = 1.1;
+
+type StatusOptionValue = "espera" | "problema" | "completado";
+
+const STATUS_ACCENTS: Record<StatusOptionValue, string> = {
+  espera: "#f59e0b",
+  problema: "#f43f5e",
+  completado: "#22c55e",
+};
+
+function getStatusToggleSx(status: StatusOptionValue) {
+  const accent = STATUS_ACCENTS[status];
+  return {
+    borderRadius: SHAPE_RADIUS,
+    borderColor: alpha(accent, 0.4),
+    backgroundColor: alpha(accent, 0.08),
+    textTransform: "none",
+    fontWeight: 700,
+    px: 1.75,
+    py: 0.8,
+    "&:hover": {
+      borderColor: accent,
+      backgroundColor: alpha(accent, 0.24),
+      color: "#ffffff",
+    },
+    "&.Mui-selected": {
+      borderColor: accent,
+      backgroundColor: alpha(accent, 0.3),
+      color: "#ffffff",
+    },
+    "&.Mui-selected:hover": {
+      borderColor: accent,
+      backgroundColor: alpha(accent, 0.36),
+      color: "#ffffff",
+    },
+  };
+}
 
 export function Journal({
   step,
@@ -251,15 +289,28 @@ export function Journal({
   }
 
   return (
-    <Stack spacing={3}>
+    <Stack
+      spacing={3}
+      sx={{
+        "& .MuiOutlinedInput-root": {
+          borderRadius: SHAPE_RADIUS,
+        },
+        "& .MuiButton-root": {
+          borderRadius: SHAPE_RADIUS,
+          textTransform: "none",
+          fontWeight: 700,
+        },
+        "& .MuiCard-root": {
+          borderRadius: SHAPE_RADIUS,
+        },
+        "& .MuiAlert-root": {
+          borderRadius: SHAPE_RADIUS,
+        },
+      }}
+    >
       <Box ref={composerRef}>
         <Stack spacing={2}>
-          <Stack spacing={0.75}>
-            <Typography variant="h6">Bitacora operativa</Typography>
-            <Typography variant="body2" color="text.secondary">
-              Registra comentarios, adjuntos y cambios de estado sin salir del paso. Todo lo que guardes quedara visible en el historial.
-            </Typography>
-          </Stack>
+          <Typography variant="h6">Bitacora operativa</Typography>
 
           <TextField
             inputRef={textareaRef}
@@ -295,9 +346,6 @@ export function Journal({
               >
                 Adjuntar archivos
               </Button>
-              <Typography variant="body2" color="text.secondary">
-                Tambien puedes pegar imagenes directamente desde el portapapeles.
-              </Typography>
             </Stack>
           )}
 
@@ -368,9 +416,6 @@ export function Journal({
               <Typography variant="subtitle2" color="text.secondary">
                 Cambiar estado
               </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Usa esta accion solo cuando el comentario explique por que el paso avanza, queda en espera o presenta un problema.
-              </Typography>
               <ToggleButtonGroup
                 exclusive
                 value={selectedStatus || null}
@@ -378,10 +423,21 @@ export function Journal({
                   onSelectedStatusChange(value ?? "");
                   setError(null);
                 }}
-                sx={{ flexWrap: "wrap", gap: 1 }}
+                sx={{
+                  flexWrap: "wrap",
+                  gap: 1,
+                  p: 0.75,
+                  borderRadius: SHAPE_RADIUS,
+                  backgroundColor: "rgba(8, 20, 44, 0.58)",
+                }}
               >
                 {stepStatusOptions.map((option) => (
-                  <ToggleButton key={option.value} value={option.value} disabled={submitting}>
+                  <ToggleButton
+                    key={option.value}
+                    value={option.value}
+                    disabled={submitting}
+                    sx={getStatusToggleSx(option.value)}
+                  >
                     {option.label}
                   </ToggleButton>
                 ))}
@@ -457,9 +513,6 @@ export function Journal({
             spacing={1.5}
             sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", sm: "center" } }}
           >
-            <Typography variant="body2" color="text.secondary">
-              Usa <strong>Ctrl + Enter</strong> para enviar mas rapido. Si solo adjuntas evidencia, no hace falta cambiar el estado.
-            </Typography>
             <Button type="button" variant="contained" onClick={() => void handleSubmit()} disabled={!canSubmit}>
               {submitting ? "Guardando..." : getSubmitLabel()}
             </Button>
@@ -477,12 +530,9 @@ export function Journal({
             <Card key={item.id} variant="outlined">
               <CardContent sx={{ display: "grid", gap: 1.25 }}>
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between" }}>
-                  <Box>
-                    <Typography sx={{ fontWeight: 700 }}>{item.author}</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {formatDate(item.date)}
-                    </Typography>
-                  </Box>
+                  <Typography variant="body2" color="text.secondary">
+                    {formatDate(item.date)}
+                  </Typography>
                   {item.kind === "status" && <StatusBadge value={item.status} />}
                 </Stack>
                 {item.body && <Typography variant="body1">{item.body}</Typography>}

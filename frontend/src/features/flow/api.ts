@@ -1,4 +1,4 @@
-import { apiGet, apiPatch, apiPost } from "../../api/client";
+import { apiDelete, apiGet, apiPatch, apiPost } from "../../api/client";
 import type {
   Step,
   StepComment,
@@ -20,6 +20,10 @@ export function listTriggers() {
 
 export function createTrigger(input: TriggerCreateInput) {
   return apiPost<Trigger>("/triggers/", input);
+}
+
+export function deleteTrigger(triggerId: string) {
+  return apiDelete(`/triggers/${triggerId}`);
 }
 
 export function getTrigger(triggerId: string) {

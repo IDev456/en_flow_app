@@ -68,6 +68,7 @@ export type Step = {
   resultado: string | null;
   observaciones: string | null;
   ultimo_comentario: string | null;
+  ultimo_comentario_fecha: string | null;
   ultimo_comentario_tipo: "texto" | "adjunto" | "imagen" | null;
   ultimo_comentario_adjunto_nombre: string | null;
   ultimo_comentario_adjunto_content_type: string | null;

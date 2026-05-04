@@ -21,6 +21,11 @@ type TriggerCreateModalProps = {
   onClose: () => void;
 };
 
+const SOLICITANTE_MAX = 150;
+const TRIGGER_DESCRIPTION_MAX = 1000;
+const STEP_DESCRIPTION_MAX = 1000;
+const OBJETIVO_FINAL_MAX = 200;
+
 export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
   const [solicitante, setSolicitante] = useState("");
   const [description, setDescription] = useState("");
@@ -36,11 +41,30 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
       return;
     }
 
+    if (solicitante.trim().length > SOLICITANTE_MAX) {
+      setError(`Solicitante supera ${SOLICITANTE_MAX} caracteres`);
+      return;
+    }
+
+    if (description.trim().length > TRIGGER_DESCRIPTION_MAX) {
+      setError(`Descripcion supera ${TRIGGER_DESCRIPTION_MAX} caracteres`);
+      return;
+    }
+
+    if (firstDescription.trim().length > STEP_DESCRIPTION_MAX) {
+      setError(`Descripcion del paso supera ${STEP_DESCRIPTION_MAX} caracteres`);
+      return;
+    }
+
     try {
       setSubmitting(true);
       setError(null);
 
       const descriptionText = description.trim();
+      const objetivoFinal = descriptionText
+        ? descriptionText.slice(0, OBJETIVO_FINAL_MAX)
+        : "Gestionar requerimiento";
+
       const trigger = await createTrigger({
         solicitante: solicitante.trim() || null,
         descripcion: descriptionText || null,
@@ -49,7 +73,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
       });
 
       const workflow = await startWorkflow(trigger.id, {
-        objetivo_final: descriptionText || "Gestionar requerimiento",
+        objetivo_final: objetivoFinal,
         resolucion_esperada: "Workflow resuelto y validado",
         primer_paso: {
           nombre: "Paso inicial",
@@ -95,7 +119,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
               autoFocus
               label="Solicitante"
               value={solicitante}
-              onChange={(event) => setSolicitante(event.target.value)}
+              onChange={(event) => setSolicitante(event.target.value.slice(0, SOLICITANTE_MAX))}
               placeholder="Ej. Cliente A, Sector Operaciones, Juan Perez..."
             />
             <TextField
@@ -103,7 +127,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
               multiline
               minRows={3}
               value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              onChange={(event) => setDescription(event.target.value.slice(0, TRIGGER_DESCRIPTION_MAX))}
               placeholder="De que se trata este requerimiento?"
             />
           </Box>
@@ -130,7 +154,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
                 multiline
                 minRows={4}
                 value={firstDescription}
-                onChange={(event) => setFirstDescription(event.target.value)}
+                onChange={(event) => setFirstDescription(event.target.value.slice(0, STEP_DESCRIPTION_MAX))}
                 placeholder="Ej. Preguntarle a Orlando quien es Orlando."
               />
             </Stack>

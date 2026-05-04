@@ -5,7 +5,6 @@ import {
   Breadcrumbs,
   Card,
   CardContent,
-  Chip,
   CircularProgress,
   Link,
   Stack,
@@ -27,7 +26,7 @@ import { StepDetailPanel } from "../components/StepDetailPanel";
 import { WorkflowGraph } from "../components/WorkflowGraph";
 import { WorkflowVariantSwitcher, type WorkflowVariant } from "../components/WorkflowVariantSwitcher";
 import type { Step, StepComment, StepHistoryEntry, StepJournalEntryInput, TriggerDetail, WorkflowDetail } from "../types";
-import { DEFAULT_ACTOR, formatDate, humanizeStatus } from "../utils";
+import { DEFAULT_ACTOR, formatDate } from "../utils";
 
 export function WorkflowDetailPage() {
   const { workflowId = "" } = useParams();
@@ -174,7 +173,8 @@ export function WorkflowDetailPage() {
   }
 
   const selectedStep: Step | null = workflow.steps.find((step) => step.id === selectedStepId) ?? workflow.steps[0] ?? null;
-  const activeStep: Step | null = workflow.steps.find((step) => step.estado === "activo") ?? selectedStep;
+  const activeStep: Step | null = workflow.steps.find((step) => step.estado !== "completado") ?? null;
+  const workflowHeaderStatus = workflow.estado === "en_proceso" && activeStep ? activeStep.estado : workflow.estado;
 
   return (
     <Stack spacing={3}>
@@ -193,26 +193,13 @@ export function WorkflowDetailPage() {
           <Stack spacing={2}>
             <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ justifyContent: "space-between" }}>
               <Box>
-                <Typography variant="overline" color="primary.light">
-                  {workflow.workflow_template_nombre}
-                </Typography>
                 <Typography variant="h3">{getPrimaryRequirementLabel()}</Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
                   Solicitante: {getSecondaryRequesterLabel()}
                 </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                  {activeStep
-                    ? `Ahora conviene avanzar sobre "${activeStep.nombre}". Puedes abrir cualquier paso para revisar contexto o registrar novedades.`
-                    : "El workflow no tiene pasos activos en este momento."}
-                </Typography>
               </Box>
               <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                <StatusBadge value={workflow.estado} />
-                <Chip
-                  label={workflow.paso_actual ? `Paso actual ${workflow.paso_actual}` : "Workflow finalizado"}
-                  variant="outlined"
-                  size="small"
-                />
+                <StatusBadge value={workflowHeaderStatus} />
               </Stack>
             </Stack>
 

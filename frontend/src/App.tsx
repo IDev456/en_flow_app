@@ -85,7 +85,7 @@ function App() {
           py: { xs: 3, md: 4 },
         }}
       >
-        <Box sx={{ minHeight: "calc(100vh - 112px)" }}>
+        <Box>
           <Routes>
             <Route path="/" element={<Navigate to="/triggers" replace />} />
             <Route path="/dashboard" element={<Navigate to="/triggers" replace />} />

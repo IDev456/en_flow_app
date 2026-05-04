@@ -9,8 +9,9 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
-import { Link as RouterLink } from "react-router-dom";
+import { Link as RouterLink, useNavigate } from "react-router-dom";
 
+import { HoverEntityActions } from "../../../components/HoverEntityActions";
 import { listActiveWorkflows, listPendingSteps } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Step, WorkflowSummary } from "../types";
@@ -21,6 +22,7 @@ export function DashboardPage() {
   const [steps, setSteps] = useState<Step[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     void loadDashboard();
@@ -99,7 +101,10 @@ export function DashboardPage() {
                   <Alert severity="info">Todavia no hay workflows activos.</Alert>
                 ) : (
                   workflows.map((workflow) => (
-                    <Card key={workflow.id} variant="outlined">
+                    <Card key={workflow.id} variant="outlined" className="hover-entity-parent" sx={{ position: "relative" }}>
+                      <HoverEntityActions
+                        onEdit={() => navigate(`/workflows/${workflow.id}`)}
+                      />
                       <CardContent sx={{ display: "flex", justifyContent: "space-between", gap: 2 }}>
                         <Box>
                           <Typography sx={{ fontWeight: 700 }}>{workflow.workflow_template_nombre}</Typography>
@@ -129,7 +134,10 @@ export function DashboardPage() {
                   <Alert severity="info">No hay pasos abiertos.</Alert>
                 ) : (
                   steps.map((step) => (
-                    <Card key={step.id} variant="outlined">
+                    <Card key={step.id} variant="outlined" className="hover-entity-parent" sx={{ position: "relative" }}>
+                      <HoverEntityActions
+                        onEdit={() => navigate(`/steps/${step.id}`)}
+                      />
                       <CardContent sx={{ display: "flex", justifyContent: "space-between", gap: 2 }}>
                         <Box>
                           <Typography sx={{ fontWeight: 700 }}>

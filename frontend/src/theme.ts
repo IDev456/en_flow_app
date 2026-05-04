@@ -59,7 +59,7 @@ export const theme = createTheme({
     },
   },
   shape: {
-    borderRadius: 16,
+    borderRadius: 12,
   },
   spacing: 8,
   typography: {
@@ -157,7 +157,7 @@ export const theme = createTheme({
       },
       styleOverrides: {
         root: {
-          borderRadius: 999,
+          borderRadius: 8,
           paddingInline: 18,
           minHeight: 42,
         },
@@ -166,7 +166,7 @@ export const theme = createTheme({
     MuiCard: {
       styleOverrides: {
         root: {
-          borderRadius: 20,
+          borderRadius: 14,
           border: "1px solid rgba(147, 169, 198, 0.12)",
           backgroundImage: "linear-gradient(180deg, rgba(20, 28, 44, 0.98), rgba(14, 20, 34, 0.98))",
           boxShadow: "0 18px 44px rgba(0, 0, 0, 0.18)",
@@ -189,7 +189,7 @@ export const theme = createTheme({
     MuiOutlinedInput: {
       styleOverrides: {
         root: {
-          borderRadius: 14,
+          borderRadius: 12,
           backgroundColor: alpha("#0d1424", 0.7),
         },
       },
@@ -197,7 +197,7 @@ export const theme = createTheme({
     MuiChip: {
       styleOverrides: {
         root: {
-          borderRadius: 999,
+          borderRadius: 10,
           fontWeight: 700,
         },
       },
@@ -205,7 +205,7 @@ export const theme = createTheme({
     MuiDialog: {
       styleOverrides: {
         paper: {
-          borderRadius: 24,
+          borderRadius: 14,
           border: "1px solid rgba(147, 169, 198, 0.14)",
           backgroundImage: "linear-gradient(180deg, rgba(19, 27, 43, 0.98), rgba(14, 20, 34, 0.98))",
         },
@@ -230,7 +230,7 @@ export const theme = createTheme({
       styleOverrides: {
         root: {
           padding: 4,
-          borderRadius: 999,
+          borderRadius: 8,
           backgroundColor: alpha("#11192c", 0.9),
         },
       },
@@ -239,7 +239,7 @@ export const theme = createTheme({
       styleOverrides: {
         root: {
           border: 0,
-          borderRadius: 999,
+          borderRadius: 7,
           paddingInline: 16,
         },
       },

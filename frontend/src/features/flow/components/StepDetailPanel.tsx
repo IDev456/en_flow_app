@@ -18,9 +18,7 @@ import {
 import { Link as RouterLink } from "react-router-dom";
 
 import type { Step, StepComment, StepHistoryEntry, StepJournalEntryInput } from "../types";
-import { formatDate } from "../utils";
 import { Journal } from "./Journal";
-import { StatusBadge } from "./StatusBadge";
 
 type StepDetailPanelProps = {
   workflowId: string;
@@ -82,6 +80,9 @@ export function StepDetailPanel({
   }
 
   const canChangeStatus = ["activo", "espera", "problema"].includes(step.estado);
+  const latestMessage =
+    step.ultimo_comentario?.trim() ||
+    (step.orden === 1 && step.descripcion?.trim() ? step.descripcion.trim() : "Sin comentarios todavia");
 
   async function handleSubmitJournal(input: StepJournalEntryInput) {
     await onSubmitJournal(input);
@@ -127,7 +128,6 @@ export function StepDetailPanel({
               </Box>
 
               <Stack direction="row" spacing={1}>
-                <StatusBadge value={step.estado} />
                 {canChangeStatus && (
                   <>
                     <IconButton onClick={(event) => setMenuAnchor(event.currentTarget)} aria-label="Cambiar estado">
@@ -149,19 +149,11 @@ export function StepDetailPanel({
             </Stack>
 
             <Stack spacing={0.5}>
-              <Typography variant="body2" color="text.secondary">
-                Tipo: {step.tipo}
+              <Typography variant="body2" color="text.secondary" sx={{ pt: 0.25 }}>
+                Ultimo comentario:
               </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Responsable: {step.asignado_a || "Sin asignar"}
-              </Typography>
-              {step.fecha_inicio && (
-                <Typography variant="body2" color="text.secondary">
-                  Inicio: {formatDate(step.fecha_inicio)}
-                </Typography>
-              )}
-              <Typography variant="body2" color="text.secondary" sx={{ pt: 0.5 }}>
-                Aqui puedes dejar evidencia, explicar bloqueos o completar el paso cuando ya este resuelto.
+              <Typography variant="body2" color={latestMessage === "Sin comentarios todavia" ? "text.secondary" : "text.primary"}>
+                {latestMessage}
               </Typography>
             </Stack>
           </Stack>

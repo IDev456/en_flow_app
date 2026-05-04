@@ -1,11 +1,9 @@
 import { useEffect, useState } from "react";
-import AddCircleOutlineRoundedIcon from "@mui/icons-material/AddCircleOutlineRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import { alpha } from "@mui/material/styles";
 import {
   Alert,
   Box,
-  Button,
   Card,
   CardContent,
   Chip,
@@ -24,14 +22,15 @@ import {
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
-import { getWorkflow, listTriggers } from "../api";
+import { HoverEntityActions } from "../../../components/HoverEntityActions";
+import { deleteTrigger, getWorkflow, listTriggers } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
 import type { TriggerDetail, WorkflowDetail } from "../types";
-import { formatDate } from "../utils";
+import { formatDate, getStatusTone } from "../utils";
 
-type TriggerFilter = "all" | "active" | "done";
+type TriggerFilter = "all" | "in_progress" | "waiting" | "problem" | "done" | "without_flow";
 
 export function TriggerListPage() {
   const [triggers, setTriggers] = useState<TriggerDetail[]>([]);
@@ -39,9 +38,9 @@ export function TriggerListPage() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<TriggerFilter>("all");
   const [loading, setLoading] = useState(true);
+  const [deletingTriggerId, setDeletingTriggerId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
-  const [, setSearchParams] = useSearchParams();
 
   useEffect(() => {
     void loadData();
@@ -116,15 +115,57 @@ export function TriggerListPage() {
     return workflow.estado;
   }
 
-  const ACTIVE_DISPLAY_STATES = new Set(["en_proceso", "espera", "problema", "activo"]);
+  async function handleDeleteTrigger(trigger: TriggerDetail) {
+    const detail = getPrimaryDetail(trigger);
+    const confirmed = window.confirm(`Eliminar requerimiento?\n\n${detail}`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDeletingTriggerId(trigger.id);
+      setError(null);
+      await deleteTrigger(trigger.id);
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo eliminar el requerimiento");
+    } finally {
+      setDeletingTriggerId(null);
+    }
+  }
+
+  function isWithoutWorkflow(trigger: TriggerDetail) {
+    return trigger.workflow_ids.length === 0 && trigger.estado_general !== "resuelto";
+  }
+
+  function getFilterBucket(trigger: TriggerDetail): Exclude<TriggerFilter, "all"> {
+    if (isWithoutWorkflow(trigger)) {
+      return "without_flow";
+    }
+
+    const tone = getStatusTone(getDisplayStatus(trigger));
+    if (tone === "problema") {
+      return "problem";
+    }
+    if (tone === "espera") {
+      return "waiting";
+    }
+    if (tone === "finalizado" || tone === "resuelto" || tone === "completado" || tone === "cancelado") {
+      return "done";
+    }
+    return "in_progress";
+  }
+
+  const stateCounts = triggers.reduce<Record<Exclude<TriggerFilter, "all">, number>>(
+    (acc, trigger) => {
+      acc[getFilterBucket(trigger)] += 1;
+      return acc;
+    },
+    { in_progress: 0, waiting: 0, problem: 0, done: 0, without_flow: 0 }
+  );
 
   const filtered = triggers.filter((trigger) => {
-    const displayStatus = getDisplayStatus(trigger);
-
-    if (filter === "active" && !ACTIVE_DISPLAY_STATES.has(displayStatus)) {
-      return false;
-    }
-    if (filter === "done" && displayStatus !== "finalizado" && displayStatus !== "resuelto") {
+    if (filter !== "all" && getFilterBucket(trigger) !== filter) {
       return false;
     }
 
@@ -137,14 +178,9 @@ export function TriggerListPage() {
     return haystack.includes(normalized);
   });
 
-  const activeCount = triggers.filter((trigger) => ACTIVE_DISPLAY_STATES.has(getDisplayStatus(trigger))).length;
-  const completedCount = triggers.filter((trigger) => {
-    const displayStatus = getDisplayStatus(trigger);
-    return displayStatus === "finalizado" || displayStatus === "resuelto";
-  }).length;
-  const withoutWorkflowCount = triggers.filter(
-    (trigger) => trigger.workflow_ids.length === 0 && trigger.estado_general !== "resuelto"
-  ).length;
+  const activeCount = stateCounts.in_progress + stateCounts.waiting + stateCounts.problem;
+  const completedCount = stateCounts.done;
+  const withoutWorkflowCount = stateCounts.without_flow;
   const totalCreatedSteps = triggers.reduce((sum, trigger) => sum + (getWorkflowForTrigger(trigger)?.steps.length ?? 0), 0);
 
   const kpis = [
@@ -187,21 +223,8 @@ export function TriggerListPage() {
               sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", md: "center" } }}
             >
               <Box>
-                <Typography variant="subtitle2" color="primary.light">
-                  Operacion diaria
-                </Typography>
                 <Typography variant="h2">Requerimientos</Typography>
-                <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
-                  Revisa los casos en curso, detecta bloqueos y entra al workflow para continuar el siguiente paso.
-                </Typography>
               </Box>
-              <Button
-                variant="contained"
-                startIcon={<AddCircleOutlineRoundedIcon />}
-                onClick={() => setSearchParams({ modal: "new" })}
-              >
-                Nuevo requerimiento
-              </Button>
             </Stack>
 
             <Stack direction={{ xs: "column", lg: "row" }} spacing={1.5} sx={{ justifyContent: "space-between" }}>
@@ -230,10 +253,14 @@ export function TriggerListPage() {
                     setFilter(value);
                   }
                 }}
+                sx={{ flexWrap: "wrap", justifyContent: { xs: "flex-start", lg: "flex-end" }, rowGap: 0.75 }}
               >
                 <ToggleButton value="all">Todos</ToggleButton>
-                <ToggleButton value="active">Activos</ToggleButton>
-                <ToggleButton value="done">Completados</ToggleButton>
+                <ToggleButton value="in_progress">En proceso ({stateCounts.in_progress})</ToggleButton>
+                <ToggleButton value="waiting">En espera ({stateCounts.waiting})</ToggleButton>
+                <ToggleButton value="problem">Con problema ({stateCounts.problem})</ToggleButton>
+                <ToggleButton value="done">Completados ({stateCounts.done})</ToggleButton>
+                <ToggleButton value="without_flow">Sin flujo ({stateCounts.without_flow})</ToggleButton>
               </ToggleButtonGroup>
             </Stack>
 
@@ -266,14 +293,15 @@ export function TriggerListPage() {
                     border: "1px solid",
                     borderColor: "divider",
                     backgroundColor: alpha("#0c1324", 0.76),
+                    overflow: "hidden",
                   }}
                 >
-                  <Table>
+                  <Table sx={{ tableLayout: "fixed", width: "100%" }}>
                     <TableHead>
                       <TableRow>
-                        <TableCell>Detalle</TableCell>
-                        <TableCell>Solicitante</TableCell>
-                        <TableCell>Pasos</TableCell>
+                        <TableCell sx={{ width: "58%" }}>Detalle</TableCell>
+                        <TableCell sx={{ width: "16%" }}>Solicitante</TableCell>
+                        <TableCell sx={{ width: "10%" }}>Pasos</TableCell>
                         <TableCell align="right">Estado</TableCell>
                       </TableRow>
                     </TableHead>
@@ -288,22 +316,28 @@ export function TriggerListPage() {
                             key={trigger.id}
                             hover
                             onClick={() => void handleOpen(trigger)}
+                            className="hover-entity-parent"
                             sx={{ cursor: "pointer" }}
                           >
                             <TableCell>
-                              <Stack spacing={0.5}>
-                                <Typography sx={{ fontWeight: 700 }}>{getPrimaryDetail(trigger)}</Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                  {trigger.id}
-                                </Typography>
-                              </Stack>
+                              <Box sx={{ position: "relative", pr: 11 }}>
+                                <HoverEntityActions
+                                  onDelete={deletingTriggerId ? undefined : () => void handleDeleteTrigger(trigger)}
+                                  sx={{ top: -2, right: 0 }}
+                                />
+                                <Stack spacing={0.5}>
+                                  <Typography sx={{ fontWeight: 700, wordBreak: "break-word" }}>
+                                    {getPrimaryDetail(trigger)}
+                                  </Typography>
+                                </Stack>
+                              </Box>
                             </TableCell>
                             <TableCell>{getSecondaryRequester(trigger)}</TableCell>
                             <TableCell>{stepCount === 1 ? "1 paso" : `${stepCount} pasos`}</TableCell>
                             <TableCell align="right">
                               <Stack direction="row" spacing={1} sx={{ justifyContent: "flex-end", alignItems: "center" }}>
                                 <StatusBadge value={displayStatus} />
-                                {trigger.workflow_ids.length === 0 && trigger.estado_general !== "resuelto" && (
+                                {isWithoutWorkflow(trigger) && (
                                   <Chip label="sin flujo" size="small" variant="outlined" />
                                 )}
                               </Stack>
@@ -324,9 +358,13 @@ export function TriggerListPage() {
                     return (
                       <Card
                         key={trigger.id}
-                        sx={{ cursor: "pointer" }}
+                        className="hover-entity-parent"
+                        sx={{ cursor: "pointer", position: "relative" }}
                         onClick={() => void handleOpen(trigger)}
                       >
+                        <HoverEntityActions
+                          onDelete={deletingTriggerId ? undefined : () => void handleDeleteTrigger(trigger)}
+                        />
                         <CardContent>
                           <Stack spacing={1.25}>
                             <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -341,8 +379,7 @@ export function TriggerListPage() {
 
                             <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
                               <Chip label={stepCount === 1 ? "1 paso" : `${stepCount} pasos`} size="small" variant="outlined" />
-                              <Chip label={trigger.id.slice(0, 8)} size="small" variant="outlined" />
-                              {trigger.workflow_ids.length === 0 && trigger.estado_general !== "resuelto" && (
+                              {isWithoutWorkflow(trigger) && (
                                 <Chip label="sin flujo" size="small" variant="outlined" />
                               )}
                             </Stack>

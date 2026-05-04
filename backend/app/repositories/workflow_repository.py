@@ -55,6 +55,10 @@ class WorkflowRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def delete_trigger(self, trigger_id: str) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
     def save_trigger(self, trigger: TriggerPublic) -> TriggerPublic:
         raise NotImplementedError
 
@@ -225,6 +229,22 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         self._triggers[trigger.id] = trigger
         self._workflow_ids_by_trigger[trigger.id] = []
         return trigger
+
+    def delete_trigger(self, trigger_id: str) -> bool:
+        trigger = self._triggers.pop(trigger_id, None)
+        workflow_ids = self._workflow_ids_by_trigger.pop(trigger_id, [])
+        if trigger is None:
+            return False
+
+        for workflow_id in workflow_ids:
+            step_ids = self._step_ids_by_workflow.pop(workflow_id, [])
+            self._workflows.pop(workflow_id, None)
+            for step_id in step_ids:
+                self._steps.pop(step_id, None)
+                self._comments_by_step.pop(step_id, None)
+                self._history_by_step.pop(step_id, None)
+
+        return True
 
     def save_trigger(self, trigger: TriggerPublic) -> TriggerPublic:
         normalized = TriggerPublic(**trigger.model_dump(exclude={"workflow_ids"}))
@@ -423,6 +443,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         return step.model_copy(
             update={
                 "ultimo_comentario": latest_snapshot["text"],
+                "ultimo_comentario_fecha": latest_snapshot["timestamp"],
                 "ultimo_comentario_tipo": latest_snapshot["kind"],
                 "ultimo_comentario_adjunto_nombre": latest_snapshot["attachment_name"],
                 "ultimo_comentario_adjunto_content_type": latest_snapshot["attachment_content_type"],
@@ -543,6 +564,15 @@ class PostgresWorkflowRepository(WorkflowRepository):
             session.flush()
             session.refresh(trigger)
             return self._trigger_to_public(trigger)
+
+    def delete_trigger(self, trigger_id: str) -> bool:
+        with session_scope() as session:
+            trigger = session.get(TriggerModel, trigger_id)
+            if trigger is None:
+                return False
+            session.delete(trigger)
+            session.flush()
+            return True
 
     def save_trigger(self, trigger: TriggerPublic) -> TriggerPublic:
         with session_scope() as session:
@@ -951,6 +981,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             resultado=step.resultado,
             observaciones=step.observaciones,
             ultimo_comentario=latest_snapshot["text"],
+            ultimo_comentario_fecha=latest_snapshot["timestamp"],
             ultimo_comentario_tipo=latest_snapshot["kind"],
             ultimo_comentario_adjunto_nombre=latest_snapshot["attachment_name"],
             ultimo_comentario_adjunto_content_type=latest_snapshot["attachment_content_type"],

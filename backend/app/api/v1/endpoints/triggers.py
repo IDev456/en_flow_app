@@ -18,6 +18,14 @@ def create_trigger(payload: TriggerCreate, service: WorkflowService = Depends(ge
     return service.create_trigger(payload)
 
 
+@router.delete("/{trigger_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_trigger(trigger_id: str, service: WorkflowService = Depends(get_workflow_service)) -> None:
+    try:
+        service.delete_trigger(trigger_id)
+    except EntityNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
 @router.get("/{trigger_id}", response_model=TriggerDetail)
 def get_trigger(trigger_id: str, service: WorkflowService = Depends(get_workflow_service)) -> TriggerDetail:
     try:

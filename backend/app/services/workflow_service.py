@@ -40,6 +40,11 @@ class WorkflowService:
     def create_trigger(self, payload: TriggerCreate) -> TriggerPublic:
         return self.repository.create_trigger(payload)
 
+    def delete_trigger(self, trigger_id: str) -> None:
+        deleted = self.repository.delete_trigger(trigger_id)
+        if not deleted:
+            raise EntityNotFoundError("Trigger not found")
+
     def list_workflow_templates(self) -> list[WorkflowTemplatePublic]:
         return self.repository.list_workflow_templates()
 
