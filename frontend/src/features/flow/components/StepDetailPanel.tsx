@@ -43,7 +43,7 @@ export function StepDetailPanel({
   error,
   onSubmitJournal,
 }: StepDetailPanelProps) {
-  const [selectedStatus, setSelectedStatus] = useState<"" | "espera" | "problema" | "completado">("");
+  const [selectedStatus, setSelectedStatus] = useState<"" | "espera" | "completado">("");
   const [composerExpanded, setComposerExpanded] = useState(false);
   const [focusRequestToken, setFocusRequestToken] = useState(0);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
@@ -91,7 +91,7 @@ export function StepDetailPanel({
     setMenuAnchor(null);
   }
 
-  function handleStatusIntent(status: "" | "espera" | "problema" | "completado") {
+  function handleStatusIntent(status: "" | "espera" | "completado") {
     setSelectedStatus(status);
     setComposerExpanded(true);
     setMenuAnchor(null);
@@ -135,7 +135,6 @@ export function StepDetailPanel({
                     </IconButton>
                     <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
                       <MenuItem onClick={() => handleStatusIntent("espera")}>Marcar en espera</MenuItem>
-                      <MenuItem onClick={() => handleStatusIntent("problema")}>Marcar con problema</MenuItem>
                       <MenuItem onClick={() => handleStatusIntent("completado")}>Completar paso</MenuItem>
                     </Menu>
                   </>

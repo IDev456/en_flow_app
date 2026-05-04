@@ -15,7 +15,7 @@ import { HoverEntityActions } from "../../../components/HoverEntityActions";
 import { listActiveWorkflows, listPendingSteps } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Step, WorkflowSummary } from "../types";
-import { formatDate } from "../utils";
+import { DEFAULT_ACTOR, formatDate } from "../utils";
 
 export function DashboardPage() {
   const [workflows, setWorkflows] = useState<WorkflowSummary[]>([]);
@@ -144,7 +144,7 @@ export function DashboardPage() {
                             Paso {step.orden}: {step.nombre}
                           </Typography>
                           <Typography variant="body2" color="text.secondary">
-                            {step.asignado_a ?? "Sin asignar"} | {formatDate(step.fecha_vencimiento)}
+                            {step.asignado_a ?? DEFAULT_ACTOR} | {formatDate(step.fecha_vencimiento)}
                           </Typography>
                         </Box>
                         <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>

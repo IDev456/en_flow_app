@@ -3,7 +3,7 @@ import type { Attachment, StepComment, StepHistoryEntry, StepStatus } from "./ty
 export const DEFAULT_ACTOR = "sistema";
 
 const statusPresentationMap: Record<string, { label: string; tone: string }> = {
-  nuevo: { label: "sin flujo", tone: "nuevo" },
+  nuevo: { label: "nuevo", tone: "espera" },
   pendiente: { label: "en espera", tone: "espera" },
   en_proceso: { label: "en proceso", tone: "en_proceso" },
   resuelto: { label: "finalizado", tone: "finalizado" },
@@ -11,7 +11,7 @@ const statusPresentationMap: Record<string, { label: string; tone: string }> = {
   activo: { label: "en proceso", tone: "en_proceso" },
   espera: { label: "en espera", tone: "espera" },
   completado: { label: "completado", tone: "completado" },
-  problema: { label: "problema", tone: "problema" },
+  problema: { label: "en espera", tone: "espera" },
   finalizado: { label: "finalizado", tone: "finalizado" }
 };
 
@@ -26,12 +26,6 @@ export const stepStatusOptions: Array<{
     label: "en espera",
     requiresNote: true,
     placeholder: "Describe que es lo que estas esperando (ej: respuesta de proveedor, validacion de presupuesto)..."
-  },
-  {
-    value: "problema",
-    label: "problema",
-    requiresNote: true,
-    placeholder: "Explica el inconveniente detectado y si bloquea el avance del flujo..."
   },
   {
     value: "completado",

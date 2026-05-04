@@ -177,11 +177,9 @@ export function WorkflowDetailPage() {
   const openSteps = workflow.steps.filter((step) => ["activo", "espera", "problema"].includes(step.estado));
   const workflowHeaderStatus =
     workflow.estado === "en_proceso"
-      ? (openSteps.some((step) => step.estado === "problema")
-          ? "problema"
-          : openSteps.some((step) => step.estado === "espera")
-            ? "espera"
-            : openSteps[0]?.estado ?? workflow.estado)
+      ? (openSteps.some((step) => step.estado === "espera" || step.estado === "problema")
+          ? "espera"
+          : openSteps[0]?.estado ?? workflow.estado)
       : workflow.estado;
 
   return (

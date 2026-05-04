@@ -28,26 +28,19 @@ export function StatusBadge({ value }: StatusBadgeProps) {
       bgcolor: alpha("#53d88f", 0.9),
       borderColor: alpha("#53d88f", 0.95),
     };
-  } else if (tone === "espera") {
+  } else if (tone === "espera" || tone === "problema") {
     color = "warning";
     sx = {
       color: "#2f1d06",
       bgcolor: alpha("#ffbe55", 0.95),
       borderColor: alpha("#ffbe55", 0.95),
     };
-  } else if (tone === "problema" || tone === "cancelado" || tone === "error") {
+  } else if (tone === "cancelado" || tone === "error") {
     color = "error";
     sx = {
       color: "#2a0812",
       bgcolor: alpha("#ff6b8d", 0.92),
       borderColor: alpha("#ff6b8d", 0.95),
-    };
-  } else if (tone === "nuevo") {
-    color = "primary";
-    sx = {
-      color: "#c9d8ee",
-      bgcolor: alpha("#233045", 0.7),
-      borderColor: alpha("#9cb7dd", 0.4),
     };
   }
 

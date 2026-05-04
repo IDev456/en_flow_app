@@ -80,7 +80,7 @@ function getStepStateColors(theme: Theme, status: Step["estado"]) {
     };
   }
 
-  if (tone === "problema" || tone === "cancelado" || tone === "error") {
+  if (tone === "cancelado" || tone === "error") {
     return {
       borderColor: alpha(theme.palette.error.main, 0.5),
       backgroundColor: alpha(theme.palette.error.main, 0.16),

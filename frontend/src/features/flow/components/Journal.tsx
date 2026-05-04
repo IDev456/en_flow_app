@@ -30,8 +30,8 @@ type JournalProps = {
   comments: StepComment[];
   history: StepHistoryEntry[];
   canChangeStatus: boolean;
-  selectedStatus: "" | "espera" | "problema" | "completado";
-  onSelectedStatusChange: (status: "" | "espera" | "problema" | "completado") => void;
+  selectedStatus: "" | "espera" | "completado";
+  onSelectedStatusChange: (status: "" | "espera" | "completado") => void;
   composerExpanded: boolean;
   onComposerExpandedChange: (expanded: boolean) => void;
   focusRequestToken: number;
@@ -47,11 +47,10 @@ const MAX_CHARS = 1000;
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const SHAPE_RADIUS = 1.1;
 
-type StatusOptionValue = "espera" | "problema" | "completado";
+type StatusOptionValue = "espera" | "completado";
 
 const STATUS_ACCENTS: Record<StatusOptionValue, string> = {
   espera: "#f59e0b",
-  problema: "#f43f5e",
   completado: "#22c55e",
 };
 
@@ -256,9 +255,6 @@ export function Journal({
     if (selectedStatus === "espera") {
       return "Que se esta esperando para poder continuar...";
     }
-    if (selectedStatus === "problema") {
-      return "Describe el problema que impide avanzar...";
-    }
     if (selectedStatus === "completado") {
       return "Describe que se completo y que resultado se obtuvo...";
     }
@@ -396,7 +392,7 @@ export function Journal({
               <ToggleButtonGroup
                 exclusive
                 value={selectedStatus || null}
-                onChange={(_, value: "" | "espera" | "problema" | "completado" | null) => {
+                onChange={(_, value: "" | "espera" | "completado" | null) => {
                   onSelectedStatusChange(value ?? "");
                   setError(null);
                 }}
@@ -413,7 +409,7 @@ export function Journal({
                     key={option.value}
                     value={option.value}
                     disabled={submitting}
-                    sx={getStatusToggleSx(option.value)}
+                    sx={getStatusToggleSx(option.value as StatusOptionValue)}
                   >
                     {option.label}
                   </ToggleButton>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import { alpha } from "@mui/material/styles";
 import {
@@ -9,9 +9,7 @@ import {
   Chip,
   CircularProgress,
   InputAdornment,
-  MenuItem,
   Paper,
-  Select,
   Stack,
   Table,
   TableBody,
@@ -32,15 +30,55 @@ import { StatusBadge } from "../components/StatusBadge";
 import type { TriggerDetail, WorkflowDetail } from "../types";
 import { formatDate, getStatusTone } from "../utils";
 
-type TriggerFilter = "all" | "in_progress" | "waiting" | "problem" | "done" | "without_flow";
-type FlowStateBucket = "in_progress" | "waiting" | "problem" | "done";
+type ViewMode = "requirements" | "flows";
+type WorkflowStateFilter = "all" | "in_progress" | "waiting" | "done";
+
+type TriggerWorkflowRow = {
+  rowId: string;
+  trigger: TriggerDetail;
+  workflowId: string;
+  workflow: WorkflowDetail;
+};
+
+function getStateBucketFromStatus(statusValue: string): Exclude<WorkflowStateFilter, "all"> {
+  const tone = getStatusTone(statusValue);
+  if (tone === "finalizado" || tone === "resuelto" || tone === "completado" || tone === "cancelado") {
+    return "done";
+  }
+  if (tone === "espera" || tone === "problema" || tone === "nuevo") {
+    return "waiting";
+  }
+  return "in_progress";
+}
+
+function getFilterSx(filter: WorkflowStateFilter) {
+  if (filter === "in_progress") {
+    return {
+      borderColor: alpha("#5fd1ff", 0.4),
+      "&.Mui-selected": { color: "#072133", bgcolor: alpha("#5fd1ff", 0.92) },
+    };
+  }
+  if (filter === "waiting") {
+    return {
+      borderColor: alpha("#ffbe55", 0.45),
+      "&.Mui-selected": { color: "#2f1d06", bgcolor: alpha("#ffbe55", 0.96) },
+    };
+  }
+  if (filter === "done") {
+    return {
+      borderColor: alpha("#53d88f", 0.45),
+      "&.Mui-selected": { color: "#042514", bgcolor: alpha("#53d88f", 0.92) },
+    };
+  }
+  return {};
+}
 
 export function TriggerListPage() {
   const [triggers, setTriggers] = useState<TriggerDetail[]>([]);
   const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
-  const [selectedWorkflowByTrigger, setSelectedWorkflowByTrigger] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<TriggerFilter>("all");
+  const [viewMode, setViewMode] = useState<ViewMode>("requirements");
+  const [stateFilter, setStateFilter] = useState<WorkflowStateFilter>("all");
   const [loading, setLoading] = useState(true);
   const [deletingTriggerId, setDeletingTriggerId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -56,14 +94,6 @@ export function TriggerListPage() {
       setError(null);
       const triggerData = await listTriggers();
       setTriggers(triggerData);
-      setSelectedWorkflowByTrigger((current) => {
-        const next: Record<string, string> = {};
-        for (const trigger of triggerData) {
-          const preferred = current[trigger.id] || trigger.workflow_activo_id || trigger.workflow_ids[0] || "";
-          next[trigger.id] = preferred;
-        }
-        return next;
-      });
 
       const workflowIds = [...new Set(triggerData.flatMap((trigger) => trigger.workflow_ids))];
       const details = await Promise.all(workflowIds.map((workflowId) => getWorkflow(workflowId)));
@@ -75,86 +105,118 @@ export function TriggerListPage() {
     }
   }
 
-  function getWorkflowIdForTrigger(trigger: TriggerDetail) {
-    const selectedId = selectedWorkflowByTrigger[trigger.id];
-    if (selectedId && trigger.workflow_ids.includes(selectedId)) {
-      return selectedId;
-    }
-    if (trigger.workflow_activo_id) {
-      return trigger.workflow_activo_id;
-    }
-    return trigger.workflow_ids[0] ?? null;
-  }
-
-  function handleOpen(trigger: TriggerDetail) {
-    const workflowId = getWorkflowIdForTrigger(trigger);
-    if (workflowId) {
-      navigate(`/workflows/${workflowId}`);
-      return;
-    }
-
-    navigate(`/triggers/${trigger.id}`);
-  }
-
-  function handleSelectWorkflow(trigger: TriggerDetail, workflowId: string) {
-    setSelectedWorkflowByTrigger((current) => ({
-      ...current,
-      [trigger.id]: workflowId,
-    }));
-  }
-
-  function getWorkflowForTrigger(trigger: TriggerDetail) {
-    const workflowId = getWorkflowIdForTrigger(trigger);
-    return workflowId ? workflowsById[workflowId] : undefined;
-  }
-
   function getPrimaryDetail(trigger: TriggerDetail) {
     return trigger.descripcion?.trim() || "Requerimiento sin detalle";
   }
 
   function getSecondaryRequester(trigger: TriggerDetail) {
-    return trigger.solicitante?.trim() || "Sin solicitante";
+    return trigger.solicitante?.trim() || "sistema";
   }
 
-  function getDisplayStatus(trigger: TriggerDetail) {
-    const workflow = getWorkflowForTrigger(trigger);
-    if (!workflow) return trigger.estado_general;
-
+  function getWorkflowDisplayStatus(workflow: WorkflowDetail, trigger: TriggerDetail) {
     if (workflow.estado === "finalizado" || workflow.estado === "cancelado") {
       return workflow.estado;
     }
-
     if (workflow.estado === "en_proceso") {
       const openSteps = workflow.steps.filter((step) => step.estado !== "completado");
-      if (openSteps.some((step) => step.estado === "problema")) return "problema";
-      if (openSteps.some((step) => step.estado === "espera")) return "espera";
+      if (openSteps.some((step) => step.estado === "espera" || step.estado === "problema")) {
+        return "espera";
+      }
     }
-
-    return workflow.estado;
+    return workflow.estado || trigger.estado_general;
   }
 
-  function getWorkflowStateBucket(workflow: WorkflowDetail): FlowStateBucket {
-    if (workflow.estado === "finalizado" || workflow.estado === "cancelado") {
+  const flowRows = useMemo<TriggerWorkflowRow[]>(() => {
+    return triggers.flatMap((trigger) =>
+      trigger.workflow_ids
+        .map((workflowId) => {
+          const workflow = workflowsById[workflowId];
+          if (!workflow) return null;
+          return {
+            rowId: `${trigger.id}:${workflowId}`,
+            trigger,
+            workflowId,
+            workflow,
+          };
+        })
+        .filter((row): row is TriggerWorkflowRow => row !== null)
+    );
+  }, [triggers, workflowsById]);
+
+  const workflowStatusById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const row of flowRows) {
+      map[row.workflowId] = getWorkflowDisplayStatus(row.workflow, row.trigger);
+    }
+    return map;
+  }, [flowRows]);
+
+  function getRequirementBucket(trigger: TriggerDetail): Exclude<WorkflowStateFilter, "all"> {
+    const workflowStates = trigger.workflow_ids
+      .map((workflowId) => workflowStatusById[workflowId])
+      .filter((value): value is string => Boolean(value))
+      .map((value) => getStateBucketFromStatus(value));
+
+    if (workflowStates.length === 0) {
+      return "waiting";
+    }
+    if (workflowStates.every((bucket) => bucket === "done")) {
       return "done";
     }
-    if (workflow.estado === "en_proceso") {
-      const openSteps = workflow.steps.filter((step) => step.estado !== "completado");
-      if (openSteps.some((step) => step.estado === "problema")) return "problem";
-      if (openSteps.some((step) => step.estado === "espera")) return "waiting";
+    if (workflowStates.some((bucket) => bucket === "in_progress")) {
       return "in_progress";
     }
-    return "in_progress";
+    return "waiting";
   }
 
-  function getWorkflowPanoramaForTrigger(trigger: TriggerDetail): Record<FlowStateBucket, number> {
-    const summary: Record<FlowStateBucket, number> = { in_progress: 0, waiting: 0, problem: 0, done: 0 };
-    for (const workflowId of trigger.workflow_ids) {
-      const workflow = workflowsById[workflowId];
-      if (!workflow) continue;
-      summary[getWorkflowStateBucket(workflow)] += 1;
-    }
-    return summary;
+  function matchesQuery(trigger: TriggerDetail) {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return true;
+    const haystack = `${trigger.id} ${trigger.solicitante ?? ""} ${trigger.descripcion ?? ""}`.toLowerCase();
+    return haystack.includes(normalized);
   }
+
+  function filterByState(bucket: Exclude<WorkflowStateFilter, "all">) {
+    return stateFilter === "all" || stateFilter === bucket;
+  }
+
+  const requirementCounts = useMemo(() => {
+    return triggers.reduce<Record<Exclude<WorkflowStateFilter, "all">, number>>(
+      (acc, trigger) => {
+        acc[getRequirementBucket(trigger)] += 1;
+        return acc;
+      },
+      { in_progress: 0, waiting: 0, done: 0 }
+    );
+  }, [triggers, workflowStatusById]);
+
+  const flowCounts = useMemo(() => {
+    return flowRows.reduce<Record<Exclude<WorkflowStateFilter, "all">, number>>(
+      (acc, row) => {
+        acc[getStateBucketFromStatus(getWorkflowDisplayStatus(row.workflow, row.trigger))] += 1;
+        return acc;
+      },
+      { in_progress: 0, waiting: 0, done: 0 }
+    );
+  }, [flowRows]);
+
+  const filteredRequirementRows = useMemo(
+    () =>
+      triggers.filter((trigger) => {
+        if (!matchesQuery(trigger)) return false;
+        return filterByState(getRequirementBucket(trigger));
+      }),
+    [triggers, query, stateFilter, workflowStatusById]
+  );
+
+  const filteredFlowRows = useMemo(
+    () =>
+      flowRows.filter((row) => {
+        if (!matchesQuery(row.trigger)) return false;
+        return filterByState(getStateBucketFromStatus(getWorkflowDisplayStatus(row.workflow, row.trigger)));
+      }),
+    [flowRows, query, stateFilter]
+  );
 
   async function handleDeleteTrigger(trigger: TriggerDetail) {
     const detail = getPrimaryDetail(trigger);
@@ -175,73 +237,17 @@ export function TriggerListPage() {
     }
   }
 
-  function isWithoutWorkflow(trigger: TriggerDetail) {
-    return trigger.workflow_ids.length === 0 && trigger.estado_general !== "resuelto";
-  }
-
-  function getFilterBucket(trigger: TriggerDetail): Exclude<TriggerFilter, "all"> {
-    if (isWithoutWorkflow(trigger)) {
-      return "without_flow";
-    }
-
-    const tone = getStatusTone(getDisplayStatus(trigger));
-    if (tone === "problema") {
-      return "problem";
-    }
-    if (tone === "espera") {
-      return "waiting";
-    }
-    if (tone === "finalizado" || tone === "resuelto" || tone === "completado" || tone === "cancelado") {
-      return "done";
-    }
-    return "in_progress";
-  }
-
-  const stateCounts = triggers.reduce<Record<Exclude<TriggerFilter, "all">, number>>(
-    (acc, trigger) => {
-      acc[getFilterBucket(trigger)] += 1;
-      return acc;
-    },
-    { in_progress: 0, waiting: 0, problem: 0, done: 0, without_flow: 0 }
-  );
-
-  const filtered = triggers.filter((trigger) => {
-    if (filter !== "all" && getFilterBucket(trigger) !== filter) {
-      return false;
-    }
-
-    const normalized = query.trim().toLowerCase();
-    if (!normalized) {
-      return true;
-    }
-
-    const haystack = `${trigger.id} ${trigger.solicitante ?? ""} ${trigger.descripcion ?? ""}`.toLowerCase();
-    return haystack.includes(normalized);
-  });
-
-  const activeCount = stateCounts.in_progress + stateCounts.waiting + stateCounts.problem;
-  const completedCount = stateCounts.done;
-  const withoutWorkflowCount = stateCounts.without_flow;
-  const totalCreatedSteps = triggers.reduce((sum, trigger) => sum + (getWorkflowForTrigger(trigger)?.steps.length ?? 0), 0);
-  const workflows = Object.values(workflowsById);
-  const flowStateCounts = workflows.reduce<Record<FlowStateBucket, number>>(
-    (acc, workflow) => {
-      acc[getWorkflowStateBucket(workflow)] += 1;
-      return acc;
-    },
-    { in_progress: 0, waiting: 0, problem: 0, done: 0 }
-  );
-
+  const activeFlows = flowCounts.in_progress + flowCounts.waiting;
+  const totalCreatedSteps = flowRows.reduce((sum, row) => sum + row.workflow.steps.length, 0);
   const kpis = [
-    { label: "Activos", value: activeCount, helper: "Requerimientos con flujo en curso" },
-    { label: "Completados", value: completedCount, helper: "Casos cerrados correctamente" },
-    { label: "Sin flujo", value: withoutWorkflowCount, helper: "Requieren definir paso inicial" },
-    { label: "Pasos creados", value: totalCreatedSteps, helper: "Total generado entre todos los requerimientos" },
-    { label: "Flows en proceso", value: flowStateCounts.in_progress, helper: "Workflows avanzando" },
-    { label: "Flows en espera", value: flowStateCounts.waiting, helper: "Workflows bloqueados en espera" },
-    { label: "Flows con problema", value: flowStateCounts.problem, helper: "Workflows con incidencia" },
-    { label: "Flows completados", value: flowStateCounts.done, helper: "Workflows finalizados o cancelados" },
+    { label: "Requerimientos", value: triggers.length, helper: "Total cargado en la bandeja operativa" },
+    { label: "Flows activos", value: activeFlows, helper: "En proceso o en espera" },
+    { label: "Flows completados", value: flowCounts.done, helper: "Finalizados o cancelados" },
+    { label: "Pasos creados", value: totalCreatedSteps, helper: "Total de pasos de todos los flows" },
   ];
+
+  const currentRowsCount = viewMode === "requirements" ? filteredRequirementRows.length : filteredFlowRows.length;
+  const currentCounts = viewMode === "requirements" ? requirementCounts : flowCounts;
 
   return (
     <Stack spacing={3.5}>
@@ -271,13 +277,22 @@ export function TriggerListPage() {
         <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
           <Stack spacing={3}>
             <Stack
-              direction={{ xs: "column", md: "row" }}
-              spacing={2}
-              sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", md: "center" } }}
+              direction={{ xs: "column", lg: "row" }}
+              spacing={1.5}
+              sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", lg: "center" } }}
             >
-              <Box>
-                <Typography variant="h2">Requerimientos</Typography>
-              </Box>
+              <Typography variant="h2">Requerimientos</Typography>
+              <ToggleButtonGroup
+                exclusive
+                size="small"
+                value={viewMode}
+                onChange={(_, value: ViewMode | null) => {
+                  if (value) setViewMode(value);
+                }}
+              >
+                <ToggleButton value="requirements">Vista requerimientos</ToggleButton>
+                <ToggleButton value="flows">Vista flows</ToggleButton>
+              </ToggleButtonGroup>
             </Stack>
 
             <Stack direction={{ xs: "column", lg: "row" }} spacing={1.5} sx={{ justifyContent: "space-between" }}>
@@ -300,27 +315,32 @@ export function TriggerListPage() {
               <ToggleButtonGroup
                 exclusive
                 size="small"
-                value={filter}
-                onChange={(_, value: TriggerFilter | null) => {
+                value={stateFilter}
+                onChange={(_, value: WorkflowStateFilter | null) => {
                   if (value) {
-                    setFilter(value);
+                    setStateFilter(value);
                   }
                 }}
                 sx={{ flexWrap: "wrap", justifyContent: { xs: "flex-start", lg: "flex-end" }, rowGap: 0.75 }}
               >
-                <ToggleButton value="all">Todos</ToggleButton>
-                <ToggleButton value="in_progress">En proceso ({stateCounts.in_progress})</ToggleButton>
-                <ToggleButton value="waiting">En espera ({stateCounts.waiting})</ToggleButton>
-                <ToggleButton value="problem">Con problema ({stateCounts.problem})</ToggleButton>
-                <ToggleButton value="done">Completados ({stateCounts.done})</ToggleButton>
-                <ToggleButton value="without_flow">Sin flujo ({stateCounts.without_flow})</ToggleButton>
+                <ToggleButton value="all" sx={getFilterSx("all")}>
+                  Todos
+                </ToggleButton>
+                <ToggleButton value="in_progress" sx={getFilterSx("in_progress")}>
+                  En proceso ({currentCounts.in_progress})
+                </ToggleButton>
+                <ToggleButton value="waiting" sx={getFilterSx("waiting")}>
+                  En espera ({currentCounts.waiting})
+                </ToggleButton>
+                <ToggleButton value="done" sx={getFilterSx("done")}>
+                  Completados ({currentCounts.done})
+                </ToggleButton>
               </ToggleButtonGroup>
             </Stack>
 
             {!loading && !error && (
               <Typography variant="body2" color="text.secondary">
-                {filtered.length} {filtered.length === 1 ? "resultado" : "resultados"}. Si un requerimiento tiene mas de un
-                workflow, selecciona cual abrir desde la lista.
+                {currentRowsCount} {viewMode === "requirements" ? "requerimientos" : "flows"} en vista.
               </Typography>
             )}
 
@@ -333,174 +353,170 @@ export function TriggerListPage() {
 
             {error && <Alert severity="error">{error}</Alert>}
 
-            {!loading && !error && filtered.length === 0 && (
-              <Alert severity="info">No hay requerimientos que coincidan con tu búsqueda actual.</Alert>
+            {!loading && !error && currentRowsCount === 0 && (
+              <Alert severity="info">No hay resultados para la búsqueda y filtro actual.</Alert>
             )}
 
-            {!loading && !error && filtered.length > 0 && (
+            {!loading && !error && currentRowsCount > 0 && (
               <>
-                <TableContainer
-                  component={Paper}
-                  sx={{
-                    display: { xs: "none", md: "block" },
-                    borderRadius: 3,
-                    border: "1px solid",
-                    borderColor: "divider",
-                    backgroundColor: alpha("#0c1324", 0.76),
-                    overflow: "hidden",
-                  }}
-                >
-                  <Table sx={{ tableLayout: "fixed", width: "100%" }}>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell sx={{ width: "40%" }}>Detalle</TableCell>
-                        <TableCell sx={{ width: "20%" }}>Workflow</TableCell>
-                        <TableCell sx={{ width: "14%" }}>Panorama flows</TableCell>
-                        <TableCell sx={{ width: "14%" }}>Solicitante</TableCell>
-                        <TableCell sx={{ width: "6%" }}>Pasos</TableCell>
-                        <TableCell align="right">Estado</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {filtered.map((trigger) => {
-                        const workflow = getWorkflowForTrigger(trigger);
-                        const stepCount = workflow?.steps.length ?? 0;
-                        const displayStatus = getDisplayStatus(trigger);
-                        const panorama = getWorkflowPanoramaForTrigger(trigger);
-
-                        return (
-                          <TableRow
-                            key={trigger.id}
-                            hover
-                            onClick={() => void handleOpen(trigger)}
-                            className="hover-entity-parent"
-                            sx={{ cursor: "pointer" }}
-                          >
-                            <TableCell>
-                              <Box sx={{ position: "relative", pr: 11 }}>
-                                <HoverEntityActions
-                                  onDelete={deletingTriggerId ? undefined : () => void handleDeleteTrigger(trigger)}
-                                  sx={{ top: -2, right: 0 }}
-                                />
-                                <Stack spacing={0.5}>
-                                  <Typography sx={{ fontWeight: 700, wordBreak: "break-word" }}>
-                                    {getPrimaryDetail(trigger)}
-                                  </Typography>
-                                </Stack>
-                              </Box>
-                            </TableCell>
-                            <TableCell onClick={(event) => event.stopPropagation()}>
-                              {trigger.workflow_ids.length > 0 ? (
-                                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                                  <Select
-                                    size="small"
-                                    value={getWorkflowIdForTrigger(trigger) ?? ""}
-                                    onChange={(event) => handleSelectWorkflow(trigger, String(event.target.value))}
-                                    sx={{ minWidth: 150 }}
-                                  >
-                                    {trigger.workflow_ids.map((workflowId, index) => (
-                                      <MenuItem key={workflowId} value={workflowId}>
-                                        {`Workflow ${trigger.workflow_ids.length - index}`}
-                                        {workflowId === trigger.workflow_activo_id ? " (activo)" : ""}
-                                      </MenuItem>
-                                    ))}
-                                  </Select>
-                                </Stack>
-                              ) : (
-                                <Typography variant="body2" color="text.secondary">
-                                  Sin workflow
-                                </Typography>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", gap: 0.5 }}>
-                                {panorama.in_progress > 0 && <Chip size="small" label={`proceso ${panorama.in_progress}`} />}
-                                {panorama.waiting > 0 && <Chip size="small" color="warning" label={`espera ${panorama.waiting}`} />}
-                                {panorama.problem > 0 && <Chip size="small" color="error" label={`problema ${panorama.problem}`} />}
-                                {panorama.done > 0 && <Chip size="small" color="success" label={`ok ${panorama.done}`} />}
-                                {trigger.workflow_ids.length === 0 && <Chip size="small" variant="outlined" label="sin flow" />}
-                              </Stack>
-                            </TableCell>
-                            <TableCell>{getSecondaryRequester(trigger)}</TableCell>
-                            <TableCell>{stepCount === 1 ? "1 paso" : `${stepCount} pasos`}</TableCell>
-                            <TableCell align="right">
-                              <Stack direction="row" spacing={1} sx={{ justifyContent: "flex-end", alignItems: "center" }}>
-                                <StatusBadge value={displayStatus} />
-                                {isWithoutWorkflow(trigger) && (
-                                  <Chip label="sin flujo" size="small" variant="outlined" />
-                                )}
-                              </Stack>
-                            </TableCell>
+                {viewMode === "requirements" ? (
+                  <>
+                    <TableContainer
+                      component={Paper}
+                      sx={{
+                        display: { xs: "none", md: "block" },
+                        borderRadius: 3,
+                        border: "1px solid",
+                        borderColor: "divider",
+                        backgroundColor: alpha("#0c1324", 0.76),
+                        overflow: "hidden",
+                      }}
+                    >
+                      <Table sx={{ tableLayout: "fixed", width: "100%" }}>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell sx={{ width: "56%" }}>Detalle</TableCell>
+                            <TableCell sx={{ width: "22%" }}>Solicitante</TableCell>
+                            <TableCell sx={{ width: "10%" }}>Flows</TableCell>
+                            <TableCell sx={{ width: "12%" }}>Pasos totales</TableCell>
                           </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
+                        </TableHead>
+                        <TableBody>
+                          {filteredRequirementRows.map((trigger) => {
+                            const workflows = trigger.workflow_ids
+                              .map((workflowId) => workflowsById[workflowId])
+                              .filter((workflow): workflow is WorkflowDetail => Boolean(workflow));
+                            const stepCount = workflows.reduce((sum, workflow) => sum + workflow.steps.length, 0);
+                            return (
+                              <TableRow
+                                key={trigger.id}
+                                hover
+                                onClick={() => navigate(`/triggers/${trigger.id}`)}
+                                className="hover-entity-parent"
+                                sx={{ cursor: "pointer" }}
+                              >
+                                <TableCell>
+                                  <Box sx={{ position: "relative", pr: 11 }}>
+                                    <HoverEntityActions
+                                      onDelete={deletingTriggerId ? undefined : () => void handleDeleteTrigger(trigger)}
+                                      sx={{ top: -2, right: 0 }}
+                                    />
+                                    <Typography sx={{ fontWeight: 700, wordBreak: "break-word" }}>
+                                      {getPrimaryDetail(trigger)}
+                                    </Typography>
+                                  </Box>
+                                </TableCell>
+                                <TableCell>{getSecondaryRequester(trigger)}</TableCell>
+                                <TableCell>{trigger.workflow_ids.length}</TableCell>
+                                <TableCell>{stepCount === 1 ? "1 paso" : `${stepCount} pasos`}</TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
 
-                <Stack spacing={1.5} sx={{ display: { xs: "flex", md: "none" } }}>
-                  {filtered.map((trigger) => {
-                    const workflow = getWorkflowForTrigger(trigger);
-                    const stepCount = workflow?.steps.length ?? 0;
-                    const displayStatus = getDisplayStatus(trigger);
-                    const panorama = getWorkflowPanoramaForTrigger(trigger);
-
-                    return (
-                      <Card
-                        key={trigger.id}
-                        className="hover-entity-parent"
-                        sx={{ position: "relative", cursor: "pointer" }}
-                        onClick={() => void handleOpen(trigger)}
-                      >
-                        <HoverEntityActions
-                          onDelete={deletingTriggerId ? undefined : () => void handleDeleteTrigger(trigger)}
-                        />
-                        <CardContent>
-                          <Stack spacing={1.25}>
-                            <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-                              <Box>
+                    <Stack spacing={1.5} sx={{ display: { xs: "flex", md: "none" } }}>
+                      {filteredRequirementRows.map((trigger) => {
+                        const workflows = trigger.workflow_ids
+                          .map((workflowId) => workflowsById[workflowId])
+                          .filter((workflow): workflow is WorkflowDetail => Boolean(workflow));
+                        const stepCount = workflows.reduce((sum, workflow) => sum + workflow.steps.length, 0);
+                        return (
+                          <Card
+                            key={trigger.id}
+                            className="hover-entity-parent"
+                            sx={{ position: "relative", cursor: "pointer" }}
+                            onClick={() => navigate(`/triggers/${trigger.id}`)}
+                          >
+                            <HoverEntityActions
+                              onDelete={deletingTriggerId ? undefined : () => void handleDeleteTrigger(trigger)}
+                            />
+                            <CardContent>
+                              <Stack spacing={1.25}>
                                 <Typography variant="h6">{getPrimaryDetail(trigger)}</Typography>
                                 <Typography variant="body2" color="text.secondary">
                                   {getSecondaryRequester(trigger)}
                                 </Typography>
-                              </Box>
-                              <StatusBadge value={displayStatus} />
-                            </Stack>
-
-                            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
-                              <Chip label={stepCount === 1 ? "1 paso" : `${stepCount} pasos`} size="small" variant="outlined" />
-                              {isWithoutWorkflow(trigger) && (
-                                <Chip label="sin flujo" size="small" variant="outlined" />
-                              )}
-                              {panorama.in_progress > 0 && <Chip size="small" label={`proceso ${panorama.in_progress}`} />}
-                              {panorama.waiting > 0 && <Chip size="small" color="warning" label={`espera ${panorama.waiting}`} />}
-                              {panorama.problem > 0 && <Chip size="small" color="error" label={`problema ${panorama.problem}`} />}
-                              {panorama.done > 0 && <Chip size="small" color="success" label={`ok ${panorama.done}`} />}
-                            </Stack>
-
-                            {trigger.workflow_ids.length > 0 ? (
-                              <Stack spacing={1} onClick={(event) => event.stopPropagation()}>
-                                <Select
-                                  size="small"
-                                  value={getWorkflowIdForTrigger(trigger) ?? ""}
-                                  onChange={(event) => handleSelectWorkflow(trigger, String(event.target.value))}
-                                  fullWidth
-                                >
-                                  {trigger.workflow_ids.map((workflowId, index) => (
-                                    <MenuItem key={workflowId} value={workflowId}>
-                                      {`Workflow ${trigger.workflow_ids.length - index}`}
-                                      {workflowId === trigger.workflow_activo_id ? " (activo)" : ""}
-                                    </MenuItem>
-                                  ))}
-                                </Select>
+                                <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
+                                  <Chip label={`${trigger.workflow_ids.length} flows`} size="small" variant="outlined" />
+                                  <Chip label={stepCount === 1 ? "1 paso" : `${stepCount} pasos`} size="small" variant="outlined" />
+                                </Stack>
                               </Stack>
-                            ) : null}
-                          </Stack>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </Stack>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </Stack>
+                  </>
+                ) : (
+                  <>
+                    <TableContainer
+                      component={Paper}
+                      sx={{
+                        display: { xs: "none", md: "block" },
+                        borderRadius: 3,
+                        border: "1px solid",
+                        borderColor: "divider",
+                        backgroundColor: alpha("#0c1324", 0.76),
+                        overflow: "hidden",
+                      }}
+                    >
+                      <Table sx={{ tableLayout: "fixed", width: "100%" }}>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell sx={{ width: "40%" }}>Requerimiento</TableCell>
+                            <TableCell sx={{ width: "16%" }}>Workflow</TableCell>
+                            <TableCell sx={{ width: "18%" }}>Solicitante</TableCell>
+                            <TableCell sx={{ width: "10%" }}>Pasos</TableCell>
+                            <TableCell sx={{ width: "16%" }}>Estado</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {filteredFlowRows.map((row) => (
+                            <TableRow
+                              key={row.rowId}
+                              hover
+                              onClick={() => navigate(`/workflows/${row.workflowId}`)}
+                              sx={{ cursor: "pointer" }}
+                            >
+                              <TableCell>
+                                <Typography sx={{ fontWeight: 700, wordBreak: "break-word" }}>
+                                  {getPrimaryDetail(row.trigger)}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>{row.workflowId.slice(0, 8)}</TableCell>
+                              <TableCell>{getSecondaryRequester(row.trigger)}</TableCell>
+                              <TableCell>{row.workflow.steps.length === 1 ? "1 paso" : `${row.workflow.steps.length} pasos`}</TableCell>
+                              <TableCell>
+                                <StatusBadge value={getWorkflowDisplayStatus(row.workflow, row.trigger)} />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+
+                    <Stack spacing={1.5} sx={{ display: { xs: "flex", md: "none" } }}>
+                      {filteredFlowRows.map((row) => (
+                        <Card key={row.rowId} sx={{ cursor: "pointer" }} onClick={() => navigate(`/workflows/${row.workflowId}`)}>
+                          <CardContent>
+                            <Stack spacing={1}>
+                              <Typography sx={{ fontWeight: 700 }}>{getPrimaryDetail(row.trigger)}</Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                Workflow {row.workflowId.slice(0, 8)} · {getSecondaryRequester(row.trigger)}
+                              </Typography>
+                              <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", gap: 1 }}>
+                                <Chip size="small" variant="outlined" label={row.workflow.steps.length === 1 ? "1 paso" : `${row.workflow.steps.length} pasos`} />
+                                <StatusBadge value={getWorkflowDisplayStatus(row.workflow, row.trigger)} />
+                              </Stack>
+                            </Stack>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </Stack>
+                  </>
+                )}
               </>
             )}
           </Stack>

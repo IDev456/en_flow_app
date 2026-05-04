@@ -106,7 +106,7 @@ export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInsp
 
         <Stack spacing={1}>
           <Typography variant="body2" color="text.secondary">
-            Asignado: {step.asignado_a ?? "Sin asignar"}
+            Asignado: {step.asignado_a ?? DEFAULT_ACTOR}
           </Typography>
           <Typography variant="body2" color="text.secondary">
             Inicio: {formatDate(step.fecha_inicio)}
