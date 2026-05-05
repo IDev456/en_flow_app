@@ -572,7 +572,13 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
                     return (
                       <Card key={trigger.id} variant="outlined" className="hover-entity-parent" sx={{ position: "relative", borderRadius: 2.2 }}>
-                        <HoverEntityActions onDelete={deletingTriggerId ? undefined : () => void handleDeleteTrigger(trigger)} />
+                        <HoverEntityActions
+                          onDelete={
+                            deletingTriggerId || trigger.workflow_ids.length > 0
+                              ? undefined
+                              : () => void handleDeleteTrigger(trigger)
+                          }
+                        />
                         <CardContent sx={{ p: { xs: 1.75, md: 2 } }}>
                           <Stack spacing={1.2}>
                             <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between", alignItems: { sm: "center" } }}>
