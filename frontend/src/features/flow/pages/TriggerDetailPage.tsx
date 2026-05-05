@@ -18,7 +18,7 @@ import {
 } from "@mui/material";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 
-import { getStepComments, getTrigger, getWorkflow, startWorkflow, updateTrigger } from "../api";
+import { deleteTrigger, getStepComments, getTrigger, getWorkflow, startWorkflow, updateTrigger } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
 import type { TriggerDetail, WorkflowDetail } from "../types";
 import { DEFAULT_ACTOR, formatDate, formatElapsedTime } from "../utils";
@@ -40,6 +40,7 @@ export function TriggerDetailPage() {
   const [workflowsError, setWorkflowsError] = useState<string | null>(null);
   const [editingRequirement, setEditingRequirement] = useState(false);
   const [savingRequirement, setSavingRequirement] = useState(false);
+  const [deletingRequirement, setDeletingRequirement] = useState(false);
   const [editSolicitante, setEditSolicitante] = useState("");
   const [editDescripcion, setEditDescripcion] = useState("");
   const [requirementError, setRequirementError] = useState<string | null>(null);
@@ -174,6 +175,32 @@ export function TriggerDetailPage() {
     }
   }
 
+  async function handleDeleteRequirement() {
+    if (!trigger) return;
+
+    if (trigger.workflow_ids.length > 0) {
+      setRequirementError("No se puede eliminar este requerimiento porque tiene flows vinculados. Primero desvincula los flows o déjalo como agrupador.");
+      return;
+    }
+
+    const detail = trigger.descripcion?.trim() || "Requerimiento sin detalle";
+    const confirmed = window.confirm(
+      `¿Eliminar este requerimiento?\n\n${detail}\n\nEsta acción no se puede deshacer.\nSolo se eliminará si no tiene flows vinculados.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeletingRequirement(true);
+      setRequirementError(null);
+      await deleteTrigger(trigger.id);
+      navigate("/requirements", { state: { toast: "Requerimiento eliminado." } });
+    } catch (err) {
+      setRequirementError(err instanceof Error ? err.message : "No se pudo eliminar el requerimiento");
+    } finally {
+      setDeletingRequirement(false);
+    }
+  }
+
   async function handleCreateWorkflow() {
     if (!trigger) return;
 
@@ -240,6 +267,7 @@ export function TriggerDetailPage() {
   const linkedWorkflows = (trigger?.workflow_ids ?? [])
     .map((workflowId) => workflowsById[workflowId])
     .filter((workflow): workflow is WorkflowDetail => Boolean(workflow));
+  const canDeleteRequirement = (trigger?.workflow_ids.length ?? 0) === 0;
   const requirementStats = {
     abiertos: linkedWorkflows.filter((workflow) =>
       ["en_proceso", "en_espera", "con_problema", "pendiente"].includes(workflow.estado)
@@ -334,21 +362,36 @@ export function TriggerDetailPage() {
                   <StatusBadge value={trigger.estado_general} />
                   {editingRequirement ? (
                     <>
-                      <Button variant="text" color="inherit" onClick={handleCancelEditRequirement} disabled={savingRequirement}>
+                      <Button variant="text" color="inherit" onClick={handleCancelEditRequirement} disabled={savingRequirement || deletingRequirement}>
                         Cancelar
                       </Button>
-                      <Button variant="contained" onClick={() => void handleSaveRequirement()} disabled={savingRequirement}>
+                      <Button variant="contained" onClick={() => void handleSaveRequirement()} disabled={savingRequirement || deletingRequirement}>
                         {savingRequirement ? "Guardando..." : "Guardar"}
                       </Button>
                     </>
                   ) : (
-                    <Button variant="outlined" color="inherit" onClick={handleStartEditRequirement}>
-                      Editar requerimiento
-                    </Button>
+                    <>
+                      <Button variant="outlined" color="inherit" onClick={handleStartEditRequirement} disabled={deletingRequirement}>
+                        Editar requerimiento
+                      </Button>
+                      <Button
+                        variant="text"
+                        color="error"
+                        onClick={() => void handleDeleteRequirement()}
+                        disabled={deletingRequirement || !canDeleteRequirement}
+                      >
+                        {deletingRequirement ? "Eliminando..." : "Eliminar requerimiento"}
+                      </Button>
+                    </>
                   )}
                 </Stack>
               </Stack>
               {requirementError && <Alert severity="error">{requirementError}</Alert>}
+              {!editingRequirement && !canDeleteRequirement && (
+                <Typography variant="caption" color="text.secondary">
+                  No se puede eliminar porque tiene flows vinculados.
+                </Typography>
+              )}
 
               <Box
                 sx={{

@@ -166,11 +166,19 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   }, [defaultView]);
 
   useEffect(() => {
-    const state = location.state as { openCreateRequirement?: boolean } | null;
-    if (!state?.openCreateRequirement || defaultView !== "requirements") return;
+    const state = location.state as { openCreateRequirement?: boolean; toast?: string } | null;
+    if (!state) return;
 
-    setViewMode("requirements");
-    setCreateRequirementOpen(true);
+    if (state.toast) {
+      setRequirementToastMessage(state.toast);
+      setRequirementToastOpen(true);
+    }
+
+    if (state.openCreateRequirement && defaultView === "requirements") {
+      setViewMode("requirements");
+      setCreateRequirementOpen(true);
+    }
+
     navigate(location.pathname, { replace: true, state: null });
   }, [defaultView, location.pathname, location.state, navigate]);
 
@@ -265,7 +273,14 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
   async function handleDeleteTrigger(trigger: TriggerDetail) {
     const detail = trigger.descripcion?.trim() || "Requerimiento sin detalle";
-    const confirmed = window.confirm(`Eliminar requerimiento?\n\n${detail}`);
+    if (trigger.workflow_ids.length > 0) {
+      setError("No se puede eliminar este requerimiento porque tiene flows vinculados. Primero desvincula los flows o déjalo como agrupador.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `¿Eliminar este requerimiento?\n\n${detail}\n\nEsta acción no se puede deshacer.\nSolo se eliminará si no tiene flows vinculados.`
+    );
     if (!confirmed) return;
 
     try {
@@ -273,6 +288,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       setError(null);
       await deleteTrigger(trigger.id);
       await loadData();
+      setRequirementToastMessage("Requerimiento eliminado.");
+      setRequirementToastOpen(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo eliminar el requerimiento");
     } finally {
