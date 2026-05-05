@@ -8,6 +8,7 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Divider,
   Dialog,
   DialogActions,
   DialogContent,
@@ -421,7 +422,7 @@ export function WorkflowDetailPage() {
             {linkedRequirements.length > 0 && (
               <Stack spacing={0.9}>
                 <Typography variant="subtitle2" color="text.secondary">
-                  Vinculados
+                  Requerimientos vinculados
                 </Typography>
                 <Stack spacing={0.9}>
                   {linkedRequirements.map((item) => (
@@ -455,6 +456,15 @@ export function WorkflowDetailPage() {
               </Stack>
             )}
 
+            {linkedRequirements.length > 0 && (
+              <Divider flexItem />
+            )}
+
+            <Stack spacing={0.9}>
+              <Typography variant="subtitle2" color="text.secondary">
+                Asociar otro requerimiento
+              </Typography>
+
             {availableRequirements.length === 0 ? (
               <Alert severity="info">No hay requerimientos disponibles para asociar.</Alert>
             ) : (
@@ -472,6 +482,7 @@ export function WorkflowDetailPage() {
                 ))}
               </TextField>
             )}
+            </Stack>
 
             {linkRequirementError && <Alert severity="error">{linkRequirementError}</Alert>}
           </Stack>
