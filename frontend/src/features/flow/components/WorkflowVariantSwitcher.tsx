@@ -8,8 +8,8 @@ type WorkflowVariantSwitcherProps = {
 };
 
 const options: Array<{ value: WorkflowVariant; label: string }> = [
-  { value: "vertical", label: "Grafo vertical" },
-  { value: "gitlog", label: "Git log" }
+  { value: "vertical", label: "Línea" },
+  { value: "gitlog", label: "Compacta" }
 ];
 
 export function WorkflowVariantSwitcher({ value, onChange }: WorkflowVariantSwitcherProps) {

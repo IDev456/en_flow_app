@@ -4,6 +4,7 @@ import {
   Alert,
   Box,
   Button,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
@@ -12,6 +13,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import { useNavigate } from "react-router-dom";
 
 import { quickCaptureFlow } from "../api";
@@ -28,6 +30,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
   const [dueDate, setDueDate] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showOptional, setShowOptional] = useState(false);
   const navigate = useNavigate();
   const canSubmit = title.trim().length >= 3;
 
@@ -48,7 +51,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
         creado_por: DEFAULT_ACTOR,
       });
       onClose();
-      navigate(`/workflows/${workflow.id}`);
+      navigate(`/workflows/${workflow.id}`, { state: { toast: "Tarea capturada y flow iniciado." } });
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo capturar la tarea");
     } finally {
@@ -79,36 +82,43 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
             placeholder="Ej. Pedir layout actualizado al proveedor"
           />
 
-          <Box
-            sx={{
-              p: { xs: 2, md: 2.5 },
-              borderRadius: 3,
-              border: "1px solid",
-              borderColor: "divider",
-              backgroundColor: "rgba(12, 18, 31, 0.58)",
-            }}
-          >
-            <Stack spacing={1.5}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Datos opcionales
-              </Typography>
-              <TextField
-                label="Detalle"
-                multiline
-                minRows={2}
-                value={detail}
-                onChange={(event) => setDetail(event.target.value)}
-              />
-              <TextField label="Asignado a" value={assignee} onChange={(event) => setAssignee(event.target.value)} />
-              <TextField
-                label="Fecha"
-                type="datetime-local"
-                value={dueDate}
-                onChange={(event) => setDueDate(event.target.value)}
-                InputLabelProps={{ shrink: true }}
-              />
-            </Stack>
-          </Box>
+          <Button variant="text" color="inherit" onClick={() => setShowOptional((current) => !current)} sx={{ alignSelf: "flex-start", px: 0.5 }}>
+            {showOptional ? "Ocultar datos opcionales" : "Agregar datos opcionales"}
+          </Button>
+
+          <Collapse in={showOptional}>
+            <Box
+              sx={{
+                p: { xs: 2, md: 2.5 },
+                borderRadius: 3,
+                border: "1px solid",
+                borderColor: "divider",
+                backgroundColor: (theme) =>
+                  alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.4 : 0.75),
+              }}
+            >
+              <Stack spacing={1.5}>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Datos opcionales
+                </Typography>
+                <TextField
+                  label="Detalle"
+                  multiline
+                  minRows={2}
+                  value={detail}
+                  onChange={(event) => setDetail(event.target.value)}
+                />
+                <TextField label="Asignado a" value={assignee} onChange={(event) => setAssignee(event.target.value)} />
+                <TextField
+                  label="Fecha"
+                  type="datetime-local"
+                  value={dueDate}
+                  onChange={(event) => setDueDate(event.target.value)}
+                  slotProps={{ inputLabel: { shrink: true } }}
+                />
+              </Stack>
+            </Box>
+          </Collapse>
 
           {error && <Alert severity="error">{error}</Alert>}
         </Stack>

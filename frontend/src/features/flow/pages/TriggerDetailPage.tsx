@@ -49,7 +49,7 @@ export function TriggerDetailPage() {
   }
 
   function getSecondaryRequester(currentTrigger: TriggerDetail) {
-    return currentTrigger.solicitante?.trim() || "Sin solicitante";
+    return currentTrigger.solicitante?.trim() || "Sin contexto";
   }
 
   useEffect(() => {
@@ -147,7 +147,7 @@ export function TriggerDetailPage() {
     if (!trigger) return;
 
     if (editSolicitante.trim().length > SOLICITANTE_MAX) {
-      setRequirementError(`Solicitante supera ${SOLICITANTE_MAX} caracteres`);
+      setRequirementError(`Contexto supera ${SOLICITANTE_MAX} caracteres`);
       return;
     }
     if (editDescripcion.trim().length > TRIGGER_DESCRIPTION_MAX) {
@@ -281,8 +281,11 @@ export function TriggerDetailPage() {
         <Card
           sx={{
             border: "1px solid",
-            borderColor: alpha("#7ec8ff", 0.14),
-            background: "linear-gradient(180deg, rgba(79, 163, 255, 0.08) 0%, rgba(9, 17, 33, 0.86) 58%, rgba(7, 13, 27, 0.95) 100%)",
+            borderColor: (theme) => alpha(theme.palette.primary.main, 0.2),
+            background: (theme) =>
+              theme.palette.mode === "dark"
+                ? `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.18)} 0%, ${alpha(theme.palette.background.paper, 0.9)} 58%, ${alpha(theme.palette.background.default, 0.98)} 100%)`
+                : `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.08)} 0%, ${alpha(theme.palette.background.paper, 0.95)} 52%, ${alpha(theme.palette.background.default, 0.98)} 100%)`,
           }}
         >
           <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
@@ -303,7 +306,7 @@ export function TriggerDetailPage() {
                         disabled={savingRequirement}
                       />
                       <TextField
-                        label="Solicitante"
+                        label="Contexto"
                         value={editSolicitante}
                         onChange={(event) => setEditSolicitante(event.target.value.slice(0, SOLICITANTE_MAX))}
                         disabled={savingRequirement}
@@ -313,7 +316,7 @@ export function TriggerDetailPage() {
                     <>
                       <Typography variant="h3">{getPrimaryDetail(trigger)}</Typography>
                       <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
-                        Solicitante: {getSecondaryRequester(trigger)}
+                        Contexto: {getSecondaryRequester(trigger)}
                       </Typography>
                     </>
                   )}
@@ -362,7 +365,7 @@ export function TriggerDetailPage() {
                     p: 2,
                     overflow: "auto",
                     borderRadius: 3,
-                    backgroundColor: "rgba(7, 11, 20, 0.75)",
+                    backgroundColor: (theme) => alpha(theme.palette.background.default, theme.palette.mode === "dark" ? 0.7 : 0.5),
                     border: "1px solid",
                     borderColor: "divider",
                     fontSize: 13,
@@ -441,8 +444,9 @@ export function TriggerDetailPage() {
                           borderRadius: 2,
                           py: 1.6,
                           px: 1.8,
-                          borderColor: "rgba(170, 214, 255, 0.24)",
-                          backgroundColor: "rgba(6, 20, 40, 0.35)",
+                          borderColor: (theme) => alpha(theme.palette.primary.main, 0.25),
+                          backgroundColor: (theme) =>
+                            alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.22 : 0.7),
                         }}
                       >
                         <Stack direction="row" spacing={1.4} sx={{ alignItems: "flex-start", minWidth: 0, width: "100%" }}>
@@ -510,8 +514,8 @@ function InfoItem({ label, value }: InfoItemProps) {
         p: 2.25,
         borderRadius: 4,
         border: "1px solid",
-        borderColor: "rgba(160, 206, 255, 0.12)",
-        backgroundColor: "rgba(7, 15, 30, 0.62)",
+        borderColor: (theme) => alpha(theme.palette.primary.main, 0.16),
+        backgroundColor: (theme) => alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.2 : 0.75),
       }}
     >
       <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: 1.1, textTransform: "uppercase" }}>

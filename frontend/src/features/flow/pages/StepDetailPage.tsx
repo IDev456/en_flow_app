@@ -109,8 +109,8 @@ export function StepDetailPage() {
   return (
     <Stack spacing={3}>
       <Breadcrumbs>
-        <Link component={RouterLink} underline="hover" color="inherit" to="/requirements">
-          Requerimientos
+        <Link component={RouterLink} underline="hover" color="inherit" to="/flows">
+          Flows
         </Link>
         {step && (
           <Link component={RouterLink} underline="hover" color="inherit" to={`/workflows/${step.workflow_id}`}>

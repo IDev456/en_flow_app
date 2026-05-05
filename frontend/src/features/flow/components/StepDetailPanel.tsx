@@ -162,7 +162,7 @@ export function StepDetailPanel({
           <Stack spacing={1}>
             <Typography variant="h5">Sin tarea seleccionada</Typography>
             <Typography color="text.secondary">
-              Selecciona una tarea del flow para revisar su bitacora, entender el contexto y registrar avance.
+              Selecciona una tarea del flow para revisar su registro, entender el contexto y decidir qué sigue.
             </Typography>
           </Stack>
         </CardContent>
@@ -227,6 +227,8 @@ export function StepDetailPanel({
   }
 
   async function handleCompleteTask() {
+    const currentStep = step;
+    if (!currentStep) return;
     const resultTrimmed = completeResult.trim();
     if (resultTrimmed.length < 3) {
       setCompleteError("Debes indicar el resultado de la tarea.");
@@ -244,7 +246,7 @@ export function StepDetailPanel({
     try {
       setCompleting(true);
       setCompleteError(null);
-      await onCompleteTask(step.id, {
+      await onCompleteTask(currentStep.id, {
         usuario: DEFAULT_ACTOR,
         resultado_cierre: resultTrimmed,
         comentario: resultTrimmed,
@@ -316,6 +318,8 @@ export function StepDetailPanel({
 
   async function handleResolveAfterExternal() {
     if (!onResolveExternalResponse) return;
+    const currentStep = step;
+    if (!currentStep) return;
     const resultTrimmed = resolveResult.trim();
     if (resultTrimmed.length < 3) {
       setResolveError("Debes indicar el resultado de cierre de la tarea.");
@@ -329,7 +333,7 @@ export function StepDetailPanel({
     try {
       setResolving(true);
       setResolveError(null);
-      await onResolveExternalResponse(step.id, {
+      await onResolveExternalResponse(currentStep.id, {
         usuario: DEFAULT_ACTOR,
         resultado_cierre: resultTrimmed,
         comentario: resultTrimmed,
@@ -465,10 +469,10 @@ export function StepDetailPanel({
                 <CardContent sx={{ p: 1.75 }}>
                   <Stack spacing={0.9}>
                     <Typography variant="subtitle2" color="text.secondary">
-                      Al completar tarea
+                      ¿Qué sigue?
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Deberas decidir el proximo movimiento del flow: crear proxima tarea, esperar respuesta externa o finalizar flow.
+                      Al cerrar esta tarea vas a decidir cómo continúa el flow.
                     </Typography>
                   </Stack>
                 </CardContent>
@@ -543,30 +547,36 @@ export function StepDetailPanel({
               exclusive
               value={completeTransition}
               onChange={(_, value: StepTransitionType | null) => value && setCompleteTransition(value)}
+              fullWidth
             >
               <ToggleButton value="next_task">Crear próxima tarea</ToggleButton>
               <ToggleButton value="wait_external">Esperar respuesta externa</ToggleButton>
               <ToggleButton value="finish_flow">Finalizar flow</ToggleButton>
             </ToggleButtonGroup>
+            <Typography variant="body2" color="text.secondary">
+              {completeTransition === "next_task" && "Hay algo más para hacer."}
+              {completeTransition === "wait_external" && "Queda pendiente una respuesta o dato externo."}
+              {completeTransition === "finish_flow" && "El tema ya quedó resuelto."}
+            </Typography>
 
             {completeTransition === "next_task" && (
               <Stack spacing={1.5}>
                 <TextField label="Nombre de la próxima tarea *" value={nextTaskName} onChange={(event) => setNextTaskName(event.target.value)} />
-                <TextField label="Descripcion / contexto" multiline minRows={2} value={nextTaskDescription} onChange={(event) => setNextTaskDescription(event.target.value)} />
+                <TextField label="Detalle / contexto" multiline minRows={2} value={nextTaskDescription} onChange={(event) => setNextTaskDescription(event.target.value)} />
                 <TextField label="Asignado a" value={nextTaskAssignee} onChange={(event) => setNextTaskAssignee(event.target.value)} />
                 <TextField
                   label="Fecha de vencimiento"
                   type="datetime-local"
                   value={nextTaskDueDate}
                   onChange={(event) => setNextTaskDueDate(event.target.value)}
-                  InputLabelProps={{ shrink: true }}
+                  slotProps={{ inputLabel: { shrink: true } }}
                 />
               </Stack>
             )}
 
             {completeTransition === "wait_external" && (
               <Stack spacing={1.5}>
-                <TextField label="Que se espera *" value={waitExpected} onChange={(event) => setWaitExpected(event.target.value)} />
+                <TextField label="Que se esta esperando *" value={waitExpected} onChange={(event) => setWaitExpected(event.target.value)} />
                 <TextField label="Origen / proveedor / persona" value={waitSource} onChange={(event) => setWaitSource(event.target.value)} />
                 <TextField label="Detalle de la espera" multiline minRows={2} value={waitDetail} onChange={(event) => setWaitDetail(event.target.value)} />
                 <TextField label="Referencia externa" value={waitReference} onChange={(event) => setWaitReference(event.target.value)} />
@@ -598,7 +608,7 @@ export function StepDetailPanel({
             Cancelar
           </Button>
           <Button onClick={() => void handleCompleteTask()} disabled={completing} variant="contained">
-            {completing ? "Guardando..." : "Confirmar cierre"}
+            {completing ? "Guardando..." : "Guardar decisión"}
           </Button>
         </DialogActions>
       </Dialog>
@@ -650,22 +660,27 @@ export function StepDetailPanel({
               exclusive
               value={resolveTransition}
               onChange={(_, value: "next_task" | "finish_flow" | null) => value && setResolveTransition(value)}
+              fullWidth
             >
               <ToggleButton value="next_task">Crear próxima tarea</ToggleButton>
               <ToggleButton value="finish_flow">Finalizar flow</ToggleButton>
             </ToggleButtonGroup>
+            <Typography variant="body2" color="text.secondary">
+              {resolveTransition === "next_task" && "Hay algo mas para hacer."}
+              {resolveTransition === "finish_flow" && "El tema ya quedo resuelto."}
+            </Typography>
 
             {resolveTransition === "next_task" && (
               <Stack spacing={1.5}>
                 <TextField label="Nombre de la próxima tarea *" value={resolveNextTaskName} onChange={(event) => setResolveNextTaskName(event.target.value)} />
-                <TextField label="Descripcion / contexto" multiline minRows={2} value={resolveNextTaskDescription} onChange={(event) => setResolveNextTaskDescription(event.target.value)} />
+                <TextField label="Detalle / contexto" multiline minRows={2} value={resolveNextTaskDescription} onChange={(event) => setResolveNextTaskDescription(event.target.value)} />
                 <TextField label="Asignado a" value={resolveNextTaskAssignee} onChange={(event) => setResolveNextTaskAssignee(event.target.value)} />
                 <TextField
                   label="Fecha de vencimiento"
                   type="datetime-local"
                   value={resolveNextTaskDueDate}
                   onChange={(event) => setResolveNextTaskDueDate(event.target.value)}
-                  InputLabelProps={{ shrink: true }}
+                  slotProps={{ inputLabel: { shrink: true } }}
                 />
               </Stack>
             )}
@@ -695,7 +710,7 @@ export function StepDetailPanel({
             Cancelar
           </Button>
           <Button onClick={() => void handleResolveAfterExternal()} disabled={resolving} variant="contained">
-            {resolving ? "Guardando..." : "Confirmar"}
+            {resolving ? "Guardando..." : "Guardar decision"}
           </Button>
         </DialogActions>
       </Dialog>

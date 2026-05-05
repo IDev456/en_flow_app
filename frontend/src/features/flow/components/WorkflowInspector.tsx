@@ -144,7 +144,7 @@ export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInsp
               minRows={3}
               value={comentarioFinal}
               onChange={(event) => setComentarioFinal(event.target.value)}
-              placeholder="Nota de cierre para la bitacora general..."
+              placeholder="Nota de cierre para el registro general..."
             />
             {error && <Alert severity="error">{error}</Alert>}
             <Button type="submit" variant="contained" disabled={submitting}>

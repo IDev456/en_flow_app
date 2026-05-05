@@ -8,11 +8,12 @@ import {
   CardContent,
   CircularProgress,
   Link,
+  Snackbar,
   Stack,
   TextField,
   Typography,
 } from "@mui/material";
-import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
+import { Link as RouterLink, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import {
   addStepComment,
@@ -48,6 +49,7 @@ import { DEFAULT_ACTOR, formatDate } from "../utils";
 
 export function WorkflowDetailPage() {
   const { workflowId = "" } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const [workflow, setWorkflow] = useState<WorkflowDetail | null>(null);
   const [trigger, setTrigger] = useState<TriggerDetail | null>(null);
@@ -62,13 +64,15 @@ export function WorkflowDetailPage() {
   const [allRequirements, setAllRequirements] = useState<TriggerDetail[]>([]);
   const [linkRequirementId, setLinkRequirementId] = useState("");
   const [newRequirementDescription, setNewRequirementDescription] = useState("");
+  const [captureToastOpen, setCaptureToastOpen] = useState(Boolean((location.state as { toast?: string } | null)?.toast));
+  const captureToastMessage = (location.state as { toast?: string } | null)?.toast;
 
   function getPrimaryRequirementLabel() {
     return trigger?.descripcion?.trim() || workflow?.objetivo_final?.trim() || "Flow sin requerimiento";
   }
 
   function getSecondaryRequesterLabel() {
-    return trigger?.solicitante?.trim() || "Sin solicitante";
+    return trigger?.solicitante?.trim() || "Sin contexto";
   }
 
   useEffect(() => {
@@ -140,7 +144,7 @@ export function WorkflowDetailPage() {
       setStepComments(comments);
       setStepHistory(history);
     } catch (err) {
-      setPanelError(err instanceof Error ? err.message : "No se pudo cargar la bitacora de la tarea");
+      setPanelError(err instanceof Error ? err.message : "No se pudo cargar los registros de la tarea");
     }
   }
 
@@ -237,9 +241,15 @@ export function WorkflowDetailPage() {
 
   return (
     <Stack spacing={3}>
+      <Snackbar
+        open={captureToastOpen}
+        autoHideDuration={2600}
+        onClose={() => setCaptureToastOpen(false)}
+        message={captureToastMessage}
+      />
       <Breadcrumbs>
-        <Link component={RouterLink} underline="hover" color="inherit" to="/requirements">
-          Requerimientos
+        <Link component={RouterLink} underline="hover" color="inherit" to="/flows">
+          Flows
         </Link>
         {trigger && (
           <Link component={RouterLink} underline="hover" color="inherit" to={`/requirements/${trigger.id}`}>
@@ -256,7 +266,7 @@ export function WorkflowDetailPage() {
               <Box>
                 <Typography variant="h3">{getPrimaryRequirementLabel()}</Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
-                  Solicitante: {getSecondaryRequesterLabel()}
+                  Contexto: {getSecondaryRequesterLabel()}
                 </Typography>
               </Box>
               <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start", flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -311,7 +321,7 @@ export function WorkflowDetailPage() {
                   label="Vincular a requerimiento"
                   value={linkRequirementId}
                   onChange={(event) => setLinkRequirementId(event.target.value)}
-                  SelectProps={{ native: true }}
+                  slotProps={{ select: { native: true } }}
                   sx={{ minWidth: 260 }}
                 >
                   <option value="">Seleccionar...</option>
@@ -384,7 +394,7 @@ export function WorkflowDetailPage() {
                 <Box>
                   <Typography variant="h5">Tareas</Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                    Selecciona una tarea para ver su detalle, registrar avance, adjuntar evidencia o cambiar su estado.
+                    Selecciona una tarea para ver su detalle, registrar avance y decidir continuidad.
                   </Typography>
                 </Box>
                 <WorkflowVariantSwitcher value={variant} onChange={setVariant} />

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import { alpha } from "@mui/material/styles";
+import type { Theme } from "@mui/material/styles";
 import {
   Alert,
   Box,
@@ -50,7 +51,7 @@ function getStateBucketFromStatus(statusValue: string): Exclude<WorkflowStateFil
   if (tone === "finalizado" || tone === "resuelto" || tone === "completado" || tone === "cancelado") {
     return "done";
   }
-  if (tone === "espera" || tone === "espera_externa" || tone === "problema" || tone === "nuevo") {
+  if (tone === "espera" || tone === "espera_externa" || tone === "problema" || tone === "sin_flows") {
     return "waiting";
   }
   return "in_progress";
@@ -59,20 +60,20 @@ function getStateBucketFromStatus(statusValue: string): Exclude<WorkflowStateFil
 function getFilterSx(filter: WorkflowStateFilter) {
   if (filter === "in_progress") {
     return {
-      borderColor: alpha("#5fd1ff", 0.4),
-      "&.Mui-selected": { color: "#072133", bgcolor: alpha("#5fd1ff", 0.92) },
+      borderColor: "info.main",
+      "&.Mui-selected": (theme: Theme) => ({ color: theme.palette.info.dark, bgcolor: alpha(theme.palette.info.main, 0.26) }),
     };
   }
   if (filter === "waiting") {
     return {
-      borderColor: alpha("#ffbe55", 0.45),
-      "&.Mui-selected": { color: "#2f1d06", bgcolor: alpha("#ffbe55", 0.96) },
+      borderColor: "warning.main",
+      "&.Mui-selected": (theme: Theme) => ({ color: theme.palette.warning.dark, bgcolor: alpha(theme.palette.warning.main, 0.24) }),
     };
   }
   if (filter === "done") {
     return {
-      borderColor: alpha("#53d88f", 0.45),
-      "&.Mui-selected": { color: "#042514", bgcolor: alpha("#53d88f", 0.92) },
+      borderColor: "success.main",
+      "&.Mui-selected": (theme: Theme) => ({ color: theme.palette.success.dark, bgcolor: alpha(theme.palette.success.main, 0.22) }),
     };
   }
   return {};
@@ -119,7 +120,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   }
 
   function getSecondaryRequester(trigger: TriggerDetail) {
-    return trigger.solicitante?.trim() || "sistema";
+    return trigger.solicitante?.trim() || "Sin contexto";
   }
 
   function getWorkflowDisplayStatus(workflow: WorkflowDetail, trigger: TriggerDetail) {
@@ -260,40 +261,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
   const activeFlows = flowCounts.in_progress + flowCounts.waiting;
   const totalCreatedSteps = flowRows.reduce((sum, row) => sum + row.workflow.steps.length, 0);
-  const kpis = [
-    { label: "Requerimientos", value: triggers.length, helper: "Total cargado en la bandeja operativa" },
-    { label: "Flows activos", value: activeFlows, helper: "En proceso, espera operativa o espera externa" },
-    { label: "Flows completados", value: flowCounts.done, helper: "Finalizados o cancelados" },
-    { label: "Tareas creadas", value: totalCreatedSteps, helper: "Total de tareas de todos los flows" },
-  ];
 
   const currentRowsCount = viewMode === "requirements" ? filteredRequirementRows.length : filteredFlowRows.length;
   const currentCounts = viewMode === "requirements" ? requirementCounts : flowCounts;
 
   return (
-    <Stack spacing={3.5}>
-      <Box
-        sx={{
-          display: "grid",
-          gap: 2,
-          gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", xl: "repeat(4, minmax(0, 1fr))" },
-        }}
-      >
-        {kpis.map((item) => (
-          <Card key={item.label}>
-            <CardContent sx={{ display: "grid", gap: 0.75 }}>
-              <Typography variant="subtitle2" color="text.secondary">
-                {item.label}
-              </Typography>
-              <Typography variant="h3">{item.value}</Typography>
-              <Typography variant="body2" color="text.secondary">
-                {item.helper}
-              </Typography>
-            </CardContent>
-          </Card>
-        ))}
-      </Box>
-
+    <Stack spacing={2.25}>
       <Card>
         <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
           <Stack spacing={3}>
@@ -302,7 +275,15 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
               spacing={1.5}
               sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", lg: "center" } }}
             >
-              <Typography variant="h2">{title}</Typography>
+              <Box>
+                <Typography variant="h2">{title}</Typography>
+                <Stack direction="row" spacing={1} sx={{ mt: 0.75, flexWrap: "wrap", gap: 1 }}>
+                  <Chip size="small" label={`Requerimientos: ${triggers.length}`} variant="outlined" />
+                  <Chip size="small" label={`Flows activos: ${activeFlows}`} variant="outlined" />
+                  <Chip size="small" label={`Flows completados: ${flowCounts.done}`} variant="outlined" />
+                  <Chip size="small" label={`Tareas: ${totalCreatedSteps}`} variant="outlined" />
+                </Stack>
+              </Box>
               {!lockView && (
                 <ToggleButtonGroup
                   exclusive
@@ -322,7 +303,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
               <TextField
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Buscar por detalle, solicitante o id..."
+                placeholder={
+                  viewMode === "flows"
+                    ? "Buscar por flow, contexto o id..."
+                    : "Buscar por requerimiento, contexto o id..."
+                }
                 sx={{ maxWidth: 460 }}
                 slotProps={{
                   input: {
@@ -377,7 +362,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             {error && <Alert severity="error">{error}</Alert>}
 
             {!loading && !error && currentRowsCount === 0 && (
-              <Alert severity="info">No hay resultados para la búsqueda y filtro actual.</Alert>
+              <Alert severity="info">No hay elementos para el filtro actual.</Alert>
             )}
 
             {!loading && !error && currentRowsCount > 0 && (
@@ -391,7 +376,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                         borderRadius: 3,
                         border: "1px solid",
                         borderColor: "divider",
-                        backgroundColor: alpha("#0c1324", 0.76),
+                        backgroundColor: (theme) => alpha(theme.palette.background.paper, 0.78),
                         overflow: "hidden",
                       }}
                     >
@@ -399,7 +384,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                         <TableHead>
                           <TableRow>
                             <TableCell sx={{ width: "56%" }}>Detalle</TableCell>
-                            <TableCell sx={{ width: "22%" }}>Solicitante</TableCell>
+                            <TableCell sx={{ width: "22%" }}>Contexto</TableCell>
                             <TableCell sx={{ width: "10%" }}>Flows</TableCell>
                             <TableCell sx={{ width: "12%" }}>Tareas totales</TableCell>
                           </TableRow>
@@ -481,16 +466,16 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                         borderRadius: 3,
                         border: "1px solid",
                         borderColor: "divider",
-                        backgroundColor: alpha("#0c1324", 0.76),
+                        backgroundColor: (theme) => alpha(theme.palette.background.paper, 0.78),
                         overflow: "hidden",
                       }}
                     >
                       <Table sx={{ tableLayout: "fixed", width: "100%" }}>
                         <TableHead>
                           <TableRow>
-                            <TableCell sx={{ width: "40%" }}>Requerimiento</TableCell>
+                            <TableCell sx={{ width: "40%" }}>Flow</TableCell>
                             <TableCell sx={{ width: "16%" }}>Flow</TableCell>
-                            <TableCell sx={{ width: "18%" }}>Solicitante</TableCell>
+                            <TableCell sx={{ width: "18%" }}>Contexto</TableCell>
                             <TableCell sx={{ width: "10%" }}>Tareas</TableCell>
                             <TableCell sx={{ width: "16%" }}>Estado</TableCell>
                           </TableRow>
@@ -505,11 +490,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                             >
                               <TableCell>
                                 <Typography sx={{ fontWeight: 700, wordBreak: "break-word" }}>
-                                  {getPrimaryDetail(row.trigger)}
+                                  {row.workflow.objetivo_final?.trim() || `Flow ${row.workflowId.slice(0, 8)}`}
                                 </Typography>
                               </TableCell>
                               <TableCell>{row.workflowId.slice(0, 8)}</TableCell>
-                              <TableCell>{getSecondaryRequester(row.trigger)}</TableCell>
+                              <TableCell>{getPrimaryDetail(row.trigger)}</TableCell>
                               <TableCell>{row.workflow.steps.length === 1 ? "1 tarea" : `${row.workflow.steps.length} tareas`}</TableCell>
                               <TableCell>
                                 <StatusBadge value={getWorkflowDisplayStatus(row.workflow, row.trigger)} />
@@ -527,7 +512,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                             <Stack spacing={1}>
                               <Typography sx={{ fontWeight: 700 }}>{getPrimaryDetail(row.trigger)}</Typography>
                               <Typography variant="body2" color="text.secondary">
-                                Flow {row.workflowId.slice(0, 8)} · {getSecondaryRequester(row.trigger)}
+                                Flow {row.workflowId.slice(0, 8)} · {row.workflow.objetivo_final?.trim() || "Sin título"}
                               </Typography>
                               <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", gap: 1 }}>
                                 <Chip size="small" variant="outlined" label={row.workflow.steps.length === 1 ? "1 tarea" : `${row.workflow.steps.length} tareas`} />

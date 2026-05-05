@@ -69,6 +69,10 @@ function renderLatestStepMovement(step: Step) {
   );
 }
 
+function getMutedSurface(theme: Theme) {
+  return alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.28 : 0.72);
+}
+
 function getStepStateColors(theme: Theme, status: Step["estado"]) {
   const tone = getStatusTone(status);
 
@@ -226,7 +230,7 @@ function VerticalWorkflowGraph({
                         height: { xs: 24, md: 28 },
                         width: 2,
                         borderRadius: 999,
-                        background: `linear-gradient(180deg, ${alpha(theme.palette.common.white, 0.08)}, ${stateColors.lineColor})`,
+                        background: `linear-gradient(180deg, ${alpha(theme.palette.text.primary, 0.08)}, ${stateColors.lineColor})`,
                       }}
                     />
                   )}
@@ -238,7 +242,7 @@ function VerticalWorkflowGraph({
                         height: { xs: 24, md: 28 },
                         width: 2,
                         borderRadius: 999,
-                        background: `linear-gradient(180deg, ${stateColors.lineColor}, ${alpha(theme.palette.common.white, 0.08)})`,
+                        background: `linear-gradient(180deg, ${stateColors.lineColor}, ${alpha(theme.palette.text.primary, 0.08)})`,
                       }}
                     />
                   )}
@@ -309,9 +313,9 @@ function VerticalWorkflowGraph({
                                 borderRadius: 1.5,
                                 px: 1.25,
                                 py: 1,
-                                backgroundColor: alpha(theme.palette.common.white, 0.04),
+                                backgroundColor: getMutedSurface(theme),
                                 border: "1px solid",
-                                borderColor: alpha(theme.palette.common.white, 0.08),
+                                borderColor: alpha(theme.palette.divider, 0.85),
                               }}
                             >
                               {renderLatestStepMovement(step)}
@@ -361,7 +365,7 @@ function VerticalWorkflowGraph({
             alignSelf: { xs: "center", md: "flex-start" },
             ml: { md: "59px" },
             borderRadius: 999,
-            background: `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.28)}, ${alpha(theme.palette.common.white, 0.12)})`,
+            background: `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.28)}, ${alpha(theme.palette.text.primary, 0.12)})`,
           }}
         />
 
@@ -388,7 +392,7 @@ function VerticalWorkflowGraph({
               </Typography>
               <Typography variant="h6">{workflowClosed ? "Flow finalizado" : "Cierre pendiente"}</Typography>
               <Typography variant="body2" color="text.secondary">
-                {workflowClosed ? "El requerimiento ya completo su recorrido." : "El flow se cerrara cuando no queden tareas pendientes."}
+                {workflowClosed ? "El flow ya quedó resuelto." : "El flow se cerrará cuando no queden tareas pendientes."}
               </Typography>
             </Stack>
           </Box>
@@ -480,9 +484,9 @@ function GitLogWorkflowGraph({
                         borderRadius: 1.5,
                         px: 1.25,
                         py: 1,
-                        backgroundColor: alpha(theme.palette.common.white, 0.04),
+                        backgroundColor: getMutedSurface(theme),
                         border: "1px solid",
-                        borderColor: alpha(theme.palette.common.white, 0.08),
+                        borderColor: alpha(theme.palette.divider, 0.85),
                       }}
                     >
                       {renderLatestStepMovement(step)}

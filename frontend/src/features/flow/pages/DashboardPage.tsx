@@ -1,11 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
+import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
+import PlaylistAddCheckRoundedIcon from "@mui/icons-material/PlaylistAddCheckRounded";
+import { alpha } from "@mui/material/styles";
 import { Alert, Box, Button, Card, CardContent, CircularProgress, Stack, Typography } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
 
 import { getDailyBoard } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
 import type { DailyBoardData, Step, WorkflowSummary } from "../types";
-import { formatDate } from "../utils";
+import { formatElapsedTime } from "../utils";
 
 export function DashboardPage() {
   const [board, setBoard] = useState<DailyBoardData | null>(null);
@@ -28,6 +32,11 @@ export function DashboardPage() {
     }
   }
 
+  const pausedAndBlocked = useMemo(
+    () => [...(board?.tareas_en_pausa ?? []), ...(board?.tareas_con_problema ?? [])],
+    [board?.tareas_en_pausa, board?.tareas_con_problema]
+  );
+
   if (loading) {
     return (
       <Stack direction="row" spacing={1.5} sx={{ py: 8, alignItems: "center", justifyContent: "center" }}>
@@ -42,85 +51,107 @@ export function DashboardPage() {
   }
 
   return (
-    <Stack spacing={3}>
+    <Stack spacing={2.25}>
       <Card>
-        <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ justifyContent: "space-between", alignItems: "center" }}>
+        <CardContent sx={{ p: { xs: 2.25, md: 2.5 } }}>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ justifyContent: "space-between", alignItems: "center" }}>
             <Box>
-              <Typography variant="subtitle2" color="primary.light">
-                Hoy
+              <Typography variant="subtitle2" color="primary.main">
+                Bandeja
               </Typography>
-              <Typography variant="h2">Bandeja operativa</Typography>
+              <Typography variant="h2">¿Con qué seguís ahora?</Typography>
             </Box>
             <Button component={RouterLink} to="?modal=capture" variant="contained">
-              + Capturar tarea
+              Capturar tarea
             </Button>
           </Stack>
         </CardContent>
       </Card>
 
-      <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "repeat(3, minmax(0, 1fr))" } }}>
-        <StepColumn title="Activas" items={board.tareas_activas} empty="No hay tareas activas." />
-        <StepColumn title="Esperando respuesta" items={board.tareas_esperando_respuesta} empty="No hay tareas esperando respuesta." />
-        <StepColumn title="En pausa / problema" items={[...board.tareas_en_pausa, ...board.tareas_con_problema]} empty="No hay tareas en pausa o con problema." />
+      <Box
+        sx={{
+          display: "grid",
+          gap: 2,
+          gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 1.25fr) minmax(0, 0.75fr)" },
+        }}
+      >
+        <SectionCard
+          title="Activas"
+          subtitle="Lo más importante para seguir ahora."
+          items={board.tareas_activas}
+          emptyTitle="No hay nada activo ahora"
+          emptyDescription="Capturá una tarea cuando aparezca algo para seguir."
+          emphasized
+        />
+
+        <Stack spacing={2}>
+          <SectionCard
+            title="Esperando respuesta"
+            subtitle="Pendientes de terceros."
+            items={board.tareas_esperando_respuesta}
+            emptyTitle="No hay respuestas pendientes"
+            emptyDescription="Los temas que dependan de una respuesta externa aparecerán acá."
+          />
+          <SectionCard
+            title="En pausa / problema"
+            subtitle="Temas que no pueden avanzar."
+            items={pausedAndBlocked}
+            emptyTitle="No hay temas pausados ni con problema"
+            emptyDescription="Cuando algo no pueda avanzar, quedará visible en esta sección."
+          />
+        </Stack>
       </Box>
 
-      <Card>
-        <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
-          <Stack spacing={1.5}>
-            <Typography variant="h5">Flows recientes</Typography>
-            {board.flows_recientes.length === 0 ? (
-              <Alert severity="info">No hay flows recientes.</Alert>
-            ) : (
-              board.flows_recientes.map((workflow) => <WorkflowRow key={workflow.id} workflow={workflow} />)
-            )}
-          </Stack>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
-          <Stack spacing={1.5}>
-            <Typography variant="h5">Cerradas recientes</Typography>
-            {board.flows_cerrados_recientes.length === 0 ? (
-              <Alert severity="info">No hay cierres recientes.</Alert>
-            ) : (
-              board.flows_cerrados_recientes.map((workflow) => <WorkflowRow key={workflow.id} workflow={workflow} />)
-            )}
-          </Stack>
-        </CardContent>
-      </Card>
+      <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" } }}>
+        <FlowSection
+          title="Flows recientes"
+          items={board.flows_recientes}
+          emptyTitle="Todavía no hay flows recientes"
+          emptyDescription="Capturá una tarea para iniciar el primero."
+        />
+        <FlowSection
+          title="Cerradas recientes"
+          items={board.flows_cerrados_recientes}
+          emptyTitle="No hay cierres recientes"
+          emptyDescription="Los flows finalizados aparecerán acá por un tiempo."
+        />
+      </Box>
     </Stack>
   );
 }
 
-function StepColumn({ title, items, empty }: { title: string; items: Step[]; empty: string }) {
+type SectionCardProps = {
+  title: string;
+  subtitle: string;
+  items: Step[];
+  emptyTitle: string;
+  emptyDescription: string;
+  emphasized?: boolean;
+};
+
+function SectionCard({ title, subtitle, items, emptyTitle, emptyDescription, emphasized = false }: SectionCardProps) {
   return (
-    <Card>
-      <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
-        <Stack spacing={1.25}>
-          <Typography variant="h6">{title}</Typography>
+    <Card sx={emphasized ? { borderColor: "primary.main" } : undefined}>
+      <CardContent sx={{ p: { xs: 2.25, md: 2.5 } }}>
+        <Stack spacing={1.5}>
+          <Box>
+            <Typography variant="h5">{title}</Typography>
+            <Typography variant="body2" color="text.secondary">
+              {subtitle}
+            </Typography>
+          </Box>
+
           {items.length === 0 ? (
-            <Alert severity="info">{empty}</Alert>
+            <Alert severity="info">
+              <Typography variant="subtitle1">{emptyTitle}</Typography>
+              <Typography variant="body2">{emptyDescription}</Typography>
+            </Alert>
           ) : (
-            items.map((step) => (
-              <Button
-                key={step.id}
-                component={RouterLink}
-                to={`/steps/${step.id}`}
-                variant="outlined"
-                color="inherit"
-                sx={{ justifyContent: "space-between", textTransform: "none" }}
-              >
-                <Box sx={{ textAlign: "left" }}>
-                  <Typography sx={{ fontWeight: 700 }}>{step.nombre}</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Tarea {step.orden}
-                  </Typography>
-                </Box>
-                <StatusBadge value={step.estado} />
-              </Button>
-            ))
+            <Stack spacing={1.1}>
+              {items.map((step) => (
+                <WorkItemCard key={step.id} step={step} />
+              ))}
+            </Stack>
           )}
         </Stack>
       </CardContent>
@@ -128,22 +159,109 @@ function StepColumn({ title, items, empty }: { title: string; items: Step[]; emp
   );
 }
 
-function WorkflowRow({ workflow }: { workflow: WorkflowSummary }) {
+function WorkItemCard({ step }: { step: Step }) {
+  const elapsed = formatElapsedTime(step.ultimo_comentario_fecha ?? step.fecha_estado_actual);
+  const latest = step.ultimo_comentario?.trim();
+
   return (
-    <Button
-      component={RouterLink}
-      to={`/workflows/${workflow.id}`}
+    <Card
       variant="outlined"
-      color="inherit"
-      sx={{ justifyContent: "space-between", textTransform: "none" }}
+      sx={{
+        borderRadius: 2,
+        boxShadow: "none",
+        "&:hover": {
+          borderColor: "primary.main",
+        },
+      }}
     >
-      <Box sx={{ textAlign: "left" }}>
-        <Typography sx={{ fontWeight: 700 }}>{workflow.objetivo_final?.trim() || `Flow ${workflow.id.slice(0, 8)}`}</Typography>
-        <Typography variant="body2" color="text.secondary">
-          Inicio: {formatDate(workflow.fecha_inicio)}
-        </Typography>
-      </Box>
-      <StatusBadge value={workflow.estado} />
-    </Button>
+      <CardContent sx={{ p: 1.5 }}>
+        <Stack spacing={1.2}>
+          <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+            <Box>
+              <Typography sx={{ fontWeight: 700 }}>{step.nombre}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Tarea actual: #{step.orden}
+              </Typography>
+            </Box>
+            <StatusBadge value={step.estado} />
+          </Stack>
+
+          <Typography variant="body2" color="text.secondary">
+            Último registro: {latest || "Sin registros todavía"}
+          </Typography>
+
+          <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 0.75 }}>
+            <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
+              <AccessTimeRoundedIcon sx={{ fontSize: 16, color: "text.secondary" }} />
+              <Typography variant="caption" color="text.secondary">
+                {elapsed ?? "Sin movimiento reciente"}
+              </Typography>
+            </Stack>
+            <Button component={RouterLink} to={`/steps/${step.id}`} size="small" endIcon={<LaunchRoundedIcon />} sx={{ px: 0.5 }}>
+              Abrir tarea
+            </Button>
+          </Stack>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+type FlowSectionProps = {
+  title: string;
+  items: WorkflowSummary[];
+  emptyTitle: string;
+  emptyDescription: string;
+};
+
+function FlowSection({ title, items, emptyTitle, emptyDescription }: FlowSectionProps) {
+  return (
+    <Card>
+      <CardContent sx={{ p: { xs: 2.25, md: 2.5 } }}>
+        <Stack spacing={1.5}>
+          <Typography variant="h6">{title}</Typography>
+          {items.length === 0 ? (
+            <Alert severity="info">
+              <Typography variant="subtitle1">{emptyTitle}</Typography>
+              <Typography variant="body2">{emptyDescription}</Typography>
+            </Alert>
+          ) : (
+            <Stack spacing={1}>
+              {items.map((workflow) => (
+                <Button
+                  key={workflow.id}
+                  component={RouterLink}
+                  to={`/workflows/${workflow.id}`}
+                  variant="outlined"
+                  color="inherit"
+                  sx={{
+                    justifyContent: "space-between",
+                    textTransform: "none",
+                    borderRadius: 2,
+                    borderColor: "divider",
+                    bgcolor: (theme) => alpha(theme.palette.background.paper, 0.55),
+                  }}
+                >
+                  <Box sx={{ textAlign: "left", minWidth: 0 }}>
+                    <Typography sx={{ fontWeight: 700 }} noWrap>
+                      {workflow.objetivo_final?.trim() || `Flow ${workflow.id.slice(0, 8)}`}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {workflow.pasos_activos.length > 0
+                        ? `Tareas abiertas: ${workflow.pasos_activos.join(", ")}`
+                        : "Sin tareas abiertas"}
+                    </Typography>
+                  </Box>
+                  <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
+                    <StatusBadge value={workflow.estado} />
+                    <PlaylistAddCheckRoundedIcon fontSize="small" />
+                  </Stack>
+                </Button>
+              ))}
+            </Stack>
+          )}
+        </Stack>
+      </CardContent>
+    </Card>
   );
 }

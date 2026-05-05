@@ -70,7 +70,7 @@ export function StatusChangeModal({
           </Stack>
 
           <Typography variant="body2" color="text.secondary">
-            La nota queda registrada en la bitacora de la tarea.
+            La nota queda registrada en el historial de la tarea.
           </Typography>
 
           <TextField

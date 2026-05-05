@@ -13,6 +13,7 @@ import {
   Chip,
   Divider,
   IconButton,
+  Snackbar,
   Stack,
   TextField,
   ToggleButton,
@@ -20,6 +21,7 @@ import {
   Typography,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
+import type { Theme } from "@mui/material/styles";
 
 import type { Attachment, AttachmentInput, Step, StepComment, StepHistoryEntry, StepJournalEntryInput } from "../types";
 import { buildJournalItems, formatDate, stepStatusOptions } from "../utils";
@@ -49,36 +51,32 @@ const SHAPE_RADIUS = 1.1;
 
 type StatusOptionValue = "espera" | "problema";
 
-const STATUS_ACCENTS: Record<StatusOptionValue, string> = {
-  espera: "#f59e0b",
-  problema: "#ff6b8d",
-};
-
 function getStatusToggleSx(status: StatusOptionValue) {
-  const accent = STATUS_ACCENTS[status];
-  return {
-    borderRadius: SHAPE_RADIUS,
-    borderColor: alpha(accent, 0.4),
-    backgroundColor: alpha(accent, 0.08),
-    textTransform: "none",
-    fontWeight: 700,
-    px: 1.75,
-    py: 0.8,
-    "&:hover": {
-      borderColor: accent,
-      backgroundColor: alpha(accent, 0.24),
-      color: "#ffffff",
-    },
-    "&.Mui-selected": {
-      borderColor: accent,
-      backgroundColor: alpha(accent, 0.3),
-      color: "#ffffff",
-    },
-    "&.Mui-selected:hover": {
-      borderColor: accent,
-      backgroundColor: alpha(accent, 0.36),
-      color: "#ffffff",
-    },
+  return (theme: Theme) => {
+    const accent = status === "espera" ? theme.palette.warning.main : theme.palette.error.main;
+    return {
+      borderRadius: SHAPE_RADIUS,
+      borderColor: alpha(accent, 0.42),
+      backgroundColor: alpha(accent, 0.08),
+      color: theme.palette.text.primary,
+      textTransform: "none",
+      fontWeight: 700,
+      px: 1.75,
+      py: 0.8,
+      "&:hover": {
+        borderColor: accent,
+        backgroundColor: alpha(accent, 0.2),
+      },
+      "&.Mui-selected": {
+        borderColor: accent,
+        backgroundColor: alpha(accent, theme.palette.mode === "dark" ? 0.34 : 0.24),
+        color: theme.palette.text.primary,
+      },
+      "&.Mui-selected:hover": {
+        borderColor: accent,
+        backgroundColor: alpha(accent, theme.palette.mode === "dark" ? 0.4 : 0.3),
+      },
+    };
   };
 }
 
@@ -101,6 +99,7 @@ export function Journal({
   const [attachments, setAttachments] = useState<DraftAttachment[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savedToastOpen, setSavedToastOpen] = useState(false);
   const items = useMemo(() => buildJournalItems(history, comments), [history, comments]);
   const commentTrimmed = text.trim();
   const canComment = step.puede_tener_comentarios;
@@ -174,7 +173,7 @@ export function Journal({
     }
 
     if (!canComment) {
-      setError("Esta tarea no admite registros en bitacora.");
+      setError("Esta tarea no admite registros.");
       return;
     }
 
@@ -199,6 +198,7 @@ export function Journal({
       setText("");
       setAttachments([]);
       onSelectedStatusChange("");
+      setSavedToastOpen(true);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -247,12 +247,12 @@ export function Journal({
 
   function getCommentPlaceholder() {
     if (selectedStatus === "espera") {
-      return "Describe por que la tarea queda pausada y que falta para retomarla...";
+      return "Qué estás esperando para poder continuar...";
     }
     if (selectedStatus === "problema") {
-      return "Describe el problema operativo y que impacto tiene en la tarea...";
+      return "Qué impide avanzar...";
     }
-    return "Registra avance operativo, resultado parcial o evidencia...";
+    return "Registrá qué pasó o qué cambió...";
   }
 
   return (
@@ -277,7 +277,7 @@ export function Journal({
     >
       <Box ref={composerRef}>
         <Stack spacing={2}>
-          <Typography variant="h6">Bitacora operativa</Typography>
+          <Typography variant="h6">Registro operativo</Typography>
 
           <TextField
             inputRef={textareaRef}
@@ -395,7 +395,8 @@ export function Journal({
                   gap: 1,
                   p: 0.75,
                   borderRadius: SHAPE_RADIUS,
-                  backgroundColor: "rgba(8, 20, 44, 0.58)",
+                  backgroundColor: (theme) =>
+                    alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.42 : 0.72),
                 }}
               >
                 {stepStatusOptions.map((option) => (
@@ -427,6 +428,13 @@ export function Journal({
       </Box>
 
       <Divider />
+
+      <Snackbar
+        open={savedToastOpen}
+        autoHideDuration={2200}
+        onClose={() => setSavedToastOpen(false)}
+        message="Avance guardado"
+      />
 
       <Stack spacing={1.5}>
         {items.length === 0 ? (
@@ -560,7 +568,8 @@ export function HistoryList({ history }: HistoryListProps) {
                   borderRadius: 2,
                   borderLeft: "3px solid",
                   borderColor: "primary.main",
-                  backgroundColor: "rgba(11, 16, 29, 0.62)",
+                  backgroundColor: (theme) =>
+                    alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.2 : 0.1),
                 }}
               >
                 <Typography variant="body2">{entry.nota}</Typography>
