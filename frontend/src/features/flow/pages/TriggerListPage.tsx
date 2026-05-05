@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
 import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
+import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import { alpha } from "@mui/material/styles";
 import {
@@ -11,7 +12,10 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  IconButton,
   InputAdornment,
+  Menu,
+  MenuItem,
   Snackbar,
   Stack,
   TextField,
@@ -154,6 +158,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [createRequirementError, setCreateRequirementError] = useState<string | null>(null);
   const [requirementToastOpen, setRequirementToastOpen] = useState(false);
   const [requirementToastMessage, setRequirementToastMessage] = useState<string | null>(null);
+  const [flowActionsAnchor, setFlowActionsAnchor] = useState<HTMLElement | null>(null);
+  const [flowActionsWorkflowId, setFlowActionsWorkflowId] = useState<string | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -329,6 +335,18 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const emptyFlowMessage = stateFilter === "all" ? "Todavía no hay flows." : "No hay flows para este filtro.";
   const currentCounts = viewMode === "flows" ? flowCounts : requirementCounts;
 
+  function handleOpenFlowActions(event: MouseEvent<HTMLElement>, workflowId: string) {
+    event.preventDefault();
+    event.stopPropagation();
+    setFlowActionsAnchor(event.currentTarget);
+    setFlowActionsWorkflowId(workflowId);
+  }
+
+  function handleCloseFlowActions() {
+    setFlowActionsAnchor(null);
+    setFlowActionsWorkflowId(null);
+  }
+
   return (
     <Stack spacing={2.25}>
       <Snackbar
@@ -484,21 +502,47 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                     const flowTitle = getFlowTitle(item.workflow, item.linkedRequirements);
 
                     return (
-                      <Card key={item.workflow.id} variant="outlined" sx={{ borderRadius: 2.2 }}>
-                        <CardContent sx={{ p: { xs: 1.75, md: 2 } }}>
-                          <Stack spacing={1.2}>
-                            <StatusBadge value={item.displayStatus} />
+                      <Card
+                        key={item.workflow.id}
+                        variant="outlined"
+                        sx={{
+                          position: "relative",
+                          borderRadius: 2.2,
+                          "& .flow-secondary-actions": {
+                            opacity: { xs: 1, sm: 0 },
+                            visibility: { xs: "visible", sm: "hidden" },
+                          },
+                          "&:hover .flow-secondary-actions, &:focus-within .flow-secondary-actions": {
+                            opacity: 1,
+                            visibility: "visible",
+                          },
+                        }}
+                      >
+                        <CardContent sx={{ p: { xs: 1.45, md: 1.6 } }}>
+                          <Stack spacing={0.9}>
+                            <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start", justifyContent: "space-between" }}>
+                              <StatusBadge value={item.displayStatus} />
+                              <IconButton
+                                className="flow-secondary-actions"
+                                size="small"
+                                aria-label="Acciones del flow"
+                                onClick={(event) => handleOpenFlowActions(event, item.workflow.id)}
+                                sx={{ mt: -0.35, mr: -0.35, transition: "opacity 160ms ease" }}
+                              >
+                                <MoreHorizRoundedIcon fontSize="small" />
+                              </IconButton>
+                            </Stack>
 
                             <Box>
                               <Typography variant="subtitle2" color="text.secondary">
                                 {stepLabel}
                               </Typography>
-                              <Typography variant="h6" sx={{ mt: 0.25 }}>
+                              <Typography variant="h6" sx={{ mt: 0.1, lineHeight: 1.2 }}>
                                 {step?.nombre ?? "Sin tarea registrada"}
                               </Typography>
                             </Box>
 
-                            <Typography variant="body2" color="text.secondary">
+                            <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.35 }}>
                               Flow: {flowTitle}
                             </Typography>
 
@@ -526,7 +570,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                             </Stack>
 
                             {item.linkedRequirements.length > 0 && (
-                              <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", gap: 0.75 }}>
+                              <Stack direction="row" spacing={0.6} sx={{ flexWrap: "wrap", gap: 0.6 }}>
                                 {item.linkedRequirements.slice(0, 2).map((requirement) => (
                                   <Chip
                                     key={`${item.workflow.id}-${requirement.id}`}
@@ -542,6 +586,14 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                             )}
                           </Stack>
                         </CardContent>
+                        <Menu
+                          anchorEl={flowActionsAnchor}
+                          open={flowActionsWorkflowId === item.workflow.id}
+                          onClose={handleCloseFlowActions}
+                        >
+                          <MenuItem disabled>Editar flow no disponible todavía</MenuItem>
+                          <MenuItem disabled>Eliminar flow no disponible todavía</MenuItem>
+                        </Menu>
                       </Card>
                     );
                   })
