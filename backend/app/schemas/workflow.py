@@ -191,6 +191,11 @@ class StepCreate(BaseModel):
     external_reference: str | None = Field(default=None, max_length=200)
 
 
+class StepUpdate(BaseModel):
+    nombre: str | None = Field(default=None, min_length=1, max_length=120)
+    descripcion: str | None = Field(default=None, max_length=1000)
+
+
 class AttachmentBase(BaseModel):
     nombre: str = Field(min_length=1, max_length=200)
     content_type: str = Field(min_length=1, max_length=120)

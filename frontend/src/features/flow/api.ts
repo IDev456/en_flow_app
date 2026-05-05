@@ -90,6 +90,10 @@ export function getStep(stepId: string) {
   return apiGet<Step>(`/steps/${stepId}`);
 }
 
+export function updateStep(stepId: string, input: { nombre?: string; descripcion?: string | null }) {
+  return apiPatch<Step>(`/steps/${stepId}`, input);
+}
+
 export function updateStepStatus(stepId: string, input: StepStatusUpdateInput) {
   return apiPatch<Step>(`/steps/${stepId}/status`, input);
 }

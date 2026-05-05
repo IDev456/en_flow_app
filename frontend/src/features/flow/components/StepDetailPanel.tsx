@@ -16,6 +16,7 @@ import {
   IconButton,
   Menu,
   MenuItem,
+  Snackbar,
   Stack,
   TextField,
   ToggleButton,
@@ -24,6 +25,7 @@ import {
 } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
 
+import { updateStep } from "../api";
 import type {
   AttachmentInput,
   ExternalEventCreateInput,
@@ -52,6 +54,7 @@ type StepDetailPanelProps = {
   onCompleteTask: (stepId: string, input: StepCompleteInput) => Promise<void>;
   openCompleteDialog?: boolean;
   onCompleteDialogOpened?: () => void;
+  onStepUpdated?: (step: Step) => Promise<void> | void;
   onRegisterExternalEvent?: (input: ExternalEventCreateInput) => Promise<void>;
   onResolveExternalResponse?: (stepId: string, input: ExternalResponseDecisionInput) => Promise<void>;
 };
@@ -69,6 +72,7 @@ export function StepDetailPanel({
   onCompleteTask,
   openCompleteDialog,
   onCompleteDialogOpened,
+  onStepUpdated,
   onRegisterExternalEvent,
   onResolveExternalResponse,
 }: StepDetailPanelProps) {
@@ -115,6 +119,12 @@ export function StepDetailPanel({
   const [resolving, setResolving] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [resolveAdvancedOpen, setResolveAdvancedOpen] = useState(false);
+  const [editingStep, setEditingStep] = useState(false);
+  const [stepDraftName, setStepDraftName] = useState("");
+  const [stepDraftDescription, setStepDraftDescription] = useState("");
+  const [stepEditError, setStepEditError] = useState<string | null>(null);
+  const [savingStep, setSavingStep] = useState(false);
+  const [stepToastOpen, setStepToastOpen] = useState(false);
 
   useEffect(() => {
     if (!step) {
@@ -159,6 +169,11 @@ export function StepDetailPanel({
     setResolveAttachments([]);
     setResolveError(null);
     setResolveAdvancedOpen(false);
+    setEditingStep(false);
+    setStepDraftName(step.nombre);
+    setStepDraftDescription(step.descripcion ?? "");
+    setStepEditError(null);
+    setStepToastOpen(false);
   }, [step?.id, step?.estado, step?.expected_external_event, step?.external_reference, step?.external_wait_reason]);
 
   if (!step) {
@@ -185,6 +200,8 @@ export function StepDetailPanel({
   const canCompleteTask = ["activo", "espera", "problema"].includes(step.estado);
   const isWaitingExternal = step.estado === "esperando_respuesta";
   const latestMessage = step.ultimo_comentario?.trim() || (step.orden === 1 && step.descripcion?.trim() ? step.descripcion.trim() : "Sin registros todavia");
+  const displayStepName = stepDraftName.trim() || step.nombre;
+  const displayStepDescription = stepDraftDescription.trim();
 
   useEffect(() => {
     if (openCompleteDialog && canCompleteTask) {
@@ -383,6 +400,58 @@ export function StepDetailPanel({
     }
   }
 
+  function handleStartStepEdit() {
+    if (!step) return;
+    setStepDraftName(step.nombre);
+    setStepDraftDescription(step.descripcion ?? "");
+    setStepEditError(null);
+    setEditingStep(true);
+  }
+
+  function handleCancelStepEdit() {
+    if (!step) return;
+    setStepDraftName(step.nombre);
+    setStepDraftDescription(step.descripcion ?? "");
+    setStepEditError(null);
+    setEditingStep(false);
+  }
+
+  async function handleSaveStepEdit() {
+    if (!step) return;
+
+    const nextName = stepDraftName.trim();
+    const nextDescription = stepDraftDescription.trim();
+
+    if (!nextName) {
+      setStepEditError("Debes indicar el nombre de la tarea.");
+      return;
+    }
+
+    if (nextName === step.nombre && nextDescription === (step.descripcion ?? "")) {
+      setEditingStep(false);
+      setStepEditError(null);
+      return;
+    }
+
+    try {
+      setSavingStep(true);
+      setStepEditError(null);
+      const updatedStep = await updateStep(step.id, {
+        nombre: nextName,
+        descripcion: nextDescription || null,
+      });
+      setStepDraftName(updatedStep.nombre);
+      setStepDraftDescription(updatedStep.descripcion ?? "");
+      await onStepUpdated?.(updatedStep);
+      setEditingStep(false);
+      setStepToastOpen(true);
+    } catch (err) {
+      setStepEditError(err instanceof Error ? err.message : "No se pudo actualizar la tarea");
+    } finally {
+      setSavingStep(false);
+    }
+  }
+
   return (
     <Card
       sx={{
@@ -392,6 +461,12 @@ export function StepDetailPanel({
       }}
       onPointerDown={(event) => event.stopPropagation()}
     >
+      <Snackbar
+        open={stepToastOpen}
+        autoHideDuration={2600}
+        onClose={() => setStepToastOpen(false)}
+        message="Tarea actualizada."
+      />
       <CardContent sx={{ p: 0 }}>
         <Box sx={{ p: { xs: 2.5, md: 3 } }}>
           <Stack spacing={2}>
@@ -400,17 +475,53 @@ export function StepDetailPanel({
                 <Typography variant="overline" color="primary.light">
                   Tarea {step.orden}
                 </Typography>
-                <Typography variant="h5" sx={{ mt: 0.25 }}>
-                  {step.nombre}
-                </Typography>
-                {step.descripcion && (
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
-                    {step.descripcion}
-                  </Typography>
+                {editingStep ? (
+                  <Stack spacing={1.25} sx={{ mt: 0.75, minWidth: { xs: "100%", sm: 360 } }}>
+                    <TextField
+                      label="Nombre de la tarea"
+                      value={stepDraftName}
+                      onChange={(event) => setStepDraftName(event.target.value)}
+                      disabled={savingStep}
+                      autoFocus
+                    />
+                    <TextField
+                      label="Descripción"
+                      multiline
+                      minRows={2}
+                      value={stepDraftDescription}
+                      onChange={(event) => setStepDraftDescription(event.target.value)}
+                      disabled={savingStep}
+                    />
+                  </Stack>
+                ) : (
+                  <>
+                    <Typography variant="h5" sx={{ mt: 0.25 }}>
+                      {displayStepName}
+                    </Typography>
+                    {displayStepDescription && (
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
+                        {displayStepDescription}
+                      </Typography>
+                    )}
+                  </>
                 )}
               </Box>
 
               <Stack direction="row" spacing={1}>
+                {editingStep ? (
+                  <>
+                    <Button variant="text" color="inherit" onClick={handleCancelStepEdit} disabled={savingStep}>
+                      Cancelar
+                    </Button>
+                    <Button variant="contained" onClick={() => void handleSaveStepEdit()} disabled={savingStep}>
+                      {savingStep ? "Guardando..." : "Guardar"}
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="text" color="inherit" onClick={handleStartStepEdit}>
+                    Editar
+                  </Button>
+                )}
                 {canCompleteTask && (
                   <Button variant="contained" onClick={() => setCompleteDialogOpen(true)} sx={{ textTransform: "none" }}>
                     Completar tarea
@@ -439,6 +550,8 @@ export function StepDetailPanel({
                 )}
               </Stack>
             </Stack>
+
+            {stepEditError && <Alert severity="error">{stepEditError}</Alert>}
 
             <Card variant="outlined">
               <CardContent sx={{ p: 1.75 }}>

@@ -17,6 +17,7 @@ from app.schemas.workflow import (
     StepCreate,
     StepHistoryPublic,
     StepInstancePublic,
+    StepUpdate,
     StepStatus,
     StepTransitionType,
     StepStatusUpdate,
@@ -237,6 +238,34 @@ class WorkflowService:
         if step is None:
             raise EntityNotFoundError("Step not found")
         return step
+
+    def update_step(self, step_id: str, payload: StepUpdate) -> StepInstancePublic:
+        step = self.get_step(step_id)
+        patch_data = payload.model_dump(exclude_unset=True)
+        update_data: dict[str, object] = {}
+
+        if "nombre" in patch_data:
+            next_name = (patch_data["nombre"] or "").strip()
+            if not next_name:
+                raise BusinessRuleError("El nombre de la tarea es obligatorio")
+            update_data["nombre"] = next_name
+
+        if "descripcion" in patch_data:
+            next_description = patch_data["descripcion"]
+            update_data["descripcion"] = next_description.strip() if isinstance(next_description, str) else None
+
+        if not update_data:
+            raise BusinessRuleError("No hay cambios para guardar")
+
+        updated_step = step.model_copy(update=update_data)
+        self.repository.save_step(updated_step)
+
+        if step.nombre != updated_step.nombre:
+            self._record_history(updated_step.id, "nombre", step.nombre, updated_step.nombre, "sistema")
+        if step.descripcion != updated_step.descripcion:
+            self._record_history(updated_step.id, "descripcion", step.descripcion, updated_step.descripcion, "sistema")
+
+        return self.get_step(step_id)
 
     def update_step_status(self, step_id: str, payload: StepStatusUpdate) -> StepInstancePublic:
         step = self.get_step(step_id)

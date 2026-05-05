@@ -11,6 +11,7 @@ import {
   CardContent,
   CircularProgress,
   Link,
+  Snackbar,
   Stack,
   TextField,
   Typography,
@@ -42,6 +43,7 @@ export function TriggerDetailPage() {
   const [editSolicitante, setEditSolicitante] = useState("");
   const [editDescripcion, setEditDescripcion] = useState("");
   const [requirementError, setRequirementError] = useState<string | null>(null);
+  const [requirementToastOpen, setRequirementToastOpen] = useState(false);
   const navigate = useNavigate();
 
   function getPrimaryDetail(currentTrigger: TriggerDetail) {
@@ -164,6 +166,7 @@ export function TriggerDetailPage() {
       });
       setTrigger(updatedTrigger);
       setEditingRequirement(false);
+      setRequirementToastOpen(true);
     } catch (err) {
       setRequirementError(err instanceof Error ? err.message : "No se pudo actualizar el requerimiento");
     } finally {
@@ -264,6 +267,12 @@ export function TriggerDetailPage() {
 
   return (
     <Stack spacing={3}>
+      <Snackbar
+        open={requirementToastOpen}
+        autoHideDuration={2600}
+        onClose={() => setRequirementToastOpen(false)}
+        message="Requerimiento actualizado."
+      />
       <Breadcrumbs>
         <Link component={RouterLink} underline="hover" color="inherit" to="/requirements">
           Requerimientos

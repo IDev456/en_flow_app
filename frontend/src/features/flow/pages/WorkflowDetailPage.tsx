@@ -206,6 +206,10 @@ export function WorkflowDetailPage() {
     setPendingCompleteDialogStepId(null);
   }
 
+  async function handleStepUpdated(step: Step) {
+    await refreshAfterStepChange(step.id);
+  }
+
   function handleOpenLinkRequirement() {
     if (!workflow) return;
     const linkedRequirementIds = new Set([
@@ -372,6 +376,7 @@ export function WorkflowDetailPage() {
               drawer
               error={panelError}
               onClose={() => setPanelOpen(false)}
+              onStepUpdated={handleStepUpdated}
               onSubmitJournal={handleSubmitJournal}
               onCompleteTask={handleCompleteTask}
               openCompleteDialog={pendingCompleteDialogStepId !== null && pendingCompleteDialogStepId === selectedStepId}

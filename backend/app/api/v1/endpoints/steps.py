@@ -11,6 +11,7 @@ from app.schemas.workflow import (
     StepCompletePayload,
     StepHistoryPublic,
     StepInstancePublic,
+    StepUpdate,
     StepStatusUpdate,
 )
 from app.services.workflow_service import WorkflowService
@@ -24,6 +25,20 @@ def get_step(step_id: str, service: WorkflowService = Depends(get_workflow_servi
         return service.get_step(step_id)
     except EntityNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.patch("/{step_id}", response_model=StepInstancePublic)
+def update_step(
+    step_id: str,
+    payload: StepUpdate,
+    service: WorkflowService = Depends(get_workflow_service),
+) -> StepInstancePublic:
+    try:
+        return service.update_step(step_id, payload)
+    except EntityNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except BusinessRuleError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.patch("/{step_id}/status", response_model=StepInstancePublic)
