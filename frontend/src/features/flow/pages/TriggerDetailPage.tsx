@@ -10,6 +10,8 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
+  Collapse,
   CircularProgress,
   IconButton,
   Link,
@@ -50,6 +52,7 @@ export function TriggerDetailPage() {
   const [requirementError, setRequirementError] = useState<string | null>(null);
   const [requirementToastOpen, setRequirementToastOpen] = useState(false);
   const [actionsAnchor, setActionsAnchor] = useState<HTMLElement | null>(null);
+  const [adminDetailsOpen, setAdminDetailsOpen] = useState(false);
   const navigate = useNavigate();
 
   function getPrimaryDetail(currentTrigger: TriggerDetail) {
@@ -403,39 +406,63 @@ export function TriggerDetailPage() {
                 </Typography>
               )}
 
-              <Box
-                sx={{
-                  display: "grid",
-                  gap: 2,
-                  gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" },
-                }}
-              >
-                <InfoItem label="ID" value={trigger.id.slice(0, 8)} />
-                <InfoItem label="Registrado por" value={trigger.creado_por} />
-                <InfoItem label="Creado" value={formatDate(trigger.fecha_creacion)} />
-                <InfoItem label="Actualizado" value={formatDate(trigger.fecha_actualizacion)} />
-                <InfoItem label="Flows abiertos" value={String(requirementStats.abiertos)} />
-                <InfoItem label="Flows esperando" value={String(requirementStats.esperando)} />
-                <InfoItem label="Flows finalizados" value={String(requirementStats.finalizados)} />
-              </Box>
+              <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", gap: 0.75 }}>
+                <Chip size="small" variant="outlined" label={`${linkedWorkflows.length} flows asociados`} />
+                <Chip size="small" variant="outlined" label={`Abiertos: ${requirementStats.abiertos}`} />
+                {requirementStats.esperando > 0 && (
+                  <Chip size="small" variant="outlined" label={`Esperando: ${requirementStats.esperando}`} />
+                )}
+              </Stack>
 
-              {trigger.metadata && (
-                <Box
-                  component="pre"
-                  sx={{
-                    m: 0,
-                    p: 2,
-                    overflow: "auto",
-                    borderRadius: 3,
-                    backgroundColor: (theme) => alpha(theme.palette.background.default, theme.palette.mode === "dark" ? 0.7 : 0.5),
-                    border: "1px solid",
-                    borderColor: "divider",
-                    fontSize: 13,
-                  }}
+              <Box>
+                <Button
+                  variant="text"
+                  color="inherit"
+                  size="small"
+                  onClick={() => setAdminDetailsOpen((value) => !value)}
+                  sx={{ px: 0.5 }}
                 >
-                  {JSON.stringify(trigger.metadata, null, 2)}
-                </Box>
-              )}
+                  {adminDetailsOpen ? "Ocultar detalles administrativos" : "Ver detalles administrativos"}
+                </Button>
+
+                <Collapse in={adminDetailsOpen}>
+                  <Stack spacing={2} sx={{ pt: 1.5 }}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Detalles administrativos
+                    </Typography>
+                    <Box
+                      sx={{
+                        display: "grid",
+                        gap: 2,
+                        gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" },
+                      }}
+                    >
+                      <InfoItem label="ID" value={trigger.id.slice(0, 8)} />
+                      <InfoItem label="Registrado por" value={trigger.creado_por} />
+                      <InfoItem label="Creado" value={formatDate(trigger.fecha_creacion)} />
+                      <InfoItem label="Actualizado" value={formatDate(trigger.fecha_actualizacion)} />
+                    </Box>
+
+                    {trigger.metadata && (
+                      <Box
+                        component="pre"
+                        sx={{
+                          m: 0,
+                          p: 2,
+                          overflow: "auto",
+                          borderRadius: 3,
+                          backgroundColor: (theme) => alpha(theme.palette.background.default, theme.palette.mode === "dark" ? 0.7 : 0.5),
+                          border: "1px solid",
+                          borderColor: "divider",
+                          fontSize: 13,
+                        }}
+                      >
+                        {JSON.stringify(trigger.metadata, null, 2)}
+                      </Box>
+                    )}
+                  </Stack>
+                </Collapse>
+              </Box>
             </Stack>
           </CardContent>
         </Card>
