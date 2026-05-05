@@ -111,7 +111,6 @@ function getStepStateColors(theme: Theme, status: Step["estado"]) {
 
 function VerticalWorkflowGraph({
   steps,
-  workflowClosed,
   selectedStepId,
   onSelectStep,
   onOpenStep,
@@ -137,7 +136,22 @@ function VerticalWorkflowGraph({
 
   return (
     <Box ref={viewportRef} sx={{ maxHeight: "72vh", overflow: "auto", pr: 0.5 }}>
-      <Stack spacing={2}>
+      <Stack spacing={2.5}>
+        {orderedSteps.length > 0 && (
+          <Box
+            aria-hidden="true"
+            sx={{
+              width: 2,
+              height: 24,
+              alignSelf: { xs: "center", md: "flex-start" },
+              ml: { md: "59px" },
+              borderRadius: 999,
+              background: `linear-gradient(180deg, ${alpha(theme.palette.warning.main, 0.3)}, ${alpha(theme.palette.primary.main, 0.3)})`,
+            }}
+          />
+        )}
+
+        <Stack spacing={2}>
           {orderedSteps.map((step, index) => {
             const isSelected = selectedStepId === step.id;
             const lastCommentAt = step.ultimo_comentario_fecha;
@@ -267,9 +281,13 @@ function VerticalWorkflowGraph({
                     {shouldExpand ? (
                       <Box sx={{ p: 2.25 }}>
                         <Stack spacing={1.25}>
-                          <Typography variant="h6" sx={{ mt: 1 }}>
-                            {step.nombre}
-                          </Typography>
+                          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
+                            <Box sx={{ flex: 1 }}>
+                              <Typography variant="h6" sx={{ mt: 1 }}>
+                                {step.nombre}
+                              </Typography>
+                            </Box>
+                          </Stack>
 
                           <Box>
                             <Typography
@@ -334,7 +352,6 @@ function VerticalWorkflowGraph({
 
 function GitLogWorkflowGraph({
   steps,
-  workflowClosed,
   selectedStepId,
   onSelectStep,
   onOpenStep,
