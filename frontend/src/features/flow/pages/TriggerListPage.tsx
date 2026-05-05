@@ -566,9 +566,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                     const waitingCount = linkedWorkflows.filter(
                       (workflow) => getFlowFilterFromStatus(getWorkflowDisplayStatus(workflow)) === "waiting"
                     ).length;
-                    const closedCount = linkedWorkflows.filter(
-                      (workflow) => getFlowFilterFromStatus(getWorkflowDisplayStatus(workflow)) === "closed"
-                    ).length;
 
                     return (
                       <Card key={trigger.id} variant="outlined" className="hover-entity-parent" sx={{ position: "relative", borderRadius: 2.2 }}>
@@ -591,10 +588,22 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                             </Typography>
 
                             <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", gap: 0.75 }}>
-                              <Chip size="small" variant="outlined" label={`${linkedWorkflows.length} flows`} />
-                              <Chip size="small" variant="outlined" label={`Abiertos: ${openCount}`} />
-                              <Chip size="small" variant="outlined" label={`Esperando: ${waitingCount}`} />
-                              <Chip size="small" variant="outlined" label={`Cerrados: ${closedCount}`} />
+                              {linkedWorkflows.length === 0 ? (
+                                <Chip size="small" variant="outlined" label="Sin flows" />
+                              ) : (
+                                <Chip
+                                  size="small"
+                                  variant="outlined"
+                                  label={
+                                    openCount > 0
+                                      ? `${linkedWorkflows.length} flows · ${openCount} abiertos`
+                                      : `${linkedWorkflows.length} flows`
+                                  }
+                                />
+                              )}
+                              {waitingCount > 0 && (
+                                <Chip size="small" variant="outlined" label={`Esperando: ${waitingCount}`} />
+                              )}
                             </Stack>
 
                             <Box>
