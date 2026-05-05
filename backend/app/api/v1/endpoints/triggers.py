@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import get_workflow_service
 from app.core.errors import BusinessRuleError, EntityNotFoundError
-from app.schemas.workflow import TriggerCreate, TriggerDetail, TriggerPublic, WorkflowDetail, WorkflowStartRequest
+from app.schemas.workflow import TriggerCreate, TriggerDetail, TriggerPublic, TriggerUpdate, WorkflowDetail, WorkflowStartRequest
 from app.services.workflow_service import WorkflowService
 
 router = APIRouter()
@@ -16,6 +16,18 @@ def list_triggers(service: WorkflowService = Depends(get_workflow_service)) -> l
 @router.post("/", response_model=TriggerPublic, status_code=status.HTTP_201_CREATED)
 def create_trigger(payload: TriggerCreate, service: WorkflowService = Depends(get_workflow_service)) -> TriggerPublic:
     return service.create_trigger(payload)
+
+
+@router.patch("/{trigger_id}", response_model=TriggerDetail)
+def update_trigger(
+    trigger_id: str,
+    payload: TriggerUpdate,
+    service: WorkflowService = Depends(get_workflow_service),
+) -> TriggerDetail:
+    try:
+        return service.update_trigger(trigger_id, payload)
+    except EntityNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.delete("/{trigger_id}", status_code=status.HTTP_204_NO_CONTENT)

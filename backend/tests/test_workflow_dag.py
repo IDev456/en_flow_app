@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from app.repositories.workflow_repository import InMemoryWorkflowRepository
 from app.schemas.workflow import (
+    ExternalEventCreate,
     InitialStepOverride,
     StepCompletePayload,
     StepStatus,
@@ -16,7 +17,7 @@ from app.schemas.workflow import (
 from app.services.workflow_service import WorkflowService
 
 
-OPEN_STEP_STATUSES = {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA}
+OPEN_STEP_STATUSES = {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA, StepStatus.ESPERANDO_RESPUESTA}
 
 
 def build_linear_template() -> WorkflowTemplatePublic:
@@ -298,6 +299,72 @@ class WorkflowDagTestCase(unittest.TestCase):
         trigger_closed = self.service.get_trigger(trigger.id)
         self.assertEqual(trigger_closed.estado_general, TriggerStatus.RESUELTO)
         self.assertIsNone(trigger_closed.workflow_activo_id)
+
+    def test_wait_external_blocks_activation_until_matching_event(self) -> None:
+        template = WorkflowTemplatePublic(
+            id=str(uuid4()),
+            nombre="A espera externo y luego B",
+            descripcion="A(wait external) -> B",
+            steps=[
+                StepTemplatePublic(
+                    id=str(uuid4()),
+                    codigo="A",
+                    depends_on=[],
+                    nombre="Solicitar layout",
+                    descripcion="Envio y espera respuesta externa",
+                    orden=1,
+                    tipo="gestion",
+                    action_type="wait_external",
+                    waits_for_external_response=True,
+                    expected_external_event="layout_recibido",
+                    external_wait_reason="Esperando layout del proveedor",
+                ),
+                StepTemplatePublic(
+                    id=str(uuid4()),
+                    codigo="B",
+                    depends_on=["A"],
+                    nombre="Continuar",
+                    descripcion="Continuar con el flujo",
+                    orden=2,
+                    tipo="ejecucion",
+                ),
+            ],
+        )
+        workflow_id = self._start_workflow(template)
+        self.assertEqual(self._open_codes(workflow_id), {"A"})
+
+        self._complete(workflow_id, "A")
+        step_a_wait = self._step_by_code(workflow_id, "A")
+        self.assertEqual(step_a_wait.estado, StepStatus.ESPERANDO_RESPUESTA)
+        self.assertEqual(self._open_codes(workflow_id), {"A"})
+        self.assertNotIn("B", self._open_codes(workflow_id))
+
+        self.service.register_external_event(
+            step_a_wait.id,
+            ExternalEventCreate(
+                event_type="otro_evento",
+                comentario="No cumple la condicion",
+                source="manual",
+                registrado_por="tester",
+            ),
+        )
+        step_a_still_wait = self._step_by_code(workflow_id, "A")
+        self.assertEqual(step_a_still_wait.estado, StepStatus.ESPERANDO_RESPUESTA)
+        self.assertNotIn("B", self._open_codes(workflow_id))
+
+        self.service.register_external_event(
+            step_a_wait.id,
+            ExternalEventCreate(
+                event_type="layout_recibido",
+                comentario="Llego la respuesta esperada",
+                source="manual",
+                registrado_por="tester",
+            ),
+        )
+        step_a_done = self._step_by_code(workflow_id, "A")
+        self.assertEqual(step_a_done.estado, StepStatus.COMPLETADO)
+        self.assertEqual(self._open_codes(workflow_id), {"B"})
+        self.assertEqual(len(self.service.list_step_external_events(step_a_wait.id)), 2)
 
 
 if __name__ == "__main__":

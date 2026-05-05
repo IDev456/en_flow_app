@@ -114,6 +114,9 @@ def _backfill_default_template_steps(template: WorkflowTemplateModel) -> None:
         # Para plantilla lineal base, los pasos posteriores al primero deben depender del anterior.
         if step.depends_on is None or (previous_code and step.depends_on == []):
             step.depends_on = [previous_code] if previous_code else []
+        step.action_type = step.action_type or "continue"
+        if step.waits_for_external_response is None:
+            step.waits_for_external_response = False
         previous_code = step.codigo
 
 
@@ -123,10 +126,28 @@ def _migrate_workflow_schema() -> None:
     migration_statements = [
         "ALTER TABLE workflow_template_steps ADD COLUMN IF NOT EXISTS codigo VARCHAR(120)",
         "ALTER TABLE workflow_template_steps ADD COLUMN IF NOT EXISTS depends_on JSON",
+        "ALTER TABLE workflow_template_steps ADD COLUMN IF NOT EXISTS action_type VARCHAR(80)",
+        "ALTER TABLE workflow_template_steps ADD COLUMN IF NOT EXISTS action_config JSON",
+        "ALTER TABLE workflow_template_steps ADD COLUMN IF NOT EXISTS action_label VARCHAR(160)",
+        "ALTER TABLE workflow_template_steps ADD COLUMN IF NOT EXISTS waits_for_external_response BOOLEAN",
+        "ALTER TABLE workflow_template_steps ADD COLUMN IF NOT EXISTS expected_external_event VARCHAR(120)",
+        "ALTER TABLE workflow_template_steps ADD COLUMN IF NOT EXISTS external_wait_reason VARCHAR(300)",
+        "ALTER TABLE workflow_template_steps ADD COLUMN IF NOT EXISTS external_reference VARCHAR(200)",
         "ALTER TABLE steps ADD COLUMN IF NOT EXISTS codigo VARCHAR(120)",
         "ALTER TABLE steps ADD COLUMN IF NOT EXISTS depends_on JSON",
+        "ALTER TABLE steps ADD COLUMN IF NOT EXISTS action_type VARCHAR(80)",
+        "ALTER TABLE steps ADD COLUMN IF NOT EXISTS action_config JSON",
+        "ALTER TABLE steps ADD COLUMN IF NOT EXISTS action_label VARCHAR(160)",
+        "ALTER TABLE steps ADD COLUMN IF NOT EXISTS waits_for_external_response BOOLEAN",
+        "ALTER TABLE steps ADD COLUMN IF NOT EXISTS expected_external_event VARCHAR(120)",
+        "ALTER TABLE steps ADD COLUMN IF NOT EXISTS external_wait_reason VARCHAR(300)",
+        "ALTER TABLE steps ADD COLUMN IF NOT EXISTS external_reference VARCHAR(200)",
         f"UPDATE workflow_template_steps SET depends_on = {empty_json_literal} WHERE depends_on IS NULL",
+        "UPDATE workflow_template_steps SET action_type = 'continue' WHERE action_type IS NULL",
+        "UPDATE workflow_template_steps SET waits_for_external_response = FALSE WHERE waits_for_external_response IS NULL",
         f"UPDATE steps SET depends_on = {empty_json_literal} WHERE depends_on IS NULL",
+        "UPDATE steps SET action_type = 'continue' WHERE action_type IS NULL",
+        "UPDATE steps SET waits_for_external_response = FALSE WHERE waits_for_external_response IS NULL",
     ]
     with engine.begin() as connection:
         for statement in migration_statements:

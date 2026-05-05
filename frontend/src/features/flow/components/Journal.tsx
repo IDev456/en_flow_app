@@ -424,9 +424,15 @@ export function Journal({
                 <Typography variant="subtitle2" color="text.secondary">
                   Al completar este paso
                 </Typography>
-                <Alert severity="info">
-                  El paso se completara y el workflow avanzara automaticamente segun la plantilla y dependencias.
-                </Alert>
+                {step.waits_for_external_response || step.action_type === "wait_external" ? (
+                  <Alert severity="info">
+                    El paso quedara en espera externa hasta recibir la respuesta esperada. Luego el flujo se reanudara automaticamente.
+                  </Alert>
+                ) : (
+                  <Alert severity="info">
+                    El paso se completara y el workflow avanzara automaticamente segun la plantilla y dependencias.
+                  </Alert>
+                )}
               </CardContent>
             </Card>
           )}

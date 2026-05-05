@@ -41,7 +41,7 @@ function renderLatestStepMovement(step: Step) {
       <Stack direction="row" spacing={1.25} sx={{ alignItems: "center" }}>
         {step.ultimo_comentario_tipo === "imagen" ? <ImageRoundedIcon color="info" /> : <AttachmentRoundedIcon color="info" />}
         <Box>
-          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+          <Typography variant="body1" sx={{ fontWeight: 700 }}>
             {step.ultimo_comentario_tipo === "imagen" ? "Imagen adjunta" : "Archivo adjunto"}
           </Typography>
           <Typography variant="body2" color="text.secondary">
@@ -55,8 +55,17 @@ function renderLatestStepMovement(step: Step) {
   const fallbackText =
     step.ultimo_comentario?.trim() ||
     (step.orden === 1 && step.descripcion?.trim() ? step.descripcion.trim() : "Sin comentarios todavia");
+  const hasComment = fallbackText !== "Sin comentarios todavia";
 
-  return <Typography variant="body2" color={fallbackText === "Sin comentarios todavia" ? "text.secondary" : "text.primary"}>{fallbackText}</Typography>;
+  return (
+    <Typography
+      variant="body1"
+      sx={{ fontWeight: hasComment ? 600 : 400 }}
+      color={hasComment ? "text.primary" : "text.secondary"}
+    >
+      {fallbackText}
+    </Typography>
+  );
 }
 
 function getStepStateColors(theme: Theme, status: Step["estado"]) {
@@ -77,6 +86,15 @@ function getStepStateColors(theme: Theme, status: Step["estado"]) {
       backgroundColor: alpha(theme.palette.warning.main, 0.16),
       textColor: theme.palette.warning.light,
       lineColor: alpha(theme.palette.warning.main, 0.34),
+    };
+  }
+
+  if (tone === "espera_externa") {
+    return {
+      borderColor: alpha(theme.palette.info.main, 0.52),
+      backgroundColor: alpha(theme.palette.info.main, 0.18),
+      textColor: theme.palette.info.light,
+      lineColor: alpha(theme.palette.info.main, 0.4),
     };
   }
 
@@ -131,14 +149,21 @@ function VerticalWorkflowGraph({
           variant="outlined"
           sx={{
             borderStyle: "dashed",
-            borderColor: workflowClosed ? alpha(theme.palette.success.main, 0.4) : "divider",
-            backgroundColor: workflowClosed ? alpha(theme.palette.success.main, 0.08) : alpha(theme.palette.common.white, 0.02),
+            borderColor: workflowClosed ? alpha(theme.palette.success.main, 0.52) : alpha(theme.palette.warning.main, 0.44),
+            backgroundColor: workflowClosed ? alpha(theme.palette.success.main, 0.1) : alpha(theme.palette.warning.main, 0.08),
             borderRadius: 2,
           }}
         >
           <Box sx={{ p: 2.25 }}>
             <Stack spacing={0.75}>
-              <Typography variant="subtitle2" color="text.secondary">
+              <Chip
+                label="CIERRE"
+                size="small"
+                color={workflowClosed ? "success" : "warning"}
+                variant="outlined"
+                sx={{ alignSelf: "flex-start", fontWeight: 700, letterSpacing: 0.6 }}
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: 0.8, textTransform: "uppercase" }}>
                 Cierre
               </Typography>
               <Typography variant="h6">{workflowClosed ? "Workflow finalizado" : "Cierre pendiente"}</Typography>
@@ -269,10 +294,25 @@ function VerticalWorkflowGraph({
                           </Stack>
 
                           <Box>
-                            <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 0.75 }}>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ mb: 0.75, letterSpacing: 0.75, textTransform: "uppercase" }}
+                            >
                               Ultimo comentario
                             </Typography>
-                            {renderLatestStepMovement(step)}
+                            <Box
+                              sx={{
+                                borderRadius: 1.5,
+                                px: 1.25,
+                                py: 1,
+                                backgroundColor: alpha(theme.palette.common.white, 0.04),
+                                border: "1px solid",
+                                borderColor: alpha(theme.palette.common.white, 0.08),
+                              }}
+                            >
+                              {renderLatestStepMovement(step)}
+                            </Box>
                             <Stack direction="row" spacing={1} sx={{ mt: 0.75, flexWrap: "wrap", gap: 1 }}>
                               <Typography variant="caption" color="text.secondary">
                                 {lastCommentAt ? `Fecha: ${formatDate(lastCommentAt)}` : "Fecha: sin registro"}
@@ -322,12 +362,21 @@ function VerticalWorkflowGraph({
           sx={{
             borderStyle: "dashed",
             cursor: "pointer",
+            borderColor: alpha(theme.palette.info.main, 0.42),
+            backgroundColor: alpha(theme.palette.info.main, 0.08),
             borderRadius: 2,
           }}
         >
           <ButtonBase onClick={onOpenTrigger} sx={{ p: 2.25, display: "block", textAlign: "left" }}>
             <Stack spacing={0.75}>
-              <Typography variant="subtitle2" color="text.secondary">
+              <Chip
+                label="DISPARADOR"
+                size="small"
+                color="info"
+                variant="outlined"
+                sx={{ alignSelf: "flex-start", fontWeight: 700, letterSpacing: 0.6 }}
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: 0.8, textTransform: "uppercase" }}>
                 Disparador
               </Typography>
               <Typography variant="h6">{triggerLabel}</Typography>
@@ -375,7 +424,7 @@ function GitLogWorkflowGraph({
         <Card variant="outlined">
           <ButtonBase onClick={onOpenTrigger} sx={{ p: 2.25, display: "block", textAlign: "left" }}>
             <Stack spacing={0.75}>
-              <Chip label="TRG" size="small" color="primary" variant="outlined" sx={{ alignSelf: "flex-start" }} />
+              <Chip label="DISPARADOR" size="small" color="info" variant="outlined" sx={{ alignSelf: "flex-start", fontWeight: 700 }} />
               <Typography variant="h6">{triggerLabel}</Typography>
               <Typography variant="body2" color="text.secondary">
                 Origen del flujo
@@ -415,10 +464,21 @@ function GitLogWorkflowGraph({
                     </Stack>
                   </Stack>
                   <Box>
-                    <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 0.75 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ mb: 0.75, letterSpacing: 0.75, textTransform: "uppercase" }}>
                       Ultimo comentario
                     </Typography>
-                    {renderLatestStepMovement(step)}
+                    <Box
+                      sx={{
+                        borderRadius: 1.5,
+                        px: 1.25,
+                        py: 1,
+                        backgroundColor: alpha(theme.palette.common.white, 0.04),
+                        border: "1px solid",
+                        borderColor: alpha(theme.palette.common.white, 0.08),
+                      }}
+                    >
+                      {renderLatestStepMovement(step)}
+                    </Box>
                     <Stack direction="row" spacing={1} sx={{ mt: 0.75, flexWrap: "wrap", gap: 1 }}>
                       <Typography variant="caption" color="text.secondary">
                         {lastCommentAt ? `Fecha: ${formatDate(lastCommentAt)}` : "Fecha: sin registro"}
@@ -441,10 +501,24 @@ function GitLogWorkflowGraph({
           );
         })}
 
-        <Card variant="outlined" sx={{ borderRadius: 2 }}>
+        <Card
+          variant="outlined"
+          sx={{
+            borderRadius: 2,
+            borderStyle: "dashed",
+            borderColor: workflowClosed ? alpha(theme.palette.success.main, 0.52) : alpha(theme.palette.warning.main, 0.44),
+            backgroundColor: workflowClosed ? alpha(theme.palette.success.main, 0.1) : alpha(theme.palette.warning.main, 0.08),
+          }}
+        >
           <Box sx={{ p: 2.25 }}>
             <Stack spacing={0.75}>
-              <Chip label="END" size="small" color={workflowClosed ? "success" : "default"} variant="outlined" sx={{ alignSelf: "flex-start" }} />
+              <Chip
+                label="CIERRE"
+                size="small"
+                color={workflowClosed ? "success" : "warning"}
+                variant="outlined"
+                sx={{ alignSelf: "flex-start", fontWeight: 700 }}
+              />
               <Typography variant="h6">{workflowClosed ? "Workflow finalizado" : "Cierre pendiente"}</Typography>
             </Stack>
           </Box>

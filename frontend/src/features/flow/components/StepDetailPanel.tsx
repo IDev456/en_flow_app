@@ -7,17 +7,23 @@ import {
   Button,
   Card,
   CardContent,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   IconButton,
   Link,
   Menu,
   MenuItem,
   Stack,
+  TextField,
   Typography,
 } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
 
-import type { Step, StepComment, StepHistoryEntry, StepJournalEntryInput } from "../types";
+import type { AttachmentInput, ExternalEventCreateInput, Step, StepComment, StepHistoryEntry, StepJournalEntryInput } from "../types";
+import { DEFAULT_ACTOR } from "../utils";
 import { Journal } from "./Journal";
 
 type StepDetailPanelProps = {
@@ -30,6 +36,7 @@ type StepDetailPanelProps = {
   onClose?: () => void;
   error?: string | null;
   onSubmitJournal: (input: StepJournalEntryInput) => Promise<void>;
+  onRegisterExternalEvent?: (input: ExternalEventCreateInput) => Promise<void>;
 };
 
 export function StepDetailPanel({
@@ -42,11 +49,20 @@ export function StepDetailPanel({
   onClose,
   error,
   onSubmitJournal,
+  onRegisterExternalEvent,
 }: StepDetailPanelProps) {
   const [selectedStatus, setSelectedStatus] = useState<"" | "espera" | "completado">("");
   const [composerExpanded, setComposerExpanded] = useState(false);
   const [focusRequestToken, setFocusRequestToken] = useState(0);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+  const [externalDialogOpen, setExternalDialogOpen] = useState(false);
+  const [externalEventType, setExternalEventType] = useState("");
+  const [externalComment, setExternalComment] = useState("");
+  const [externalSource, setExternalSource] = useState("manual");
+  const [externalActor, setExternalActor] = useState(DEFAULT_ACTOR);
+  const [externalAttachments, setExternalAttachments] = useState<AttachmentInput[]>([]);
+  const [registeringExternal, setRegisteringExternal] = useState(false);
+  const [externalError, setExternalError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!step) {
@@ -55,7 +71,14 @@ export function StepDetailPanel({
     setSelectedStatus("");
     setComposerExpanded(false);
     setMenuAnchor(null);
-  }, [step?.id]);
+    setExternalDialogOpen(false);
+    setExternalError(null);
+    setExternalEventType(step.expected_external_event ?? "");
+    setExternalComment("");
+    setExternalSource("manual");
+    setExternalActor(DEFAULT_ACTOR);
+    setExternalAttachments([]);
+  }, [step?.id, step?.expected_external_event, step?.estado]);
 
   if (!step) {
     return (
@@ -98,6 +121,67 @@ export function StepDetailPanel({
     setFocusRequestToken((value) => value + 1);
   }
 
+  async function readFileAsAttachment(file: File): Promise<AttachmentInput> {
+    if (file.size > 5 * 1024 * 1024) {
+      throw new Error(`El archivo "${file.name}" supera el limite de 5 MB`);
+    }
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onerror = () => reject(new Error(`No se pudo leer "${file.name}"`));
+      reader.readAsDataURL(file);
+    });
+    const [, contentBase64 = ""] = dataUrl.split(",", 2);
+    return {
+      nombre: file.name,
+      content_type: file.type || "application/octet-stream",
+      size_bytes: file.size,
+      content_base64: contentBase64,
+    };
+  }
+
+  async function handleExternalFileChange(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    try {
+      const parsed = await Promise.all(Array.from(files).map((file) => readFileAsAttachment(file)));
+      setExternalAttachments((current) => [...current, ...parsed]);
+      setExternalError(null);
+    } catch (err) {
+      setExternalError(err instanceof Error ? err.message : "No se pudieron adjuntar archivos");
+    }
+  }
+
+  async function handleRegisterExternalEvent() {
+    if (!onRegisterExternalEvent) return;
+    if (!externalEventType.trim()) {
+      setExternalError("Debes indicar el tipo de evento externo.");
+      return;
+    }
+    if (!externalActor.trim()) {
+      setExternalError("Debes indicar quien registra la respuesta.");
+      return;
+    }
+
+    try {
+      setRegisteringExternal(true);
+      setExternalError(null);
+      await onRegisterExternalEvent({
+        event_type: externalEventType.trim(),
+        comentario: externalComment.trim() || null,
+        source: externalSource.trim() || "manual",
+        registrado_por: externalActor.trim(),
+        attachments: externalAttachments,
+      });
+      setExternalDialogOpen(false);
+      setExternalComment("");
+      setExternalAttachments([]);
+    } catch (err) {
+      setExternalError(err instanceof Error ? err.message : "No se pudo registrar la respuesta externa");
+    } finally {
+      setRegisteringExternal(false);
+    }
+  }
+
   return (
     <Card
       sx={{
@@ -128,6 +212,16 @@ export function StepDetailPanel({
               </Box>
 
               <Stack direction="row" spacing={1}>
+                {step.estado === "esperando_respuesta" && onRegisterExternalEvent && (
+                  <Button
+                    variant="outlined"
+                    color="info"
+                    onClick={() => setExternalDialogOpen(true)}
+                    sx={{ textTransform: "none" }}
+                  >
+                    Registrar respuesta externa
+                  </Button>
+                )}
                 {canChangeStatus && (
                   <>
                     <IconButton onClick={(event) => setMenuAnchor(event.currentTarget)} aria-label="Cambiar estado">
@@ -155,6 +249,43 @@ export function StepDetailPanel({
                 {latestMessage}
               </Typography>
             </Stack>
+
+            <Card variant="outlined">
+              <CardContent sx={{ p: 1.75 }}>
+                <Stack spacing={0.6}>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Accion al completar
+                  </Typography>
+                  <Typography variant="body2">
+                    {step.action_label?.trim() || step.action_type || "continue"}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Espera respuesta externa: {step.waits_for_external_response ? "si" : "no"}
+                  </Typography>
+                  {step.expected_external_event && (
+                    <Typography variant="body2" color="text.secondary">
+                      Evento esperado: {step.expected_external_event}
+                    </Typography>
+                  )}
+                  {step.external_wait_reason && (
+                    <Typography variant="body2" color="text.secondary">
+                      Motivo de espera: {step.external_wait_reason}
+                    </Typography>
+                  )}
+                  {step.external_reference && (
+                    <Typography variant="body2" color="text.secondary">
+                      Referencia externa: {step.external_reference}
+                    </Typography>
+                  )}
+                </Stack>
+              </CardContent>
+            </Card>
+
+            {step.estado === "esperando_respuesta" && (
+              <Alert severity="info">
+                El paso quedo en espera externa. El flujo continuara cuando se registre un evento externo valido.
+              </Alert>
+            )}
           </Stack>
         </Box>
 
@@ -195,6 +326,85 @@ export function StepDetailPanel({
           </>
         )}
       </CardContent>
+
+      <Dialog open={externalDialogOpen} onClose={registeringExternal ? undefined : () => setExternalDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Registrar respuesta externa</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            <TextField
+              label="Tipo de evento *"
+              value={externalEventType}
+              onChange={(event) => setExternalEventType(event.target.value)}
+              disabled={registeringExternal}
+            />
+            <TextField
+              label="Comentario"
+              multiline
+              minRows={3}
+              value={externalComment}
+              onChange={(event) => setExternalComment(event.target.value)}
+              disabled={registeringExternal}
+            />
+            <TextField
+              label="Registrado por"
+              value={externalActor}
+              onChange={(event) => setExternalActor(event.target.value)}
+              disabled={registeringExternal}
+            />
+            <TextField
+              label="Origen"
+              value={externalSource}
+              onChange={(event) => setExternalSource(event.target.value)}
+              disabled={registeringExternal}
+            />
+            <Button component="label" variant="outlined" color="inherit" disabled={registeringExternal}>
+              Adjuntar archivos (opcional)
+              <input hidden multiple type="file" onChange={(event) => void handleExternalFileChange(event.target.files)} />
+            </Button>
+            {externalAttachments.length > 0 && (
+              <Stack spacing={0.5}>
+                {externalAttachments.map((item, index) => (
+                  <Box
+                    key={`${item.nombre}-${index}`}
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      px: 1.25,
+                      py: 0.8,
+                      borderRadius: 1.1,
+                      border: "1px solid",
+                      borderColor: "divider",
+                    }}
+                  >
+                    <Typography variant="body2">{`${item.nombre} (${Math.round(item.size_bytes / 1024)} KB)`}</Typography>
+                    <Button
+                      size="small"
+                      color="inherit"
+                      onClick={() =>
+                        setExternalAttachments((current) =>
+                          current.filter((_, currentIndex) => currentIndex !== index)
+                        )
+                      }
+                    >
+                      Quitar
+                    </Button>
+                  </Box>
+                ))}
+              </Stack>
+            )}
+            {externalError && <Alert severity="error">{externalError}</Alert>}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setExternalDialogOpen(false)} disabled={registeringExternal} color="inherit">
+            Cancelar
+          </Button>
+          <Button onClick={() => void handleRegisterExternalEvent()} disabled={registeringExternal} variant="contained">
+            {registeringExternal ? "Registrando..." : "Registrar respuesta"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Card>
   );
 }

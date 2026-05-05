@@ -45,7 +45,7 @@ function getStateBucketFromStatus(statusValue: string): Exclude<WorkflowStateFil
   if (tone === "finalizado" || tone === "resuelto" || tone === "completado" || tone === "cancelado") {
     return "done";
   }
-  if (tone === "espera" || tone === "problema" || tone === "nuevo") {
+  if (tone === "espera" || tone === "espera_externa" || tone === "problema" || tone === "nuevo") {
     return "waiting";
   }
   return "in_progress";
@@ -119,6 +119,9 @@ export function TriggerListPage() {
     }
     if (workflow.estado === "en_proceso") {
       const openSteps = workflow.steps.filter((step) => step.estado !== "completado");
+      if (openSteps.some((step) => step.estado === "esperando_respuesta")) {
+        return "esperando_respuesta";
+      }
       if (openSteps.some((step) => step.estado === "espera" || step.estado === "problema")) {
         return "espera";
       }

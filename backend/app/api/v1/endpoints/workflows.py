@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import get_workflow_service
 from app.core.errors import BusinessRuleError, EntityNotFoundError
-from app.schemas.workflow import StepCreate, StepInstancePublic, WorkflowDetail, WorkflowSummary, WorkflowTemplatePublic
+from app.schemas.workflow import ExternalEventPublic, StepCreate, StepInstancePublic, WorkflowDetail, WorkflowSummary, WorkflowTemplatePublic
 from app.services.workflow_service import WorkflowService
 
 router = APIRouter()
@@ -32,6 +32,17 @@ def get_workflow_steps(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
+@router.get("/{workflow_id}/external-events", response_model=list[ExternalEventPublic])
+def list_workflow_external_events(
+    workflow_id: str,
+    service: WorkflowService = Depends(get_workflow_service),
+) -> list[ExternalEventPublic]:
+    try:
+        return service.list_workflow_external_events(workflow_id)
+    except EntityNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
 @router.post("/{workflow_id}/steps", response_model=StepInstancePublic, status_code=status.HTTP_201_CREATED)
 def create_workflow_step(
     workflow_id: str,
@@ -49,4 +60,3 @@ def create_workflow_step(
 @router.get("/templates/list", response_model=list[WorkflowTemplatePublic])
 def list_workflow_templates(service: WorkflowService = Depends(get_workflow_service)) -> list[WorkflowTemplatePublic]:
     return service.list_workflow_templates()
-

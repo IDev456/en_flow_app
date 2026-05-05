@@ -1,6 +1,6 @@
 export type TriggerStatus = "nuevo" | "en_proceso" | "resuelto" | "cancelado";
 export type WorkflowStatus = "pendiente" | "en_proceso" | "finalizado" | "cancelado";
-export type StepStatus = "activo" | "espera" | "problema" | "completado";
+export type StepStatus = "activo" | "espera" | "problema" | "esperando_respuesta" | "completado";
 
 export type Attachment = {
   id: string;
@@ -61,6 +61,13 @@ export type Step = {
   tipo: string;
   requiere_aprobacion: boolean;
   puede_tener_comentarios: boolean;
+  action_type: string;
+  action_config: Record<string, unknown> | null;
+  action_label: string | null;
+  waits_for_external_response: boolean;
+  expected_external_event: string | null;
+  external_wait_reason: string | null;
+  external_reference: string | null;
   estado: StepStatus;
   fecha_estado_actual: string;
   asignado_a: string | null;
@@ -102,12 +109,32 @@ export type StepHistoryEntry = {
   attachments: Attachment[];
 };
 
+export type ExternalEvent = {
+  id: string;
+  workflow_id: string;
+  step_id: string;
+  event_type: string;
+  source: string;
+  payload: Record<string, unknown> | null;
+  comentario: string | null;
+  attachments: Attachment[];
+  fecha_creacion: string;
+  registrado_por: string;
+};
+
 export type TriggerCreateInput = {
   solicitante: string | null;
   descripcion: string | null;
   tipo: string;
   creado_por?: string;
   metadata: Record<string, unknown> | null;
+};
+
+export type TriggerUpdateInput = {
+  solicitante: string | null;
+  descripcion: string | null;
+  tipo?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 export type WorkflowStartInput = {
@@ -162,4 +189,13 @@ export type StepJournalEntryInput = {
     descripcion?: string | null;
   } | null;
   finalizar_workflow?: boolean;
+};
+
+export type ExternalEventCreateInput = {
+  event_type: string;
+  source?: string;
+  payload?: Record<string, unknown> | null;
+  comentario?: string | null;
+  attachments?: AttachmentInput[];
+  registrado_por?: string;
 };

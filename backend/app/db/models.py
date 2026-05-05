@@ -77,6 +77,13 @@ class WorkflowTemplateStepModel(Base):
     puede_tener_comentarios: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     condicion_para_activarse: Mapped[str | None] = mapped_column(Text)
     condicion_para_cerrarse: Mapped[str | None] = mapped_column(Text)
+    action_type: Mapped[str] = mapped_column(String(80), nullable=False, default="continue")
+    action_config: Mapped[dict | None] = mapped_column(JSON)
+    action_label: Mapped[str | None] = mapped_column(String(160))
+    waits_for_external_response: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    expected_external_event: Mapped[str | None] = mapped_column(String(120))
+    external_wait_reason: Mapped[str | None] = mapped_column(String(300))
+    external_reference: Mapped[str | None] = mapped_column(String(200))
 
     template: Mapped["WorkflowTemplateModel"] = relationship(back_populates="steps")
 
@@ -106,6 +113,11 @@ class WorkflowModel(Base):
         cascade="all, delete-orphan",
         order_by=lambda: StepModel.orden,
     )
+    external_events: Mapped[list["ExternalEventModel"]] = relationship(
+        back_populates="workflow",
+        cascade="all, delete-orphan",
+        order_by=lambda: ExternalEventModel.fecha_creacion,
+    )
 
 
 class StepModel(Base):
@@ -125,6 +137,13 @@ class StepModel(Base):
     tipo: Mapped[str] = mapped_column(String(80), nullable=False)
     requiere_aprobacion: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     puede_tener_comentarios: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    action_type: Mapped[str] = mapped_column(String(80), nullable=False, default="continue")
+    action_config: Mapped[dict | None] = mapped_column(JSON)
+    action_label: Mapped[str | None] = mapped_column(String(160))
+    waits_for_external_response: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    expected_external_event: Mapped[str | None] = mapped_column(String(120))
+    external_wait_reason: Mapped[str | None] = mapped_column(String(300))
+    external_reference: Mapped[str | None] = mapped_column(String(200))
     estado: Mapped[str] = mapped_column(String(40), nullable=False)
     fecha_estado_actual: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     asignado_a: Mapped[str | None] = mapped_column(String(120))
@@ -145,6 +164,11 @@ class StepModel(Base):
         back_populates="step",
         cascade="all, delete-orphan",
         order_by=lambda: StepHistoryModel.fecha,
+    )
+    external_events: Mapped[list["ExternalEventModel"]] = relationship(
+        back_populates="step",
+        cascade="all, delete-orphan",
+        order_by=lambda: ExternalEventModel.fecha_creacion,
     )
 
 
@@ -175,3 +199,21 @@ class StepHistoryModel(Base):
     attachments: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
 
     step: Mapped["StepModel"] = relationship(back_populates="history_entries")
+
+
+class ExternalEventModel(Base):
+    __tablename__ = "external_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workflow_id: Mapped[str] = mapped_column(String(36), ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
+    step_id: Mapped[str] = mapped_column(String(36), ForeignKey("steps.id", ondelete="CASCADE"), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    source: Mapped[str] = mapped_column(String(120), nullable=False)
+    payload: Mapped[dict | None] = mapped_column(JSON)
+    comentario: Mapped[str | None] = mapped_column(Text)
+    attachments: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
+    fecha_creacion: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    registrado_por: Mapped[str] = mapped_column(String(120), nullable=False)
+
+    workflow: Mapped["WorkflowModel"] = relationship(back_populates="external_events")
+    step: Mapped["StepModel"] = relationship(back_populates="external_events")

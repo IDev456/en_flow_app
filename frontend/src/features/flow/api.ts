@@ -4,11 +4,14 @@ import type {
   StepComment,
   StepCommentInput,
   StepCompleteInput,
+  ExternalEvent,
+  ExternalEventCreateInput,
   StepHistoryEntry,
   StepStatusUpdateInput,
   Trigger,
   TriggerCreateInput,
   TriggerDetail,
+  TriggerUpdateInput,
   WorkflowDetail,
   WorkflowStartInput,
   WorkflowSummary
@@ -28,6 +31,10 @@ export function deleteTrigger(triggerId: string) {
 
 export function getTrigger(triggerId: string) {
   return apiGet<TriggerDetail>(`/triggers/${triggerId}`);
+}
+
+export function updateTrigger(triggerId: string, input: TriggerUpdateInput) {
+  return apiPatch<TriggerDetail>(`/triggers/${triggerId}`, input);
 }
 
 export function startWorkflow(triggerId: string, input: WorkflowStartInput) {
@@ -76,4 +83,16 @@ export function getStepComments(stepId: string) {
 
 export function getStepHistory(stepId: string) {
   return apiGet<StepHistoryEntry[]>(`/steps/${stepId}/history`);
+}
+
+export function registerExternalEvent(stepId: string, input: ExternalEventCreateInput) {
+  return apiPost<ExternalEvent>(`/steps/${stepId}/external-events`, input);
+}
+
+export function listStepExternalEvents(stepId: string) {
+  return apiGet<ExternalEvent[]>(`/steps/${stepId}/external-events`);
+}
+
+export function listWorkflowExternalEvents(workflowId: string) {
+  return apiGet<ExternalEvent[]>(`/workflows/${workflowId}/external-events`);
 }

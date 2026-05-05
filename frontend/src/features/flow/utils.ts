@@ -10,6 +10,7 @@ const statusPresentationMap: Record<string, { label: string; tone: string }> = {
   cancelado: { label: "cancelado", tone: "cancelado" },
   activo: { label: "en proceso", tone: "en_proceso" },
   espera: { label: "en espera", tone: "espera" },
+  esperando_respuesta: { label: "esperando respuesta", tone: "espera_externa" },
   completado: { label: "completado", tone: "completado" },
   problema: { label: "en espera", tone: "espera" },
   finalizado: { label: "finalizado", tone: "finalizado" }
@@ -120,6 +121,17 @@ export function buildJournalItems(history: StepHistoryEntry[], comments: StepCom
       attachments: entry.attachments ?? []
     }));
 
+  const historyNoteEntries = history
+    .filter((entry) => entry.campo !== "estado" && ((entry.nota && entry.nota.trim()) || entry.attachments.length > 0))
+    .map((entry) => ({
+      id: `history-note-${entry.id}`,
+      kind: "comment" as const,
+      author: entry.usuario,
+      date: entry.fecha,
+      body: entry.nota ?? `Movimiento: ${entry.campo}`,
+      attachments: entry.attachments ?? []
+    }));
+
   const commentEntries = comments.map((comment) => ({
     id: `comment-${comment.id}`,
     kind: "comment" as const,
@@ -129,7 +141,7 @@ export function buildJournalItems(history: StepHistoryEntry[], comments: StepCom
     attachments: comment.attachments ?? []
   }));
 
-  return [...statusEntries, ...commentEntries].sort(
+  return [...statusEntries, ...historyNoteEntries, ...commentEntries].sort(
     (left, right) => new Date(right.date).getTime() - new Date(left.date).getTime()
   );
 }

@@ -21,6 +21,13 @@ export function StatusBadge({ value }: StatusBadgeProps) {
       bgcolor: alpha("#5fd1ff", 0.92),
       borderColor: alpha("#5fd1ff", 0.95),
     };
+  } else if (tone === "espera_externa") {
+    color = "info";
+    sx = {
+      color: "#022236",
+      bgcolor: alpha("#7bd8ff", 0.92),
+      borderColor: alpha("#7bd8ff", 0.95),
+    };
   } else if (tone === "finalizado" || tone === "completado" || tone === "resuelto") {
     color = "success";
     sx = {

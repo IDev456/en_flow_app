@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { Alert, Breadcrumbs, CircularProgress, Link, Stack, Typography } from "@mui/material";
 import { Link as RouterLink, useParams } from "react-router-dom";
 
-import { addStepComment, completeStep, getStep, getStepComments, getStepHistory, updateStepStatus } from "../api";
+import { addStepComment, completeStep, getStep, getStepComments, getStepHistory, registerExternalEvent, updateStepStatus } from "../api";
 import { StepDetailPanel } from "../components/StepDetailPanel";
-import type { Step, StepComment, StepHistoryEntry, StepJournalEntryInput } from "../types";
+import type { ExternalEventCreateInput, Step, StepComment, StepHistoryEntry, StepJournalEntryInput } from "../types";
 import { DEFAULT_ACTOR } from "../utils";
 
 export function StepDetailPage() {
@@ -79,6 +79,12 @@ export function StepDetailPage() {
     await loadStepData();
   }
 
+  async function handleRegisterExternal(input: ExternalEventCreateInput) {
+    if (!step) return;
+    await registerExternalEvent(step.id, input);
+    await loadStepData();
+  }
+
   if (loading) {
     return (
       <Stack direction="row" spacing={1.5} sx={{ py: 8, alignItems: "center", justifyContent: "center" }}>
@@ -114,6 +120,7 @@ export function StepDetailPage() {
         standalone
         error={error}
         onSubmitJournal={handleSubmitJournal}
+        onRegisterExternalEvent={handleRegisterExternal}
       />
     </Stack>
   );

@@ -16,6 +16,7 @@ import {
   addStepComment,
   completeStep,
   getStepComments,
+  registerExternalEvent,
   getStepHistory,
   getTrigger,
   getWorkflow,
@@ -25,7 +26,7 @@ import { StatusBadge } from "../components/StatusBadge";
 import { StepDetailPanel } from "../components/StepDetailPanel";
 import { WorkflowGraph } from "../components/WorkflowGraph";
 import { WorkflowVariantSwitcher, type WorkflowVariant } from "../components/WorkflowVariantSwitcher";
-import type { Step, StepComment, StepHistoryEntry, StepJournalEntryInput, TriggerDetail, WorkflowDetail } from "../types";
+import type { ExternalEventCreateInput, Step, StepComment, StepHistoryEntry, StepJournalEntryInput, TriggerDetail, WorkflowDetail } from "../types";
 import { DEFAULT_ACTOR, formatDate } from "../utils";
 
 export function WorkflowDetailPage() {
@@ -70,7 +71,7 @@ export function WorkflowDetailPage() {
       const workflowData = await getWorkflow(workflowId);
       setWorkflow(workflowData);
       const stepExistsInWorkflow = workflowData.steps.some((step) => step.id === selectedStepId);
-      const openStatuses = new Set(["activo", "espera", "problema"]);
+      const openStatuses = new Set(["activo", "espera", "problema", "esperando_respuesta"]);
       const nextSelectedStepId =
         preferredStepId ??
         (stepExistsInWorkflow ? selectedStepId : null) ??
@@ -133,7 +134,9 @@ export function WorkflowDetailPage() {
         finalizar_workflow: Boolean(input.finalizar_workflow),
       });
       const currentWorkflow = await getWorkflow(workflowId);
-      const nextActiveStep = currentWorkflow.steps.find((step) => ["activo", "espera", "problema"].includes(step.estado));
+      const nextActiveStep = currentWorkflow.steps.find((step) =>
+        ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado)
+      );
       await refreshAfterStepChange(nextActiveStep?.id ?? selectedStepId);
       return;
     }
@@ -145,6 +148,11 @@ export function WorkflowDetailPage() {
       attachments: input.attachments ?? [],
     });
     await refreshAfterStepChange(selectedStepId);
+  }
+
+  async function handleRegisterExternalEvent(stepId: string, input: ExternalEventCreateInput) {
+    await registerExternalEvent(stepId, input);
+    await refreshAfterStepChange(stepId);
   }
 
   function handleSelectStep(stepId: string) {
@@ -174,10 +182,12 @@ export function WorkflowDetailPage() {
   }
 
   const selectedStep: Step | null = workflow.steps.find((step) => step.id === selectedStepId) ?? workflow.steps[0] ?? null;
-  const openSteps = workflow.steps.filter((step) => ["activo", "espera", "problema"].includes(step.estado));
+  const openSteps = workflow.steps.filter((step) => ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado));
   const workflowHeaderStatus =
     workflow.estado === "en_proceso"
-      ? (openSteps.some((step) => step.estado === "espera" || step.estado === "problema")
+      ? (openSteps.some((step) => step.estado === "esperando_respuesta")
+          ? "esperando_respuesta"
+          : openSteps.some((step) => step.estado === "espera" || step.estado === "problema")
           ? "espera"
           : openSteps[0]?.estado ?? workflow.estado)
       : workflow.estado;
@@ -274,6 +284,7 @@ export function WorkflowDetailPage() {
             error={panelError}
             onClose={() => setPanelOpen(false)}
             onSubmitJournal={handleSubmitJournal}
+            onRegisterExternalEvent={(input) => handleRegisterExternalEvent(selectedStep.id, input)}
           />
         )}
       </Box>

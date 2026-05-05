@@ -23,6 +23,7 @@ class StepStatus(StrEnum):
     ACTIVO = "activo"
     ESPERA = "espera"
     PROBLEMA = "problema"
+    ESPERANDO_RESPUESTA = "esperando_respuesta"
     COMPLETADO = "completado"
 
 
@@ -35,6 +36,13 @@ class TriggerBase(BaseModel):
 
 class TriggerCreate(TriggerBase):
     creado_por: str = Field(default="sistema", min_length=1, max_length=120)
+
+
+class TriggerUpdate(BaseModel):
+    solicitante: str | None = Field(default=None, max_length=150)
+    descripcion: str | None = Field(default=None, max_length=1000)
+    tipo: str | None = Field(default=None, min_length=1, max_length=80)
+    metadata: dict[str, Any] | None = None
 
 
 class TriggerPublic(TriggerBase):
@@ -61,6 +69,13 @@ class StepTemplateBase(BaseModel):
     puede_tener_comentarios: bool = True
     condicion_para_activarse: str | None = None
     condicion_para_cerrarse: str | None = None
+    action_type: str = Field(default="continue", min_length=1, max_length=80)
+    action_config: dict[str, Any] | None = None
+    action_label: str | None = Field(default=None, max_length=160)
+    waits_for_external_response: bool = False
+    expected_external_event: str | None = Field(default=None, max_length=120)
+    external_wait_reason: str | None = Field(default=None, max_length=300)
+    external_reference: str | None = Field(default=None, max_length=200)
 
 
 class StepTemplatePublic(StepTemplateBase):
@@ -110,6 +125,13 @@ class StepInstanceBase(BaseModel):
     nombre: str = Field(min_length=1, max_length=120)
     descripcion: str | None = Field(default=None, max_length=1000)
     orden: int = Field(ge=1)
+    action_type: str = Field(default="continue", min_length=1, max_length=80)
+    action_config: dict[str, Any] | None = None
+    action_label: str | None = Field(default=None, max_length=160)
+    waits_for_external_response: bool = False
+    expected_external_event: str | None = Field(default=None, max_length=120)
+    external_wait_reason: str | None = Field(default=None, max_length=300)
+    external_reference: str | None = Field(default=None, max_length=200)
 
 
 class StepInstancePublic(StepInstanceBase):
@@ -147,6 +169,13 @@ class StepCreate(BaseModel):
     puede_tener_comentarios: bool = True
     asignado_a: str | None = None
     fecha_vencimiento: datetime | None = None
+    action_type: str = Field(default="continue", min_length=1, max_length=80)
+    action_config: dict[str, Any] | None = None
+    action_label: str | None = Field(default=None, max_length=160)
+    waits_for_external_response: bool = False
+    expected_external_event: str | None = Field(default=None, max_length=120)
+    external_wait_reason: str | None = Field(default=None, max_length=300)
+    external_reference: str | None = Field(default=None, max_length=200)
 
 
 class AttachmentBase(BaseModel):
@@ -206,3 +235,25 @@ class StepHistoryPublic(BaseModel):
     fecha: datetime
     nota: str | None = None
     attachments: list[AttachmentPublic] = Field(default_factory=list)
+
+
+class ExternalEventCreate(BaseModel):
+    event_type: str = Field(min_length=1, max_length=120)
+    source: str = Field(default="manual", min_length=1, max_length=120)
+    payload: dict[str, Any] | None = None
+    comentario: str | None = Field(default=None, max_length=1000)
+    attachments: list[AttachmentBase] = Field(default_factory=list)
+    registrado_por: str = Field(default="sistema", min_length=1, max_length=120)
+
+
+class ExternalEventPublic(BaseModel):
+    id: str
+    workflow_id: str
+    step_id: str
+    event_type: str
+    source: str
+    payload: dict[str, Any] | None = None
+    comentario: str | None = None
+    attachments: list[AttachmentPublic] = Field(default_factory=list)
+    fecha_creacion: datetime
+    registrado_por: str

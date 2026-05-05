@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.db.models import (
     DEFAULT_WORKFLOW_TEMPLATE_ID,
     CommentModel,
+    ExternalEventModel,
     StepHistoryModel,
     StepModel,
     TriggerModel,
@@ -20,6 +21,8 @@ from app.schemas.workflow import (
     AttachmentPublic,
     CommentCreate,
     CommentPublic,
+    ExternalEventCreate,
+    ExternalEventPublic,
     StepCreate,
     StepHistoryPublic,
     StepInstancePublic,
@@ -41,7 +44,7 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-OPEN_STEP_STATUSES = {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA}
+OPEN_STEP_STATUSES = {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA, StepStatus.ESPERANDO_RESPUESTA}
 
 
 def _sort_template_steps(steps: list[StepTemplatePublic]) -> list[StepTemplatePublic]:
@@ -168,6 +171,18 @@ class WorkflowRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def add_external_event(self, step_id: str, payload: ExternalEventCreate) -> ExternalEventPublic:
+        raise NotImplementedError
+
+    @abstractmethod
+    def list_step_external_events(self, step_id: str) -> list[ExternalEventPublic]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def list_workflow_external_events(self, workflow_id: str) -> list[ExternalEventPublic]:
+        raise NotImplementedError
+
+    @abstractmethod
     def list_pending_steps(self) -> list[StepInstancePublic]:
         raise NotImplementedError
 
@@ -197,6 +212,8 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         self._step_ids_by_workflow: dict[str, list[str]] = {}
         self._comments_by_step: dict[str, list[CommentPublic]] = {}
         self._history_by_step: dict[str, list[StepHistoryPublic]] = {}
+        self._external_events_by_step: dict[str, list[ExternalEventPublic]] = {}
+        self._external_events_by_workflow: dict[str, list[ExternalEventPublic]] = {}
         self._workflow_templates: dict[str, WorkflowTemplatePublic] = {}
         self._seed_templates()
 
@@ -304,10 +321,12 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         for workflow_id in workflow_ids:
             step_ids = self._step_ids_by_workflow.pop(workflow_id, [])
             self._workflows.pop(workflow_id, None)
+            self._external_events_by_workflow.pop(workflow_id, None)
             for step_id in step_ids:
                 self._steps.pop(step_id, None)
                 self._comments_by_step.pop(step_id, None)
                 self._history_by_step.pop(step_id, None)
+                self._external_events_by_step.pop(step_id, None)
 
         return True
 
@@ -400,6 +419,13 @@ class InMemoryWorkflowRepository(WorkflowRepository):
                     tipo=template_step.tipo,
                     requiere_aprobacion=template_step.requiere_aprobacion,
                     puede_tener_comentarios=template_step.puede_tener_comentarios,
+                    action_type=template_step.action_type,
+                    action_config=template_step.action_config,
+                    action_label=template_step.action_label,
+                    waits_for_external_response=template_step.waits_for_external_response,
+                    expected_external_event=template_step.expected_external_event,
+                    external_wait_reason=template_step.external_wait_reason,
+                    external_reference=template_step.external_reference,
                     estado=StepStatus.ACTIVO,
                     fecha_estado_actual=now,
                     asignado_a=first_step_override.asignado_a if should_apply_override and first_step_override else None,
@@ -420,6 +446,8 @@ class InMemoryWorkflowRepository(WorkflowRepository):
                 self._step_ids_by_workflow[workflow.id].append(step.id)
                 self._comments_by_step[step.id] = []
                 self._history_by_step[step.id] = []
+                self._external_events_by_step[step.id] = []
+                self._external_events_by_workflow.setdefault(workflow.id, [])
 
         return self.get_workflow(workflow.id)  # type: ignore[return-value]
 
@@ -463,6 +491,13 @@ class InMemoryWorkflowRepository(WorkflowRepository):
             tipo=payload.tipo,
             requiere_aprobacion=payload.requiere_aprobacion,
             puede_tener_comentarios=payload.puede_tener_comentarios,
+            action_type=payload.action_type,
+            action_config=payload.action_config,
+            action_label=payload.action_label,
+            waits_for_external_response=payload.waits_for_external_response,
+            expected_external_event=payload.expected_external_event,
+            external_wait_reason=payload.external_wait_reason,
+            external_reference=payload.external_reference,
             estado=estado,
             fecha_estado_actual=now,
             asignado_a=payload.asignado_a,
@@ -477,6 +512,8 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         self._step_ids_by_workflow.setdefault(workflow_id, []).append(step.id)
         self._comments_by_step[step.id] = []
         self._history_by_step[step.id] = []
+        self._external_events_by_step[step.id] = []
+        self._external_events_by_workflow.setdefault(workflow_id, [])
         return step
 
     def save_step(self, step: StepInstancePublic) -> StepInstancePublic:
@@ -504,6 +541,33 @@ class InMemoryWorkflowRepository(WorkflowRepository):
 
     def list_history(self, step_id: str) -> list[StepHistoryPublic]:
         return list(self._history_by_step.get(step_id, []))
+
+    def add_external_event(self, step_id: str, payload: ExternalEventCreate) -> ExternalEventPublic:
+        step = self._steps.get(step_id)
+        if step is None:
+            raise ValueError(f"Step {step_id} not found")
+
+        event = ExternalEventPublic(
+            id=str(uuid4()),
+            workflow_id=step.workflow_id,
+            step_id=step_id,
+            event_type=payload.event_type,
+            source=payload.source,
+            payload=payload.payload,
+            comentario=payload.comentario,
+            attachments=self._materialize_attachments(payload.attachments),
+            fecha_creacion=utc_now(),
+            registrado_por=payload.registrado_por,
+        )
+        self._external_events_by_step.setdefault(step_id, []).append(event)
+        self._external_events_by_workflow.setdefault(step.workflow_id, []).append(event)
+        return event
+
+    def list_step_external_events(self, step_id: str) -> list[ExternalEventPublic]:
+        return list(self._external_events_by_step.get(step_id, []))
+
+    def list_workflow_external_events(self, workflow_id: str) -> list[ExternalEventPublic]:
+        return list(self._external_events_by_workflow.get(workflow_id, []))
 
     def list_pending_steps(self) -> list[StepInstancePublic]:
         steps = [step for step in self._steps.values() if step.estado in OPEN_STEP_STATUSES]
@@ -762,6 +826,13 @@ class PostgresWorkflowRepository(WorkflowRepository):
                         tipo=template_step.tipo,
                         requiere_aprobacion=template_step.requiere_aprobacion,
                         puede_tener_comentarios=template_step.puede_tener_comentarios,
+                        action_type=template_step.action_type,
+                        action_config=template_step.action_config,
+                        action_label=template_step.action_label,
+                        waits_for_external_response=template_step.waits_for_external_response,
+                        expected_external_event=template_step.expected_external_event,
+                        external_wait_reason=template_step.external_wait_reason,
+                        external_reference=template_step.external_reference,
                         estado=StepStatus.ACTIVO.value,
                         fecha_estado_actual=now,
                         asignado_a=first_step_override.asignado_a if use_override and first_step_override else None,
@@ -855,6 +926,13 @@ class PostgresWorkflowRepository(WorkflowRepository):
             tipo=payload.tipo,
             requiere_aprobacion=payload.requiere_aprobacion,
             puede_tener_comentarios=payload.puede_tener_comentarios,
+            action_type=payload.action_type,
+            action_config=payload.action_config,
+            action_label=payload.action_label,
+            waits_for_external_response=payload.waits_for_external_response,
+            expected_external_event=payload.expected_external_event,
+            external_wait_reason=payload.external_wait_reason,
+            external_reference=payload.external_reference,
             estado=estado.value,
             fecha_estado_actual=now,
             asignado_a=payload.asignado_a,
@@ -891,6 +969,13 @@ class PostgresWorkflowRepository(WorkflowRepository):
             existing.tipo = step.tipo
             existing.requiere_aprobacion = step.requiere_aprobacion
             existing.puede_tener_comentarios = step.puede_tener_comentarios
+            existing.action_type = step.action_type
+            existing.action_config = step.action_config
+            existing.action_label = step.action_label
+            existing.waits_for_external_response = step.waits_for_external_response
+            existing.expected_external_event = step.expected_external_event
+            existing.external_wait_reason = step.external_wait_reason
+            existing.external_reference = step.external_reference
             existing.estado = step.estado.value
             existing.fecha_estado_actual = step.fecha_estado_actual
             existing.asignado_a = step.asignado_a
@@ -968,6 +1053,56 @@ class PostgresWorkflowRepository(WorkflowRepository):
                 .order_by(StepHistoryModel.fecha.asc())
             ).all()
             return [self._history_to_public(entry) for entry in entries]
+
+    def add_external_event(self, step_id: str, payload: ExternalEventCreate) -> ExternalEventPublic:
+        with session_scope() as session:
+            step = session.get(StepModel, step_id)
+            if step is None:
+                raise ValueError(f"Step {step_id} not found")
+
+            event = ExternalEventModel(
+                id=str(uuid4()),
+                workflow_id=step.workflow_id,
+                step_id=step_id,
+                event_type=payload.event_type,
+                source=payload.source,
+                payload=payload.payload,
+                comentario=payload.comentario,
+                attachments=[
+                    {
+                        "id": str(uuid4()),
+                        "nombre": item.nombre,
+                        "content_type": item.content_type,
+                        "size_bytes": item.size_bytes,
+                        "content_base64": item.content_base64,
+                    }
+                    for item in payload.attachments
+                ],
+                fecha_creacion=utc_now(),
+                registrado_por=payload.registrado_por,
+            )
+            session.add(event)
+            session.flush()
+            session.refresh(event)
+            return self._external_event_to_public(event)
+
+    def list_step_external_events(self, step_id: str) -> list[ExternalEventPublic]:
+        with session_scope() as session:
+            events = session.scalars(
+                select(ExternalEventModel)
+                .where(ExternalEventModel.step_id == step_id)
+                .order_by(ExternalEventModel.fecha_creacion.asc())
+            ).all()
+            return [self._external_event_to_public(item) for item in events]
+
+    def list_workflow_external_events(self, workflow_id: str) -> list[ExternalEventPublic]:
+        with session_scope() as session:
+            events = session.scalars(
+                select(ExternalEventModel)
+                .where(ExternalEventModel.workflow_id == workflow_id)
+                .order_by(ExternalEventModel.fecha_creacion.asc())
+            ).all()
+            return [self._external_event_to_public(item) for item in events]
 
     def list_pending_steps(self) -> list[StepInstancePublic]:
         with session_scope() as session:
@@ -1103,6 +1238,13 @@ class PostgresWorkflowRepository(WorkflowRepository):
             tipo=step.tipo,
             requiere_aprobacion=step.requiere_aprobacion,
             puede_tener_comentarios=step.puede_tener_comentarios,
+            action_type=step.action_type or "continue",
+            action_config=step.action_config,
+            action_label=step.action_label,
+            waits_for_external_response=bool(step.waits_for_external_response),
+            expected_external_event=step.expected_external_event,
+            external_wait_reason=step.external_wait_reason,
+            external_reference=step.external_reference,
             estado=StepStatus(step.estado),
             fecha_estado_actual=step.fecha_estado_actual,
             asignado_a=step.asignado_a,
@@ -1142,6 +1284,20 @@ class PostgresWorkflowRepository(WorkflowRepository):
             attachments=self._deserialize_attachments(entry.attachments),
         )
 
+    def _external_event_to_public(self, event: ExternalEventModel) -> ExternalEventPublic:
+        return ExternalEventPublic(
+            id=event.id,
+            workflow_id=event.workflow_id,
+            step_id=event.step_id,
+            event_type=event.event_type,
+            source=event.source,
+            payload=event.payload,
+            comentario=event.comentario,
+            attachments=self._deserialize_attachments(event.attachments),
+            fecha_creacion=event.fecha_creacion,
+            registrado_por=event.registrado_por,
+        )
+
     def _template_to_public(self, template: WorkflowTemplateModel) -> WorkflowTemplatePublic:
         ordered_steps = sorted(template.steps, key=lambda item: item.orden)
         fallback_codes = [step.nombre.strip().lower().replace(" ", "_") for step in ordered_steps]
@@ -1160,6 +1316,13 @@ class PostgresWorkflowRepository(WorkflowRepository):
                 tipo=step.tipo,
                 requiere_aprobacion=step.requiere_aprobacion,
                 puede_tener_comentarios=step.puede_tener_comentarios,
+                action_type=step.action_type or "continue",
+                action_config=step.action_config,
+                action_label=step.action_label,
+                waits_for_external_response=bool(step.waits_for_external_response),
+                expected_external_event=step.expected_external_event,
+                external_wait_reason=step.external_wait_reason,
+                external_reference=step.external_reference,
                 condicion_para_activarse=step.condicion_para_activarse,
                 condicion_para_cerrarse=step.condicion_para_cerrarse,
             )

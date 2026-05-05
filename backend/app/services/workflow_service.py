@@ -4,8 +4,11 @@ from uuid import uuid4
 from app.core.errors import BusinessRuleError, EntityNotFoundError
 from app.repositories.workflow_repository import WorkflowRepository, utc_now
 from app.schemas.workflow import (
+    AttachmentBase,
     CommentCreate,
     CommentPublic,
+    ExternalEventCreate,
+    ExternalEventPublic,
     StepCompletePayload,
     StepCreate,
     StepHistoryPublic,
@@ -15,6 +18,7 @@ from app.schemas.workflow import (
     TriggerCreate,
     TriggerDetail,
     TriggerPublic,
+    TriggerUpdate,
     TriggerStatus,
     WorkflowDetail,
     WorkflowStartRequest,
@@ -23,7 +27,7 @@ from app.schemas.workflow import (
     WorkflowTemplatePublic,
 )
 
-OPEN_STEP_STATUSES = {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA}
+OPEN_STEP_STATUSES = {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA, StepStatus.ESPERANDO_RESPUESTA}
 
 
 class WorkflowService:
@@ -41,6 +45,31 @@ class WorkflowService:
 
     def create_trigger(self, payload: TriggerCreate) -> TriggerPublic:
         return self.repository.create_trigger(payload)
+
+    def update_trigger(self, trigger_id: str, payload: TriggerUpdate) -> TriggerDetail:
+        trigger = self.repository.get_trigger(trigger_id)
+        if trigger is None:
+            raise EntityNotFoundError("Trigger not found")
+
+        patch_data = payload.model_dump(exclude_unset=True)
+        update_data: dict[str, object] = {"fecha_actualizacion": utc_now()}
+        if "solicitante" in patch_data:
+            update_data["solicitante"] = patch_data["solicitante"]
+        if "descripcion" in patch_data:
+            update_data["descripcion"] = patch_data["descripcion"]
+        if "tipo" in patch_data:
+            update_data["tipo"] = patch_data["tipo"]
+        if "metadata" in patch_data:
+            update_data["metadata"] = patch_data["metadata"]
+
+        updated_trigger = trigger.model_copy(
+            update=update_data
+        )
+        self.repository.save_trigger(updated_trigger)
+        refreshed = self.repository.get_trigger(trigger_id)
+        if refreshed is None:
+            raise EntityNotFoundError("Trigger not found")
+        return refreshed
 
     def delete_trigger(self, trigger_id: str) -> None:
         deleted = self.repository.delete_trigger(trigger_id)
@@ -162,6 +191,8 @@ class WorkflowService:
         step = self.get_step(step_id)
         if step.estado not in OPEN_STEP_STATUSES:
             raise BusinessRuleError("Solo se puede completar un step abierto")
+        if step.estado == StepStatus.ESPERANDO_RESPUESTA:
+            raise BusinessRuleError("Este paso espera respuesta externa. Registra el evento externo para reanudar.")
 
         if len(payload.comentario.strip()) < 3:
             raise BusinessRuleError("Completar un paso requiere un comentario justificando el cierre")
@@ -169,35 +200,58 @@ class WorkflowService:
         workflow = self.get_workflow(step.workflow_id)
         now = utc_now()
 
-        completed_step = step.model_copy(
+        waits_external = step.waits_for_external_response or step.action_type == "wait_external"
+        next_status = StepStatus.ESPERANDO_RESPUESTA if waits_external else StepStatus.COMPLETADO
+
+        updated_step = step.model_copy(
             update={
-                "estado": StepStatus.COMPLETADO,
+                "estado": next_status,
                 "fecha_estado_actual": now,
                 "resultado": payload.resultado,
                 "observaciones": payload.observaciones,
-                "fecha_cierre": now,
+                "fecha_cierre": None if waits_external else now,
             }
         )
-        self.repository.save_step(completed_step)
+        self.repository.save_step(updated_step)
         self._record_history(
-            completed_step.id,
+            updated_step.id,
             "estado",
             step.estado,
-            StepStatus.COMPLETADO,
+            next_status,
             payload.usuario,
             note=payload.comentario.strip(),
             attachments=payload.attachments,
         )
 
         if step.resultado != payload.resultado:
-            self._record_history(completed_step.id, "resultado", step.resultado, payload.resultado, payload.usuario)
+            self._record_history(updated_step.id, "resultado", step.resultado, payload.resultado, payload.usuario)
         if step.observaciones != payload.observaciones:
-            self._record_history(completed_step.id, "observaciones", step.observaciones, payload.observaciones, payload.usuario)
+            self._record_history(updated_step.id, "observaciones", step.observaciones, payload.observaciones, payload.usuario)
 
-        self._activate_available_steps(workflow.id, payload.usuario)
+        if waits_external:
+            wait_detail_parts = []
+            if updated_step.expected_external_event:
+                wait_detail_parts.append(f"evento esperado: {updated_step.expected_external_event}")
+            if updated_step.external_wait_reason:
+                wait_detail_parts.append(f"motivo: {updated_step.external_wait_reason}")
+            if updated_step.external_reference:
+                wait_detail_parts.append(f"referencia: {updated_step.external_reference}")
+            wait_note = "El paso quedo esperando respuesta externa."
+            if wait_detail_parts:
+                wait_note = f"{wait_note} ({'; '.join(wait_detail_parts)})"
+            self._record_history(
+                updated_step.id,
+                "espera_externa",
+                None,
+                updated_step.expected_external_event,
+                payload.usuario,
+                note=wait_note,
+            )
+        else:
+            self._activate_available_steps(workflow.id, payload.usuario)
+
         self._sync_workflow_and_trigger_status(workflow.id, now)
-
-        return completed_step
+        return updated_step
 
     def add_comment(self, step_id: str, payload: CommentCreate) -> CommentPublic:
         step = self.get_step(step_id)
@@ -215,6 +269,57 @@ class WorkflowService:
 
     def list_pending_steps(self) -> list[StepInstancePublic]:
         return self.repository.list_pending_steps()
+
+    def list_step_external_events(self, step_id: str) -> list[ExternalEventPublic]:
+        self.get_step(step_id)
+        return self.repository.list_step_external_events(step_id)
+
+    def list_workflow_external_events(self, workflow_id: str) -> list[ExternalEventPublic]:
+        self.get_workflow(workflow_id)
+        return self.repository.list_workflow_external_events(workflow_id)
+
+    def register_external_event(self, step_id: str, payload: ExternalEventCreate) -> ExternalEventPublic:
+        step = self.get_step(step_id)
+        if step.estado != StepStatus.ESPERANDO_RESPUESTA:
+            raise BusinessRuleError("Solo puedes registrar respuesta externa en pasos esperando respuesta")
+
+        event = self.repository.add_external_event(step_id, payload)
+        self._record_history(
+            step.id,
+            "evento_externo",
+            None,
+            payload.event_type,
+            payload.registrado_por,
+            note=payload.comentario or f"Evento externo recibido: {payload.event_type}",
+            attachments=payload.attachments,
+        )
+
+        expected_event = (step.expected_external_event or "").strip().lower()
+        incoming_event = payload.event_type.strip().lower()
+        event_matches = not expected_event or expected_event == incoming_event
+
+        if event_matches:
+            now = utc_now()
+            resumed_step = step.model_copy(
+                update={
+                    "estado": StepStatus.COMPLETADO,
+                    "fecha_estado_actual": now,
+                    "fecha_cierre": now,
+                }
+            )
+            self.repository.save_step(resumed_step)
+            self._record_history(
+                step.id,
+                "estado",
+                StepStatus.ESPERANDO_RESPUESTA,
+                StepStatus.COMPLETADO,
+                payload.registrado_por,
+                note=f"Respuesta externa valida ({payload.event_type}). Se reanuda el flujo.",
+            )
+            self._activate_available_steps(step.workflow_id, payload.registrado_por)
+            self._sync_workflow_and_trigger_status(step.workflow_id, now)
+
+        return event
 
     def _activate_available_steps(self, workflow_id: str, actor: str) -> list[StepInstancePublic]:
         workflow = self.get_workflow(workflow_id)
@@ -249,6 +354,13 @@ class WorkflowService:
                 puede_tener_comentarios=template_step.puede_tener_comentarios,
                 asignado_a=None,
                 fecha_vencimiento=None,
+                action_type=template_step.action_type,
+                action_config=template_step.action_config,
+                action_label=template_step.action_label,
+                waits_for_external_response=template_step.waits_for_external_response,
+                expected_external_event=template_step.expected_external_event,
+                external_wait_reason=template_step.external_wait_reason,
+                external_reference=template_step.external_reference,
             )
             created_step = self.repository.create_step(
                 workflow_id,
@@ -355,7 +467,7 @@ class WorkflowService:
         valor_nuevo: object,
         usuario: str,
         note: str | None = None,
-        attachments: list | None = None,
+        attachments: list[AttachmentBase] | None = None,
     ) -> None:
         history = StepHistoryPublic(
             id=str(uuid4()),
