@@ -629,11 +629,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         </CardContent>
       </Card>
 
-      {!loading && !error && viewMode === "flows" && (
-        <Typography variant="body2" color="text.secondary" sx={{ opacity: 0.8 }}>
-          {filteredFlows.length} flows en vista.
-        </Typography>
-      )}
     </Stack>
   );
 }
