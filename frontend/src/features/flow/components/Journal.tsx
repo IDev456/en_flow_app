@@ -109,20 +109,27 @@ export function Journal({
 
   useEffect(() => {
     if (focusRequestToken > 0) {
+      onComposerExpandedChange(true);
       textareaRef.current?.focus();
     }
-  }, [focusRequestToken]);
+  }, [focusRequestToken, onComposerExpandedChange]);
 
   useEffect(() => {
+    if (!composerExpanded) {
+      return;
+    }
+
     function handlePointerDown(event: MouseEvent) {
       if (!composerRef.current?.contains(event.target as Node)) {
-        onComposerExpandedChange(false);
+        if (!text.trim() && attachments.length === 0 && !submitting) {
+          onComposerExpandedChange(false);
+        }
       }
     }
 
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [onComposerExpandedChange]);
+  }, [attachments.length, composerExpanded, onComposerExpandedChange, submitting, text]);
 
   const canSubmit = canComment && !missingComment && !insufficientLength && !submitting;
 
@@ -198,6 +205,7 @@ export function Journal({
       setText("");
       setAttachments([]);
       onSelectedStatusChange("");
+      onComposerExpandedChange(false);
       setSavedToastOpen(true);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
@@ -255,6 +263,23 @@ export function Journal({
     return "Registrá qué pasó o qué cambió...";
   }
 
+  function handleOpenComposer() {
+    onComposerExpandedChange(true);
+    setError(null);
+  }
+
+  function handleCancelComposer() {
+    if (submitting) return;
+    setText("");
+    setAttachments([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+    setError(null);
+    onSelectedStatusChange("");
+    onComposerExpandedChange(false);
+  }
+
   return (
     <Stack
       spacing={3}
@@ -279,40 +304,58 @@ export function Journal({
         <Stack spacing={2}>
           <Typography variant="h6">Registro operativo</Typography>
 
-          <TextField
-            inputRef={textareaRef}
-            label="Registrar avance"
-            multiline
-            minRows={4}
-            placeholder={getCommentPlaceholder()}
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            onFocus={() => onComposerExpandedChange(true)}
-            onClick={() => onComposerExpandedChange(true)}
-            onKeyDown={handleKeyDown}
-            onPaste={(event) => void handlePaste(event)}
-            slotProps={{ htmlInput: { maxLength: MAX_CHARS } }}
-            disabled={!canComment || submitting}
-            helperText={`${text.length} / ${MAX_CHARS}`}
-          />
+          {composerExpanded ? (
+            <Stack spacing={2}>
+              <TextField
+                inputRef={textareaRef}
+                label="Registrar avance"
+                multiline
+                minRows={4}
+                placeholder={getCommentPlaceholder()}
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                onKeyDown={handleKeyDown}
+                onPaste={(event) => void handlePaste(event)}
+                slotProps={{ htmlInput: { maxLength: MAX_CHARS } }}
+                disabled={!canComment || submitting}
+                helperText={`${text.length} / ${MAX_CHARS}`}
+              />
 
-          {composerExpanded && (
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                spacing={1.25}
+                sx={{ alignItems: { xs: "stretch", sm: "center" } }}
+              >
+                <input ref={fileInputRef} type="file" multiple hidden onChange={handleFileChange} />
+                <Button
+                  type="button"
+                  variant="outlined"
+                  color="inherit"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={!canComment || submitting}
+                  startIcon={<AddPhotoAlternateRoundedIcon />}
+                >
+                  Adjuntar archivos
+                </Button>
+              </Stack>
+            </Stack>
+          ) : (
             <Stack
               direction={{ xs: "column", sm: "row" }}
-              spacing={1.25}
-              sx={{ alignItems: { xs: "stretch", sm: "center" } }}
+              spacing={1}
+              sx={{ alignItems: { xs: "stretch", sm: "center" }, justifyContent: "space-between" }}
             >
-              <input ref={fileInputRef} type="file" multiple hidden onChange={handleFileChange} />
               <Button
                 type="button"
-                variant="outlined"
-                color="inherit"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={!canComment || submitting}
-                startIcon={<AddPhotoAlternateRoundedIcon />}
+                variant="contained"
+                onClick={handleOpenComposer}
+                disabled={!canComment}
               >
-                Adjuntar archivos
+                Registrar avance
               </Button>
+              <Typography variant="body2" color="text.secondary">
+                {canComment ? "Abrí un registro rápido cuando haya novedades." : "Esta tarea no admite registros."}
+              </Typography>
             </Stack>
           )}
 
@@ -415,15 +458,22 @@ export function Journal({
 
           {error && <Alert severity="error">{error}</Alert>}
 
-          <Stack
-            direction={{ xs: "column", sm: "row" }}
-            spacing={1.5}
-            sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", sm: "center" } }}
-          >
-            <Button type="button" variant="contained" onClick={() => void handleSubmit()} disabled={!canSubmit}>
-              {submitting ? "Guardando..." : getSubmitLabel()}
-            </Button>
-          </Stack>
+          {composerExpanded && (
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              spacing={1.25}
+              sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", sm: "center" } }}
+            >
+              <Stack direction="row" spacing={1}>
+                <Button type="button" variant="contained" onClick={() => void handleSubmit()} disabled={!canSubmit}>
+                  {submitting ? "Guardando..." : getSubmitLabel()}
+                </Button>
+                <Button type="button" variant="text" color="inherit" onClick={handleCancelComposer} disabled={submitting}>
+                  Cancelar
+                </Button>
+              </Stack>
+            </Stack>
+          )}
         </Stack>
       </Box>
 

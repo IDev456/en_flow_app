@@ -6,6 +6,7 @@ import {
   Button,
   Card,
   CardContent,
+  Collapse,
   CircularProgress,
   Link,
   Snackbar,
@@ -33,7 +34,6 @@ import {
 import { StatusBadge } from "../components/StatusBadge";
 import { StepDetailPanel } from "../components/StepDetailPanel";
 import { WorkflowGraph } from "../components/WorkflowGraph";
-import { WorkflowVariantSwitcher, type WorkflowVariant } from "../components/WorkflowVariantSwitcher";
 import type {
   ExternalEventCreateInput,
   ExternalResponseDecisionInput,
@@ -45,7 +45,7 @@ import type {
   TriggerDetail,
   WorkflowDetail,
 } from "../types";
-import { DEFAULT_ACTOR, formatDate } from "../utils";
+import { DEFAULT_ACTOR, formatDate, formatElapsedTime } from "../utils";
 
 export function WorkflowDetailPage() {
   const { workflowId = "" } = useParams();
@@ -57,7 +57,7 @@ export function WorkflowDetailPage() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [stepComments, setStepComments] = useState<StepComment[]>([]);
   const [stepHistory, setStepHistory] = useState<StepHistoryEntry[]>([]);
-  const [variant, setVariant] = useState<WorkflowVariant>("vertical");
+  const [requirementsExpanded, setRequirementsExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
@@ -73,6 +73,26 @@ export function WorkflowDetailPage() {
 
   function getSecondaryRequesterLabel() {
     return trigger?.solicitante?.trim() || "Sin contexto";
+  }
+
+  function pickRelevantStep(workflowData: WorkflowDetail) {
+    const byOrder = [...workflowData.steps].sort((a, b) => a.orden - b.orden);
+    return (
+      byOrder.find((step) => step.estado === "activo") ??
+      byOrder.find((step) => step.estado === "esperando_respuesta") ??
+      byOrder.find((step) => step.estado === "espera" || step.estado === "problema") ??
+      byOrder[0] ??
+      null
+    );
+  }
+
+  function getPrimaryActionLabel(step: Step | null) {
+    if (!step) return "Ver registro";
+    if (step.estado === "esperando_respuesta") return "Registrar respuesta recibida";
+    if (step.estado === "activo") return "Completar tarea";
+    if (step.estado === "espera") return "Retomar tarea";
+    if (step.estado === "problema") return "Registrar avance";
+    return "Ver registro";
   }
 
   useEffect(() => {
@@ -226,7 +246,7 @@ export function WorkflowDetailPage() {
     return <Alert severity="info">Flow no encontrado.</Alert>;
   }
 
-  const selectedStep: Step | null = workflow.steps.find((step) => step.id === selectedStepId) ?? workflow.steps[0] ?? null;
+  const selectedStep: Step | null = workflow.steps.find((step) => step.id === selectedStepId) ?? pickRelevantStep(workflow);
   const openSteps = workflow.steps.filter((step) => ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado));
   const workflowHeaderStatus =
     workflow.estado === "en_proceso"
@@ -261,116 +281,132 @@ export function WorkflowDetailPage() {
 
       <Card>
         <CardContent sx={{ p: { xs: 2.25, md: 2.5 } }}>
-          <Stack spacing={2}>
-            <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ justifyContent: "space-between" }}>
+          <Stack spacing={1.25}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between", alignItems: { sm: "center" } }}>
+              <Typography variant="subtitle2" color="text.secondary">
+                {selectedStep && ["activo", "espera", "problema", "esperando_respuesta"].includes(selectedStep.estado) ? "Tarea actual" : "Última tarea"}
+              </Typography>
+              {selectedStep && <StatusBadge value={selectedStep.estado} />}
+            </Stack>
+            <Typography variant="h4">
+              {selectedStep?.nombre ?? "Sin tareas registradas"}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Último registro: {selectedStep?.ultimo_comentario?.trim() || selectedStep?.descripcion?.trim() || "Sin registros todavía"}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {formatElapsedTime(selectedStep?.ultimo_comentario_fecha ?? selectedStep?.fecha_estado_actual ?? null) ?? "Sin movimiento reciente"}
+            </Typography>
+            <Box>
+              <Button variant="contained" onClick={() => selectedStep && handleOpenStep(selectedStep.id)} disabled={!selectedStep}>
+                {getPrimaryActionLabel(selectedStep)}
+              </Button>
+            </Box>
+          </Stack>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent sx={{ p: { xs: 2.25, md: 2.5 } }}>
+          <Stack spacing={1.25}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between", alignItems: { sm: "center" } }}>
               <Box>
-                <Typography variant="h3">{getPrimaryRequirementLabel()}</Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
+                <Typography variant="h5">{getPrimaryRequirementLabel()}</Typography>
+                <Typography variant="body2" color="text.secondary">
                   Contexto: {getSecondaryRequesterLabel()}
                 </Typography>
               </Box>
-              <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                <StatusBadge value={workflowHeaderStatus} />
-              </Stack>
+              <StatusBadge value={workflowHeaderStatus} />
             </Stack>
 
-            {(workflow.fecha_inicio || workflow.fecha_fin || workflow.objetivo_final) && (
-              <Stack direction={{ xs: "column", md: "row" }} spacing={{ xs: 0.5, md: 2 }} sx={{ color: "text.secondary" }}>
-                {workflow.fecha_inicio && (
-                  <Typography variant="body2">Inicio: {formatDate(workflow.fecha_inicio)}</Typography>
-                )}
-                {workflow.fecha_fin && <Typography variant="body2">Cierre: {formatDate(workflow.fecha_fin)}</Typography>}
-                {workflow.objetivo_final && <Typography variant="body2">Objetivo: {workflow.objetivo_final}</Typography>}
-                <Typography variant="body2">
-                  Tareas activas: {workflow.pasos_activos.length > 0 ? workflow.pasos_activos.join(", ") : "sin tareas activas"}
-                </Typography>
-              </Stack>
-            )}
-
-            <Stack spacing={1.25}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Requerimientos vinculados
-              </Typography>
+            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
               {workflow.requirement_ids.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">
-                  Este flow todavia no esta vinculado a requerimientos.
+                  Sin requerimientos vinculados.
                 </Typography>
               ) : (
-                <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
-                  {workflow.requirement_ids.map((requirementId) => {
-                    const requirement = allRequirements.find((item) => item.id === requirementId);
-                    return (
-                      <Button
-                        key={requirementId}
-                        size="small"
-                        variant="outlined"
-                        color="inherit"
-                        onClick={() => navigate(`/requirements/${requirementId}`)}
-                        sx={{ textTransform: "none" }}
-                      >
-                        {requirement?.descripcion?.trim() || `Req ${requirementId.slice(0, 8)}`}
-                      </Button>
-                    );
-                  })}
-                </Stack>
-              )}
-
-              <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-                <TextField
-                  select
-                  label="Vincular a requerimiento"
-                  value={linkRequirementId}
-                  onChange={(event) => setLinkRequirementId(event.target.value)}
-                  slotProps={{ select: { native: true } }}
-                  sx={{ minWidth: 260 }}
-                >
-                  <option value="">Seleccionar...</option>
-                  {allRequirements
-                    .filter((item) => !workflow.requirement_ids.includes(item.id))
-                    .map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.descripcion?.trim() || item.id.slice(0, 8)}
-                      </option>
-                    ))}
-                </TextField>
-                <Button variant="outlined" color="inherit" onClick={() => void handleLinkRequirement()} disabled={!linkRequirementId}>
-                  Vincular
-                </Button>
-              </Stack>
-
-              <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-                <TextField
-                  label="Crear requerimiento relacionado"
-                  value={newRequirementDescription}
-                  onChange={(event) => setNewRequirementDescription(event.target.value)}
-                  placeholder="Ej. Instalación grupo electrógeno"
-                  fullWidth
-                />
-                <Button
-                  variant="outlined"
-                  color="inherit"
-                  onClick={() => void handleCreateRequirement()}
-                  disabled={newRequirementDescription.trim().length < 3}
-                >
-                  Crear y vincular
-                </Button>
-              </Stack>
-              {workflow.requirement_ids.length > 0 && (
-                <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
-                  {workflow.requirement_ids.map((requirementId) => (
+                workflow.requirement_ids.map((requirementId) => {
+                  const requirement = allRequirements.find((item) => item.id === requirementId);
+                  return (
                     <Button
-                      key={`unlink-${requirementId}`}
+                      key={requirementId}
                       size="small"
-                      variant="text"
+                      variant="outlined"
                       color="inherit"
-                      onClick={() => void handleUnlinkRequirement(requirementId)}
+                      onClick={() => navigate(`/requirements/${requirementId}`)}
                     >
-                      Desvincular {requirementId.slice(0, 8)}
+                      {requirement?.descripcion?.trim() || `Req ${requirementId.slice(0, 8)}`}
                     </Button>
-                  ))}
-                </Stack>
+                  );
+                })
               )}
             </Stack>
+
+            <Box>
+              <Button variant="text" color="inherit" onClick={() => setRequirementsExpanded((value) => !value)}>
+                {requirementsExpanded ? "Ocultar gestión de requerimientos" : "Gestionar requerimientos vinculados"}
+              </Button>
+            </Box>
+
+            <Collapse in={requirementsExpanded}>
+              <Stack spacing={1.25}>
+                <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+                  <TextField
+                    select
+                    label="Vincular a requerimiento"
+                    value={linkRequirementId}
+                    onChange={(event) => setLinkRequirementId(event.target.value)}
+                    slotProps={{ select: { native: true } }}
+                    sx={{ minWidth: 260 }}
+                  >
+                    <option value="">Seleccionar...</option>
+                    {allRequirements
+                      .filter((item) => !workflow.requirement_ids.includes(item.id))
+                      .map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.descripcion?.trim() || item.id.slice(0, 8)}
+                        </option>
+                      ))}
+                  </TextField>
+                  <Button variant="outlined" color="inherit" onClick={() => void handleLinkRequirement()} disabled={!linkRequirementId}>
+                    Vincular
+                  </Button>
+                </Stack>
+
+                <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+                  <TextField
+                    label="Crear requerimiento relacionado"
+                    value={newRequirementDescription}
+                    onChange={(event) => setNewRequirementDescription(event.target.value)}
+                    placeholder="Ej. Instalación grupo electrógeno"
+                    fullWidth
+                  />
+                  <Button
+                    variant="outlined"
+                    color="inherit"
+                    onClick={() => void handleCreateRequirement()}
+                    disabled={newRequirementDescription.trim().length < 3}
+                  >
+                    Crear y vincular
+                  </Button>
+                </Stack>
+                {workflow.requirement_ids.length > 0 && (
+                  <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
+                    {workflow.requirement_ids.map((requirementId) => (
+                      <Button
+                        key={`unlink-${requirementId}`}
+                        size="small"
+                        variant="text"
+                        color="inherit"
+                        onClick={() => void handleUnlinkRequirement(requirementId)}
+                      >
+                        Desvincular {requirementId.slice(0, 8)}
+                      </Button>
+                    ))}
+                  </Stack>
+                )}
+              </Stack>
+            </Collapse>
           </Stack>
         </CardContent>
       </Card>
@@ -383,25 +419,18 @@ export function WorkflowDetailPage() {
           gridTemplateColumns: panelOpen && selectedStep ? { xs: "1fr", xl: "minmax(0, 1fr) 420px" } : "1fr",
         }}
       >
-        <Card sx={{ minWidth: 0 }} onPointerDown={() => panelOpen && setPanelOpen(false)}>
+        <Card sx={{ minWidth: 0 }}>
           <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
             <Stack spacing={3}>
-              <Stack
-                direction={{ xs: "column", md: "row" }}
-                spacing={2}
-                sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", md: "center" } }}
-              >
-                <Box>
-                  <Typography variant="h5">Tareas</Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                    Selecciona una tarea para ver su detalle, registrar avance y decidir continuidad.
-                  </Typography>
-                </Box>
-                <WorkflowVariantSwitcher value={variant} onChange={setVariant} />
-              </Stack>
+              <Box>
+                <Typography variant="h5">Secuencia de tareas</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  Continuidad del flow de principio a fin.
+                </Typography>
+              </Box>
 
               <WorkflowGraph
-                variant={variant}
+                variant="vertical"
                 triggerLabel={getPrimaryRequirementLabel()}
                 steps={workflow.steps}
                 workflowClosed={workflow.estado === "finalizado"}

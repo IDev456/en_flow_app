@@ -13,8 +13,8 @@ export function NotFoundPage() {
           <Typography variant="body1" color="text.secondary">
             La URL actual no corresponde a ninguna pantalla operativa disponible dentro del flujo.
           </Typography>
-          <Button component={RouterLink} to="/board" variant="contained">
-            Volver a bandeja
+          <Button component={RouterLink} to="/flows" variant="contained">
+            Volver a flows
           </Button>
         </Stack>
       </CardContent>

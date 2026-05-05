@@ -7,6 +7,7 @@ import {
   Button,
   Card,
   CardContent,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
@@ -88,6 +89,7 @@ export function StepDetailPanel({
   const [completeAttachments, setCompleteAttachments] = useState<AttachmentInput[]>([]);
   const [completeError, setCompleteError] = useState<string | null>(null);
   const [completing, setCompleting] = useState(false);
+  const [completeAdvancedOpen, setCompleteAdvancedOpen] = useState(false);
 
   const [externalDialogOpen, setExternalDialogOpen] = useState(false);
   const [externalComment, setExternalComment] = useState("");
@@ -95,6 +97,7 @@ export function StepDetailPanel({
   const [externalAttachments, setExternalAttachments] = useState<AttachmentInput[]>([]);
   const [registeringExternal, setRegisteringExternal] = useState(false);
   const [externalError, setExternalError] = useState<string | null>(null);
+  const [externalAdvancedOpen, setExternalAdvancedOpen] = useState(false);
 
   const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
   const [resolveTransition, setResolveTransition] = useState<"next_task" | "finish_flow">("next_task");
@@ -107,6 +110,7 @@ export function StepDetailPanel({
   const [resolveAttachments, setResolveAttachments] = useState<AttachmentInput[]>([]);
   const [resolving, setResolving] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
+  const [resolveAdvancedOpen, setResolveAdvancedOpen] = useState(false);
 
   useEffect(() => {
     if (!step) {
@@ -131,12 +135,14 @@ export function StepDetailPanel({
     setFinishReason("");
     setCompleteAttachments([]);
     setCompleteError(null);
+    setCompleteAdvancedOpen(false);
 
     setExternalDialogOpen(false);
     setExternalComment("");
     setExternalSource("manual");
     setExternalAttachments([]);
     setExternalError(null);
+    setExternalAdvancedOpen(false);
 
     setResolveDialogOpen(false);
     setResolveTransition("next_task");
@@ -148,6 +154,7 @@ export function StepDetailPanel({
     setResolveFinishReason("");
     setResolveAttachments([]);
     setResolveError(null);
+    setResolveAdvancedOpen(false);
   }, [step?.id, step?.estado, step?.expected_external_event, step?.external_reference, step?.external_wait_reason]);
 
   if (!step) {
@@ -399,7 +406,7 @@ export function StepDetailPanel({
                   </Button>
                 )}
                 {isWaitingExternal && onRegisterExternalEvent && (
-                  <Button variant="outlined" color="info" onClick={() => setExternalDialogOpen(true)} sx={{ textTransform: "none" }}>
+                  <Button variant="contained" color="info" onClick={() => setExternalDialogOpen(true)} sx={{ textTransform: "none" }}>
                     Registrar respuesta recibida
                   </Button>
                 )}
@@ -531,14 +538,6 @@ export function StepDetailPanel({
               onChange={(event) => setCompleteResult(event.target.value)}
               disabled={completing}
             />
-            <TextField
-              label="Observaciones"
-              multiline
-              minRows={2}
-              value={completeObservations}
-              onChange={(event) => setCompleteObservations(event.target.value)}
-              disabled={completing}
-            />
 
             <Typography variant="subtitle2" color="text.secondary">
               ¿Qué sigue?
@@ -546,7 +545,11 @@ export function StepDetailPanel({
             <ToggleButtonGroup
               exclusive
               value={completeTransition}
-              onChange={(_, value: StepTransitionType | null) => value && setCompleteTransition(value)}
+              onChange={(_, value: StepTransitionType | null) => {
+                if (!value) return;
+                setCompleteTransition(value);
+                setCompleteAdvancedOpen(false);
+              }}
               fullWidth
             >
               <ToggleButton value="next_task">Crear próxima tarea</ToggleButton>
@@ -562,44 +565,72 @@ export function StepDetailPanel({
             {completeTransition === "next_task" && (
               <Stack spacing={1.5}>
                 <TextField label="Nombre de la próxima tarea *" value={nextTaskName} onChange={(event) => setNextTaskName(event.target.value)} />
-                <TextField label="Detalle / contexto" multiline minRows={2} value={nextTaskDescription} onChange={(event) => setNextTaskDescription(event.target.value)} />
-                <TextField label="Asignado a" value={nextTaskAssignee} onChange={(event) => setNextTaskAssignee(event.target.value)} />
-                <TextField
-                  label="Fecha de vencimiento"
-                  type="datetime-local"
-                  value={nextTaskDueDate}
-                  onChange={(event) => setNextTaskDueDate(event.target.value)}
-                  slotProps={{ inputLabel: { shrink: true } }}
-                />
               </Stack>
             )}
 
             {completeTransition === "wait_external" && (
               <Stack spacing={1.5}>
                 <TextField label="Que se esta esperando *" value={waitExpected} onChange={(event) => setWaitExpected(event.target.value)} />
-                <TextField label="Origen / proveedor / persona" value={waitSource} onChange={(event) => setWaitSource(event.target.value)} />
-                <TextField label="Detalle de la espera" multiline minRows={2} value={waitDetail} onChange={(event) => setWaitDetail(event.target.value)} />
-                <TextField label="Referencia externa" value={waitReference} onChange={(event) => setWaitReference(event.target.value)} />
               </Stack>
             )}
 
-            {completeTransition === "finish_flow" && (
-              <TextField label="Motivo de cierre" multiline minRows={2} value={finishReason} onChange={(event) => setFinishReason(event.target.value)} />
-            )}
-
-            <Button component="label" variant="outlined" color="inherit" disabled={completing}>
-              Adjuntar archivos (opcional)
-              <input hidden multiple type="file" onChange={(event) => void handleAttachmentSelection(event.target.files, "complete")} />
+            <Button variant="text" color="inherit" onClick={() => setCompleteAdvancedOpen((value) => !value)}>
+              {completeAdvancedOpen ? "Ocultar opciones avanzadas" : "Más detalle (opcional)"}
             </Button>
-            {completeAttachments.length > 0 && (
-              <Stack spacing={0.5}>
-                {completeAttachments.map((item, index) => (
-                  <Typography key={`${item.nombre}-${index}`} variant="body2" color="text.secondary">
-                    {item.nombre} ({Math.round(item.size_bytes / 1024)} KB)
-                  </Typography>
-                ))}
+
+            <Collapse in={completeAdvancedOpen}>
+              <Stack spacing={1.5}>
+                <TextField
+                  label="Observaciones"
+                  multiline
+                  minRows={2}
+                  value={completeObservations}
+                  onChange={(event) => setCompleteObservations(event.target.value)}
+                  disabled={completing}
+                />
+
+                {completeTransition === "next_task" && (
+                  <>
+                    <TextField label="Detalle / contexto" multiline minRows={2} value={nextTaskDescription} onChange={(event) => setNextTaskDescription(event.target.value)} />
+                    <TextField label="Asignado a" value={nextTaskAssignee} onChange={(event) => setNextTaskAssignee(event.target.value)} />
+                    <TextField
+                      label="Fecha de vencimiento"
+                      type="datetime-local"
+                      value={nextTaskDueDate}
+                      onChange={(event) => setNextTaskDueDate(event.target.value)}
+                      slotProps={{ inputLabel: { shrink: true } }}
+                    />
+                  </>
+                )}
+
+                {completeTransition === "wait_external" && (
+                  <>
+                    <TextField label="Origen / proveedor / persona" value={waitSource} onChange={(event) => setWaitSource(event.target.value)} />
+                    <TextField label="Detalle de la espera" multiline minRows={2} value={waitDetail} onChange={(event) => setWaitDetail(event.target.value)} />
+                    <TextField label="Referencia externa" value={waitReference} onChange={(event) => setWaitReference(event.target.value)} />
+                  </>
+                )}
+
+                {completeTransition === "finish_flow" && (
+                  <TextField label="Motivo de cierre" multiline minRows={2} value={finishReason} onChange={(event) => setFinishReason(event.target.value)} />
+                )}
+
+                <Button component="label" variant="outlined" color="inherit" disabled={completing}>
+                  Adjuntar archivos (opcional)
+                  <input hidden multiple type="file" onChange={(event) => void handleAttachmentSelection(event.target.files, "complete")} />
+                </Button>
+                {completeAttachments.length > 0 && (
+                  <Stack spacing={0.5}>
+                    {completeAttachments.map((item, index) => (
+                      <Typography key={`${item.nombre}-${index}`} variant="body2" color="text.secondary">
+                        {item.nombre} ({Math.round(item.size_bytes / 1024)} KB)
+                      </Typography>
+                    ))}
+                  </Stack>
+                )}
               </Stack>
-            )}
+            </Collapse>
+
             {completeError && <Alert severity="error">{completeError}</Alert>}
           </Stack>
         </DialogContent>
@@ -618,20 +649,27 @@ export function StepDetailPanel({
         <DialogContent dividers>
           <Stack spacing={2}>
             <TextField label="¿Qué respuesta llegó? *" multiline minRows={3} value={externalComment} onChange={(event) => setExternalComment(event.target.value)} disabled={registeringExternal} />
-            <TextField label="Origen" value={externalSource} onChange={(event) => setExternalSource(event.target.value)} disabled={registeringExternal} />
-            <Button component="label" variant="outlined" color="inherit" disabled={registeringExternal}>
-              Adjuntar archivos (opcional)
-              <input hidden multiple type="file" onChange={(event) => void handleAttachmentSelection(event.target.files, "external")} />
+            <Button variant="text" color="inherit" onClick={() => setExternalAdvancedOpen((value) => !value)}>
+              {externalAdvancedOpen ? "Ocultar opciones avanzadas" : "Más detalle (opcional)"}
             </Button>
-            {externalAttachments.length > 0 && (
-              <Stack spacing={0.5}>
-                {externalAttachments.map((item, index) => (
-                  <Typography key={`${item.nombre}-${index}`} variant="body2" color="text.secondary">
-                    {item.nombre} ({Math.round(item.size_bytes / 1024)} KB)
-                  </Typography>
-                ))}
+            <Collapse in={externalAdvancedOpen}>
+              <Stack spacing={1.5}>
+                <TextField label="Origen" value={externalSource} onChange={(event) => setExternalSource(event.target.value)} disabled={registeringExternal} />
+                <Button component="label" variant="outlined" color="inherit" disabled={registeringExternal}>
+                  Adjuntar archivos (opcional)
+                  <input hidden multiple type="file" onChange={(event) => void handleAttachmentSelection(event.target.files, "external")} />
+                </Button>
+                {externalAttachments.length > 0 && (
+                  <Stack spacing={0.5}>
+                    {externalAttachments.map((item, index) => (
+                      <Typography key={`${item.nombre}-${index}`} variant="body2" color="text.secondary">
+                        {item.nombre} ({Math.round(item.size_bytes / 1024)} KB)
+                      </Typography>
+                    ))}
+                  </Stack>
+                )}
               </Stack>
-            )}
+            </Collapse>
             {externalError && <Alert severity="error">{externalError}</Alert>}
           </Stack>
         </DialogContent>
@@ -659,7 +697,11 @@ export function StepDetailPanel({
             <ToggleButtonGroup
               exclusive
               value={resolveTransition}
-              onChange={(_, value: "next_task" | "finish_flow" | null) => value && setResolveTransition(value)}
+              onChange={(_, value: "next_task" | "finish_flow" | null) => {
+                if (!value) return;
+                setResolveTransition(value);
+                setResolveAdvancedOpen(false);
+              }}
               fullWidth
             >
               <ToggleButton value="next_task">Crear próxima tarea</ToggleButton>
@@ -673,35 +715,48 @@ export function StepDetailPanel({
             {resolveTransition === "next_task" && (
               <Stack spacing={1.5}>
                 <TextField label="Nombre de la próxima tarea *" value={resolveNextTaskName} onChange={(event) => setResolveNextTaskName(event.target.value)} />
-                <TextField label="Detalle / contexto" multiline minRows={2} value={resolveNextTaskDescription} onChange={(event) => setResolveNextTaskDescription(event.target.value)} />
-                <TextField label="Asignado a" value={resolveNextTaskAssignee} onChange={(event) => setResolveNextTaskAssignee(event.target.value)} />
-                <TextField
-                  label="Fecha de vencimiento"
-                  type="datetime-local"
-                  value={resolveNextTaskDueDate}
-                  onChange={(event) => setResolveNextTaskDueDate(event.target.value)}
-                  slotProps={{ inputLabel: { shrink: true } }}
-                />
               </Stack>
             )}
 
-            {resolveTransition === "finish_flow" && (
-              <TextField label="Motivo de cierre" multiline minRows={2} value={resolveFinishReason} onChange={(event) => setResolveFinishReason(event.target.value)} />
-            )}
-
-            <Button component="label" variant="outlined" color="inherit" disabled={resolving}>
-              Adjuntar archivos (opcional)
-              <input hidden multiple type="file" onChange={(event) => void handleAttachmentSelection(event.target.files, "resolve")} />
+            <Button variant="text" color="inherit" onClick={() => setResolveAdvancedOpen((value) => !value)}>
+              {resolveAdvancedOpen ? "Ocultar opciones avanzadas" : "Más detalle (opcional)"}
             </Button>
-            {resolveAttachments.length > 0 && (
-              <Stack spacing={0.5}>
-                {resolveAttachments.map((item, index) => (
-                  <Typography key={`${item.nombre}-${index}`} variant="body2" color="text.secondary">
-                    {item.nombre} ({Math.round(item.size_bytes / 1024)} KB)
-                  </Typography>
-                ))}
+
+            <Collapse in={resolveAdvancedOpen}>
+              <Stack spacing={1.5}>
+                {resolveTransition === "next_task" && (
+                  <>
+                    <TextField label="Detalle / contexto" multiline minRows={2} value={resolveNextTaskDescription} onChange={(event) => setResolveNextTaskDescription(event.target.value)} />
+                    <TextField label="Asignado a" value={resolveNextTaskAssignee} onChange={(event) => setResolveNextTaskAssignee(event.target.value)} />
+                    <TextField
+                      label="Fecha de vencimiento"
+                      type="datetime-local"
+                      value={resolveNextTaskDueDate}
+                      onChange={(event) => setResolveNextTaskDueDate(event.target.value)}
+                      slotProps={{ inputLabel: { shrink: true } }}
+                    />
+                  </>
+                )}
+
+                {resolveTransition === "finish_flow" && (
+                  <TextField label="Motivo de cierre" multiline minRows={2} value={resolveFinishReason} onChange={(event) => setResolveFinishReason(event.target.value)} />
+                )}
+
+                <Button component="label" variant="outlined" color="inherit" disabled={resolving}>
+                  Adjuntar archivos (opcional)
+                  <input hidden multiple type="file" onChange={(event) => void handleAttachmentSelection(event.target.files, "resolve")} />
+                </Button>
+                {resolveAttachments.length > 0 && (
+                  <Stack spacing={0.5}>
+                    {resolveAttachments.map((item, index) => (
+                      <Typography key={`${item.nombre}-${index}`} variant="body2" color="text.secondary">
+                        {item.nombre} ({Math.round(item.size_bytes / 1024)} KB)
+                      </Typography>
+                    ))}
+                  </Stack>
+                )}
               </Stack>
-            )}
+            </Collapse>
             {resolveError && <Alert severity="error">{resolveError}</Alert>}
           </Stack>
         </DialogContent>

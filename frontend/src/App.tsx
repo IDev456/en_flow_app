@@ -9,7 +9,6 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-
 
 import { NotFoundPage } from "./features/flow/pages/NotFoundPage";
 import { TriggerCreateModal } from "./features/flow/components/TriggerCreateModal";
-import { DashboardPage } from "./features/flow/pages/DashboardPage";
 import { StepDetailPage } from "./features/flow/pages/StepDetailPage";
 import { TriggerCreatePage } from "./features/flow/pages/TriggerCreatePage";
 import { TriggerDetailPage } from "./features/flow/pages/TriggerDetailPage";
@@ -76,7 +75,7 @@ function AppLayout({ mode, onToggleMode }: AppLayoutProps) {
         }}
       >
         <Container maxWidth="xl">
-          <Toolbar disableGutters sx={{ minHeight: 80, gap: 2, justifyContent: "space-between" }}>
+          <Toolbar disableGutters sx={{ minHeight: { xs: 70, md: 80 }, gap: 2, justifyContent: "space-between" }}>
             <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
               <Box
                 sx={{
@@ -98,7 +97,7 @@ function AppLayout({ mode, onToggleMode }: AppLayoutProps) {
                   En Flow
                 </Typography>
                 <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                  Bandeja diaria de trabajo
+                  Continuidad operativa
                 </Typography>
               </Box>
             </Stack>
@@ -108,11 +107,6 @@ function AppLayout({ mode, onToggleMode }: AppLayoutProps) {
               spacing={1.25}
               sx={{ alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end", rowGap: 0.5 }}
             >
-              <Button variant="text" color="inherit" onClick={() => navigate("/board")}>
-                <Box component="span" sx={{ fontWeight: isRouteActive("/board") ? 800 : 600 }}>
-                  Bandeja
-                </Box>
-              </Button>
               <Button variant="text" color="inherit" onClick={() => navigate("/flows")}>
                 <Box component="span" sx={{ fontWeight: isRouteActive("/flows") ? 800 : 600 }}>
                   Flows
@@ -158,9 +152,9 @@ function AppLayout({ mode, onToggleMode }: AppLayoutProps) {
       >
         <Box>
           <Routes>
-            <Route path="/" element={<Navigate to="/board" replace />} />
-            <Route path="/dashboard" element={<Navigate to="/board" replace />} />
-            <Route path="/board" element={<DashboardPage />} />
+            <Route path="/" element={<Navigate to="/flows" replace />} />
+            <Route path="/dashboard" element={<Navigate to="/flows" replace />} />
+            <Route path="/board" element={<Navigate to="/flows" replace />} />
             <Route path="/flows" element={<TriggerListPage defaultView="flows" lockView title="Flows" />} />
             <Route path="/requirements" element={<TriggerListPage defaultView="requirements" lockView title="Requerimientos" />} />
             <Route path="/triggers" element={<Navigate to="/requirements" replace />} />
