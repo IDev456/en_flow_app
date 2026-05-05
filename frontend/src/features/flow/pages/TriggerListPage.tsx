@@ -114,6 +114,9 @@ export function TriggerListPage() {
   }
 
   function getWorkflowDisplayStatus(workflow: WorkflowDetail, trigger: TriggerDetail) {
+    if (workflow.estado === "esperando_respuesta") {
+      return "esperando_respuesta";
+    }
     if (workflow.estado === "finalizado" || workflow.estado === "cancelado") {
       return workflow.estado;
     }
@@ -246,7 +249,7 @@ export function TriggerListPage() {
     { label: "Requerimientos", value: triggers.length, helper: "Total cargado en la bandeja operativa" },
     { label: "Flows activos", value: activeFlows, helper: "En proceso, espera operativa o espera externa" },
     { label: "Flows completados", value: flowCounts.done, helper: "Finalizados o cancelados" },
-    { label: "Pasos creados", value: totalCreatedSteps, helper: "Total de pasos de todos los flows" },
+    { label: "Tareas creadas", value: totalCreatedSteps, helper: "Total de tareas de todos los flows" },
   ];
 
   const currentRowsCount = viewMode === "requirements" ? filteredRequirementRows.length : filteredFlowRows.length;
@@ -381,7 +384,7 @@ export function TriggerListPage() {
                             <TableCell sx={{ width: "56%" }}>Detalle</TableCell>
                             <TableCell sx={{ width: "22%" }}>Solicitante</TableCell>
                             <TableCell sx={{ width: "10%" }}>Flows</TableCell>
-                            <TableCell sx={{ width: "12%" }}>Pasos totales</TableCell>
+                            <TableCell sx={{ width: "12%" }}>Tareas totales</TableCell>
                           </TableRow>
                         </TableHead>
                         <TableBody>
@@ -411,7 +414,7 @@ export function TriggerListPage() {
                                 </TableCell>
                                 <TableCell>{getSecondaryRequester(trigger)}</TableCell>
                                 <TableCell>{trigger.workflow_ids.length}</TableCell>
-                                <TableCell>{stepCount === 1 ? "1 paso" : `${stepCount} pasos`}</TableCell>
+                                <TableCell>{stepCount === 1 ? "1 tarea" : `${stepCount} tareas`}</TableCell>
                               </TableRow>
                             );
                           })}
@@ -443,7 +446,7 @@ export function TriggerListPage() {
                                 </Typography>
                                 <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
                                   <Chip label={`${trigger.workflow_ids.length} flows`} size="small" variant="outlined" />
-                                  <Chip label={stepCount === 1 ? "1 paso" : `${stepCount} pasos`} size="small" variant="outlined" />
+                                  <Chip label={stepCount === 1 ? "1 tarea" : `${stepCount} tareas`} size="small" variant="outlined" />
                                 </Stack>
                               </Stack>
                             </CardContent>
@@ -469,9 +472,9 @@ export function TriggerListPage() {
                         <TableHead>
                           <TableRow>
                             <TableCell sx={{ width: "40%" }}>Requerimiento</TableCell>
-                            <TableCell sx={{ width: "16%" }}>Workflow</TableCell>
+                            <TableCell sx={{ width: "16%" }}>Flow</TableCell>
                             <TableCell sx={{ width: "18%" }}>Solicitante</TableCell>
-                            <TableCell sx={{ width: "10%" }}>Pasos</TableCell>
+                            <TableCell sx={{ width: "10%" }}>Tareas</TableCell>
                             <TableCell sx={{ width: "16%" }}>Estado</TableCell>
                           </TableRow>
                         </TableHead>
@@ -490,7 +493,7 @@ export function TriggerListPage() {
                               </TableCell>
                               <TableCell>{row.workflowId.slice(0, 8)}</TableCell>
                               <TableCell>{getSecondaryRequester(row.trigger)}</TableCell>
-                              <TableCell>{row.workflow.steps.length === 1 ? "1 paso" : `${row.workflow.steps.length} pasos`}</TableCell>
+                              <TableCell>{row.workflow.steps.length === 1 ? "1 tarea" : `${row.workflow.steps.length} tareas`}</TableCell>
                               <TableCell>
                                 <StatusBadge value={getWorkflowDisplayStatus(row.workflow, row.trigger)} />
                               </TableCell>
@@ -507,10 +510,10 @@ export function TriggerListPage() {
                             <Stack spacing={1}>
                               <Typography sx={{ fontWeight: 700 }}>{getPrimaryDetail(row.trigger)}</Typography>
                               <Typography variant="body2" color="text.secondary">
-                                Workflow {row.workflowId.slice(0, 8)} · {getSecondaryRequester(row.trigger)}
+                                Flow {row.workflowId.slice(0, 8)} · {getSecondaryRequester(row.trigger)}
                               </Typography>
                               <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", gap: 1 }}>
-                                <Chip size="small" variant="outlined" label={row.workflow.steps.length === 1 ? "1 paso" : `${row.workflow.steps.length} pasos`} />
+                                <Chip size="small" variant="outlined" label={row.workflow.steps.length === 1 ? "1 tarea" : `${row.workflow.steps.length} tareas`} />
                                 <StatusBadge value={getWorkflowDisplayStatus(row.workflow, row.trigger)} />
                               </Stack>
                             </Stack>

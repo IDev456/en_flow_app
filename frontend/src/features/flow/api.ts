@@ -4,6 +4,7 @@ import type {
   StepComment,
   StepCommentInput,
   StepCompleteInput,
+  ExternalResponseDecisionInput,
   ExternalEvent,
   ExternalEventCreateInput,
   StepHistoryEntry,
@@ -87,6 +88,10 @@ export function getStepHistory(stepId: string) {
 
 export function registerExternalEvent(stepId: string, input: ExternalEventCreateInput) {
   return apiPost<ExternalEvent>(`/steps/${stepId}/external-events`, input);
+}
+
+export function resolveExternalResponse(stepId: string, input: ExternalResponseDecisionInput) {
+  return apiPost<Step>(`/steps/${stepId}/external-response/resolve`, input);
 }
 
 export function listStepExternalEvents(stepId: string) {

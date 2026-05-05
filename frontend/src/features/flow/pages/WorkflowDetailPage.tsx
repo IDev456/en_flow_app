@@ -17,6 +17,7 @@ import {
   completeStep,
   getStepComments,
   registerExternalEvent,
+  resolveExternalResponse,
   getStepHistory,
   getTrigger,
   getWorkflow,
@@ -26,7 +27,17 @@ import { StatusBadge } from "../components/StatusBadge";
 import { StepDetailPanel } from "../components/StepDetailPanel";
 import { WorkflowGraph } from "../components/WorkflowGraph";
 import { WorkflowVariantSwitcher, type WorkflowVariant } from "../components/WorkflowVariantSwitcher";
-import type { ExternalEventCreateInput, Step, StepComment, StepHistoryEntry, StepJournalEntryInput, TriggerDetail, WorkflowDetail } from "../types";
+import type {
+  ExternalEventCreateInput,
+  ExternalResponseDecisionInput,
+  Step,
+  StepComment,
+  StepCompleteInput,
+  StepHistoryEntry,
+  StepJournalEntryInput,
+  TriggerDetail,
+  WorkflowDetail,
+} from "../types";
 import { DEFAULT_ACTOR, formatDate } from "../utils";
 
 export function WorkflowDetailPage() {
@@ -81,7 +92,7 @@ export function WorkflowDetailPage() {
       setSelectedStepId(nextSelectedStepId);
       setTrigger(await getTrigger(workflowData.trigger_id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo cargar el workflow");
+      setError(err instanceof Error ? err.message : "No se pudo cargar el flow");
     } finally {
       setLoading(false);
     }
@@ -94,7 +105,7 @@ export function WorkflowDetailPage() {
       setStepComments(comments);
       setStepHistory(history);
     } catch (err) {
-      setPanelError(err instanceof Error ? err.message : "No se pudo cargar la bitacora del paso");
+      setPanelError(err instanceof Error ? err.message : "No se pudo cargar la bitacora de la tarea");
     }
   }
 
@@ -118,29 +129,6 @@ export function WorkflowDetailPage() {
       return;
     }
 
-    if (input.estado === "completado") {
-      await completeStep(selectedStepId, {
-        usuario: DEFAULT_ACTOR,
-        comentario: input.comentario ?? "",
-        resultado: null,
-        observaciones: null,
-        attachments: input.attachments ?? [],
-        siguiente_paso: input.siguiente_paso
-          ? {
-              nombre: input.siguiente_paso.nombre,
-              descripcion: input.siguiente_paso.descripcion ?? null,
-            }
-          : null,
-        finalizar_workflow: Boolean(input.finalizar_workflow),
-      });
-      const currentWorkflow = await getWorkflow(workflowId);
-      const nextActiveStep = currentWorkflow.steps.find((step) =>
-        ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado)
-      );
-      await refreshAfterStepChange(nextActiveStep?.id ?? selectedStepId);
-      return;
-    }
-
     await updateStepStatus(selectedStepId, {
       estado: input.estado,
       usuario: DEFAULT_ACTOR,
@@ -150,9 +138,27 @@ export function WorkflowDetailPage() {
     await refreshAfterStepChange(selectedStepId);
   }
 
+  async function handleCompleteTask(stepId: string, input: StepCompleteInput) {
+    await completeStep(stepId, input);
+    const currentWorkflow = await getWorkflow(workflowId);
+    const nextActiveStep =
+      currentWorkflow.steps.find((workflowStep) => workflowStep.estado === "activo") ??
+      currentWorkflow.steps.find((workflowStep) => ["espera", "problema", "esperando_respuesta"].includes(workflowStep.estado));
+    await refreshAfterStepChange(nextActiveStep?.id ?? stepId);
+  }
+
   async function handleRegisterExternalEvent(stepId: string, input: ExternalEventCreateInput) {
     await registerExternalEvent(stepId, input);
     await refreshAfterStepChange(stepId);
+  }
+
+  async function handleResolveExternalResponse(stepId: string, input: ExternalResponseDecisionInput) {
+    await resolveExternalResponse(stepId, input);
+    const refreshedWorkflow = await getWorkflow(workflowId);
+    const nextActiveStep =
+      refreshedWorkflow.steps.find((workflowStep) => workflowStep.estado === "activo") ??
+      refreshedWorkflow.steps.find((workflowStep) => ["espera", "problema", "esperando_respuesta"].includes(workflowStep.estado));
+    await refreshAfterStepChange(nextActiveStep?.id ?? stepId);
   }
 
   function handleSelectStep(stepId: string) {
@@ -168,7 +174,7 @@ export function WorkflowDetailPage() {
     return (
       <Stack direction="row" spacing={1.5} sx={{ py: 8, alignItems: "center", justifyContent: "center" }}>
         <CircularProgress size={24} />
-        <Typography color="text.secondary">Cargando workflow...</Typography>
+        <Typography color="text.secondary">Cargando flow...</Typography>
       </Stack>
     );
   }
@@ -178,7 +184,7 @@ export function WorkflowDetailPage() {
   }
 
   if (!workflow) {
-    return <Alert severity="info">Workflow no encontrado.</Alert>;
+    return <Alert severity="info">Flow no encontrado.</Alert>;
   }
 
   const selectedStep: Step | null = workflow.steps.find((step) => step.id === selectedStepId) ?? workflow.steps[0] ?? null;
@@ -201,7 +207,7 @@ export function WorkflowDetailPage() {
         <Link component={RouterLink} underline="hover" color="inherit" to={`/triggers/${workflow.trigger_id}`}>
           {getPrimaryRequirementLabel()}
         </Link>
-        <Typography color="text.primary">Workflow</Typography>
+        <Typography color="text.primary">Flow</Typography>
       </Breadcrumbs>
 
       <Card>
@@ -227,7 +233,7 @@ export function WorkflowDetailPage() {
                 {workflow.fecha_fin && <Typography variant="body2">Cierre: {formatDate(workflow.fecha_fin)}</Typography>}
                 {workflow.objetivo_final && <Typography variant="body2">Objetivo: {workflow.objetivo_final}</Typography>}
                 <Typography variant="body2">
-                  Pasos activos: {workflow.pasos_activos.length > 0 ? workflow.pasos_activos.join(", ") : "sin pasos activos"}
+                  Tareas activas: {workflow.pasos_activos.length > 0 ? workflow.pasos_activos.join(", ") : "sin tareas activas"}
                 </Typography>
               </Stack>
             )}
@@ -252,7 +258,7 @@ export function WorkflowDetailPage() {
                 sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", md: "center" } }}
               >
                 <Box>
-                  <Typography variant="h5">Pasos</Typography>
+                  <Typography variant="h5">Tareas</Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                     Selecciona una tarea para ver su detalle, registrar avance, adjuntar evidencia o cambiar su estado.
                   </Typography>
@@ -284,7 +290,9 @@ export function WorkflowDetailPage() {
             error={panelError}
             onClose={() => setPanelOpen(false)}
             onSubmitJournal={handleSubmitJournal}
+            onCompleteTask={handleCompleteTask}
             onRegisterExternalEvent={(input) => handleRegisterExternalEvent(selectedStep.id, input)}
+            onResolveExternalResponse={(stepId, input) => handleResolveExternalResponse(stepId, input)}
           />
         )}
       </Box>

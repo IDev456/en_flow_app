@@ -118,7 +118,7 @@ export function TriggerDetailPage() {
       } catch {
         setWorkflowsById({});
         setWorkflowLatestCommentById({});
-        setWorkflowsError("No se pudo cargar el detalle de algunos workflows.");
+        setWorkflowsError("No se pudo cargar el detalle de algunos flows.");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cargar el requerimiento");
@@ -175,7 +175,7 @@ export function TriggerDetailPage() {
     if (!trigger) return;
 
     if (!newWorkflowFirstDescription.trim()) {
-      setNewWorkflowError("Debes indicar la descripcion del primer paso.");
+      setNewWorkflowError("Debes indicar la descripcion de la tarea inicial.");
       return;
     }
 
@@ -187,18 +187,18 @@ export function TriggerDetailPage() {
         objetivo_final: trigger.descripcion ?? "Gestionar requerimiento",
         resolucion_esperada: "Flujo completado con validacion final",
         primer_paso: {
-          nombre: "Paso inicial",
+          nombre: "Tarea inicial",
           descripcion: newWorkflowFirstDescription.trim(),
           asignado_a: DEFAULT_ACTOR,
           fecha_vencimiento: null,
         },
       });
-      setNewWorkflowSuccess("Nuevo workflow asociado creado.");
+      setNewWorkflowSuccess("Nuevo flow asociado creado.");
       setNewWorkflowFirstDescription("");
       await loadTrigger();
       navigate(`/workflows/${newWorkflow.id}`);
     } catch (err) {
-      setNewWorkflowError(err instanceof Error ? err.message : "No se pudo crear el nuevo workflow");
+      setNewWorkflowError(err instanceof Error ? err.message : "No se pudo crear el nuevo flow");
     } finally {
       setCreatingWorkflow(false);
     }
@@ -212,11 +212,11 @@ export function TriggerDetailPage() {
   }
 
   function getWorkflowDisplayStatus(workflow: WorkflowDetail) {
+    if (workflow.estado === "esperando_respuesta") {
+      return "esperando_respuesta";
+    }
     if (workflow.estado === "finalizado" || workflow.estado === "cancelado") {
       return workflow.estado;
-    }
-    if (workflow.steps.some((step) => step.estado === "esperando_respuesta")) {
-      return "esperando_respuesta";
     }
     if (workflow.steps.some((step) => step.estado === "espera" || step.estado === "problema")) {
       return "espera";
@@ -359,25 +359,25 @@ export function TriggerDetailPage() {
           <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
             <Stack spacing={2.5}>
               <Stack spacing={0.75}>
-                <Typography variant="h5">Workflows asociados</Typography>
+                <Typography variant="h5">Flows asociados</Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Crea y consulta workflows vinculados a este requerimiento.
+                  Crea y consulta flows vinculados a este requerimiento.
                 </Typography>
               </Stack>
 
               {trigger.workflow_activo_id ? (
                 <Stack spacing={2}>
-                  <Alert severity="info">Hay al menos un workflow activo asociado a este requerimiento.</Alert>
+                  <Alert severity="info">Hay al menos un flow activo asociado a este requerimiento.</Alert>
                 </Stack>
               ) : (
                 <Stack spacing={2}>
-                  <Typography color="text.secondary">No hay workflow activo en este momento.</Typography>
+                  <Typography color="text.secondary">No hay flow activo en este momento.</Typography>
                 </Stack>
               )}
 
               <Stack spacing={1.25}>
                 <Typography variant="subtitle2" color="text.secondary">
-                  Crear nuevo workflow asociado
+                  Crear nuevo flow asociado
                 </Typography>
                 <TextField
                   label="Tarea inicial del flow *"
@@ -394,7 +394,7 @@ export function TriggerDetailPage() {
                   onClick={() => void handleCreateWorkflow()}
                   disabled={creatingWorkflow}
                 >
-                  {creatingWorkflow ? "Creando workflow..." : "Crear nuevo workflow"}
+                  {creatingWorkflow ? "Creando flow..." : "Crear nuevo flow"}
                 </Button>
                 {newWorkflowError && <Alert severity="error">{newWorkflowError}</Alert>}
                 {newWorkflowSuccess && <Alert severity="success">{newWorkflowSuccess}</Alert>}
@@ -434,14 +434,14 @@ export function TriggerDetailPage() {
                               sx={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 1 }}
                             >
                               <Typography sx={{ fontWeight: 700 }}>
-                                Workflow {index + 1}
+                                Flow {index + 1}
                               </Typography>
                               {workflowsById[workflowId] && <StatusBadge value={getWorkflowDisplayStatus(workflowsById[workflowId])} />}
                             </Stack>
                             {workflowsById[workflowId] ? (
                               <>
                                 <Typography variant="caption" color="text.secondary">
-                                  Pasos: {workflowsById[workflowId].steps.length}
+                                  Tareas: {workflowsById[workflowId].steps.length}
                                 </Typography>
                                 {countExternalWaitingSteps(workflowsById[workflowId]) > 0 && (
                                   <Typography variant="caption" color="info.light">

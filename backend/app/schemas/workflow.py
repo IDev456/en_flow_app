@@ -15,6 +15,7 @@ class TriggerStatus(StrEnum):
 class WorkflowStatus(StrEnum):
     PENDIENTE = "pendiente"
     EN_PROCESO = "en_proceso"
+    ESPERANDO_RESPUESTA = "esperando_respuesta"
     FINALIZADO = "finalizado"
     CANCELADO = "cancelado"
 
@@ -25,6 +26,12 @@ class StepStatus(StrEnum):
     PROBLEMA = "problema"
     ESPERANDO_RESPUESTA = "esperando_respuesta"
     COMPLETADO = "completado"
+
+
+class StepTransitionType(StrEnum):
+    NEXT_TASK = "next_task"
+    WAIT_EXTERNAL = "wait_external"
+    FINISH_FLOW = "finish_flow"
 
 
 class TriggerBase(BaseModel):
@@ -196,15 +203,74 @@ class StepStatusUpdate(BaseModel):
     attachments: list[AttachmentBase] = Field(default_factory=list)
 
 
+class NextTaskInput(BaseModel):
+    nombre: str = Field(min_length=1, max_length=120)
+    descripcion: str | None = Field(default=None, max_length=1000)
+    asignado_a: str | None = Field(default=None, max_length=120)
+    fecha_vencimiento: datetime | None = None
+
+
+class ExternalWaitInput(BaseModel):
+    que_se_espera: str = Field(min_length=1, max_length=200)
+    origen: str = Field(min_length=1, max_length=120)
+    detalle: str | None = Field(default=None, max_length=1000)
+    referencia_externa: str | None = Field(default=None, max_length=200)
+    attachments: list[AttachmentBase] = Field(default_factory=list)
+
+
+class FinishFlowInput(BaseModel):
+    resultado_final: str | None = Field(default=None, max_length=1000)
+    motivo_cierre: str | None = Field(default=None, max_length=1000)
+    attachments: list[AttachmentBase] = Field(default_factory=list)
+
+
 class StepCompletePayload(BaseModel):
     usuario: str = Field(min_length=1, max_length=120)
-    comentario: str = Field(min_length=3, max_length=1000)
-    resultado: str | None = Field(default=None, max_length=1000)
+    resultado_cierre: str | None = Field(default=None, max_length=1000)
+    comentario: str | None = Field(default=None, max_length=1000)
     observaciones: str | None = Field(default=None, max_length=1000)
-    # Compatibilidad: la logica DAG prioriza auto-activacion por plantilla.
-    siguiente_paso: StepCreate | None = None
-    finalizar_workflow: bool = False
+    transition_type: StepTransitionType
+    next_task: NextTaskInput | None = None
+    external_wait: ExternalWaitInput | None = None
+    finish_data: FinishFlowInput | None = None
     attachments: list[AttachmentBase] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_transition(self) -> "StepCompletePayload":
+        closing_note = (self.resultado_cierre or self.comentario or "").strip()
+        if len(closing_note) < 3:
+            raise ValueError("Debes indicar un resultado de cierre de al menos 3 caracteres")
+
+        if self.transition_type == StepTransitionType.NEXT_TASK and self.next_task is None:
+            raise ValueError("Debes indicar la proxima tarea")
+        if self.transition_type == StepTransitionType.WAIT_EXTERNAL and self.external_wait is None:
+            raise ValueError("Debes indicar la informacion de espera externa")
+        if self.transition_type == StepTransitionType.FINISH_FLOW and self.finish_data is None:
+            raise ValueError("Debes indicar los datos de cierre del flow")
+        return self
+
+
+class ExternalResponseDecisionPayload(BaseModel):
+    usuario: str = Field(min_length=1, max_length=120)
+    resultado_cierre: str | None = Field(default=None, max_length=1000)
+    comentario: str | None = Field(default=None, max_length=1000)
+    transition_type: StepTransitionType
+    next_task: NextTaskInput | None = None
+    finish_data: FinishFlowInput | None = None
+    attachments: list[AttachmentBase] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_transition(self) -> "ExternalResponseDecisionPayload":
+        closing_note = (self.resultado_cierre or self.comentario or "").strip()
+        if len(closing_note) < 3:
+            raise ValueError("Debes indicar un resultado de cierre de al menos 3 caracteres")
+        if self.transition_type not in {StepTransitionType.NEXT_TASK, StepTransitionType.FINISH_FLOW}:
+            raise ValueError("Luego de una respuesta externa solo puedes crear proxima tarea o finalizar flow")
+        if self.transition_type == StepTransitionType.NEXT_TASK and self.next_task is None:
+            raise ValueError("Debes indicar la proxima tarea")
+        if self.transition_type == StepTransitionType.FINISH_FLOW and self.finish_data is None:
+            raise ValueError("Debes indicar los datos de cierre del flow")
+        return self
 
 
 class CommentCreate(BaseModel):
@@ -215,7 +281,7 @@ class CommentCreate(BaseModel):
     @model_validator(mode="after")
     def validate_content(self) -> "CommentCreate":
         if not (self.comentario and self.comentario.strip()) and not self.attachments:
-            raise ValueError("Debes enviar un comentario o al menos un adjunto")
+            raise ValueError("Debes enviar un registro o al menos un adjunto")
         return self
 
 

@@ -1,6 +1,7 @@
 export type TriggerStatus = "nuevo" | "en_proceso" | "resuelto" | "cancelado";
-export type WorkflowStatus = "pendiente" | "en_proceso" | "finalizado" | "cancelado";
+export type WorkflowStatus = "pendiente" | "en_proceso" | "esperando_respuesta" | "finalizado" | "cancelado";
 export type StepStatus = "activo" | "espera" | "problema" | "esperando_respuesta" | "completado";
+export type StepTransitionType = "next_task" | "wait_external" | "finish_flow";
 
 export type Attachment = {
   id: string;
@@ -151,20 +152,35 @@ export type WorkflowStartInput = {
 
 export type StepCompleteInput = {
   usuario: string;
-  comentario: string;
-  resultado: string | null;
+  resultado_cierre: string;
+  comentario?: string | null;
   observaciones: string | null;
+  transition_type: StepTransitionType;
+  next_task?: NextTaskInput | null;
+  external_wait?: ExternalWaitInput | null;
+  finish_data?: FinishFlowInput | null;
   attachments?: AttachmentInput[];
-  siguiente_paso?: {
-    nombre: string;
-    descripcion?: string | null;
-    tipo?: string;
-    requiere_aprobacion?: boolean;
-    puede_tener_comentarios?: boolean;
-    asignado_a?: string | null;
-    fecha_vencimiento?: string | null;
-  } | null;
-  finalizar_workflow?: boolean;
+};
+
+export type NextTaskInput = {
+  nombre: string;
+  descripcion?: string | null;
+  asignado_a?: string | null;
+  fecha_vencimiento?: string | null;
+};
+
+export type ExternalWaitInput = {
+  que_se_espera: string;
+  origen: string;
+  detalle?: string | null;
+  referencia_externa?: string | null;
+  attachments?: AttachmentInput[];
+};
+
+export type FinishFlowInput = {
+  resultado_final?: string | null;
+  motivo_cierre?: string | null;
+  attachments?: AttachmentInput[];
 };
 
 export type StepStatusUpdateInput = {
@@ -182,13 +198,8 @@ export type StepCommentInput = {
 
 export type StepJournalEntryInput = {
   comentario: string | null;
-  estado?: Exclude<StepStatus, "activo"> | null;
+  estado?: Extract<StepStatus, "espera" | "problema"> | null;
   attachments?: AttachmentInput[];
-  siguiente_paso?: {
-    nombre: string;
-    descripcion?: string | null;
-  } | null;
-  finalizar_workflow?: boolean;
 };
 
 export type ExternalEventCreateInput = {
@@ -198,4 +209,14 @@ export type ExternalEventCreateInput = {
   comentario?: string | null;
   attachments?: AttachmentInput[];
   registrado_por?: string;
+};
+
+export type ExternalResponseDecisionInput = {
+  usuario: string;
+  resultado_cierre: string;
+  comentario?: string | null;
+  transition_type: Extract<StepTransitionType, "next_task" | "finish_flow">;
+  next_task?: NextTaskInput | null;
+  finish_data?: FinishFlowInput | null;
+  attachments?: AttachmentInput[];
 };

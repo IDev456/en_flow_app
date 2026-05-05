@@ -4,20 +4,20 @@ export const DEFAULT_ACTOR = "sistema";
 
 const statusPresentationMap: Record<string, { label: string; tone: string }> = {
   nuevo: { label: "nuevo", tone: "espera" },
-  pendiente: { label: "en espera", tone: "espera" },
+  pendiente: { label: "pendiente", tone: "espera" },
   en_proceso: { label: "en proceso", tone: "en_proceso" },
-  resuelto: { label: "finalizado", tone: "finalizado" },
+  resuelto: { label: "resuelto", tone: "finalizado" },
   cancelado: { label: "cancelado", tone: "cancelado" },
   activo: { label: "en proceso", tone: "en_proceso" },
   espera: { label: "en espera", tone: "espera" },
   esperando_respuesta: { label: "esperando respuesta", tone: "espera_externa" },
-  completado: { label: "completado", tone: "completado" },
-  problema: { label: "problema", tone: "problema" },
+  completado: { label: "completada", tone: "completado" },
+  problema: { label: "con problema", tone: "problema" },
   finalizado: { label: "finalizado", tone: "finalizado" }
 };
 
 export const stepStatusOptions: Array<{
-  value: Exclude<StepStatus, "activo">;
+  value: Extract<StepStatus, "espera" | "problema">;
   label: string;
   requiresNote: boolean;
   placeholder: string;
@@ -29,10 +29,10 @@ export const stepStatusOptions: Array<{
     placeholder: "Describe por que la tarea queda pausada y que condicion falta para retomarla..."
   },
   {
-    value: "completado",
-    label: "completar tarea",
+    value: "problema",
+    label: "registrar problema",
     requiresNote: true,
-    placeholder: "Resume el resultado final y cualquier detalle relevante del cierre del paso..."
+    placeholder: "Describe el problema detectado y que hace falta para resolverlo..."
   }
 ];
 

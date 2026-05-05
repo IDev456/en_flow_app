@@ -2,9 +2,26 @@ import { useEffect, useState } from "react";
 import { Alert, Breadcrumbs, CircularProgress, Link, Stack, Typography } from "@mui/material";
 import { Link as RouterLink, useParams } from "react-router-dom";
 
-import { addStepComment, completeStep, getStep, getStepComments, getStepHistory, registerExternalEvent, updateStepStatus } from "../api";
+import {
+  addStepComment,
+  completeStep,
+  getStep,
+  getStepComments,
+  getStepHistory,
+  registerExternalEvent,
+  resolveExternalResponse,
+  updateStepStatus,
+} from "../api";
 import { StepDetailPanel } from "../components/StepDetailPanel";
-import type { ExternalEventCreateInput, Step, StepComment, StepHistoryEntry, StepJournalEntryInput } from "../types";
+import type {
+  ExternalEventCreateInput,
+  ExternalResponseDecisionInput,
+  Step,
+  StepComment,
+  StepCompleteInput,
+  StepHistoryEntry,
+  StepJournalEntryInput,
+} from "../types";
 import { DEFAULT_ACTOR } from "../utils";
 
 export function StepDetailPage() {
@@ -32,7 +49,7 @@ export function StepDetailPage() {
       setComments(commentsData);
       setHistory(historyData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo cargar el paso");
+      setError(err instanceof Error ? err.message : "No se pudo cargar la tarea");
     } finally {
       setLoading(false);
     }
@@ -51,25 +68,6 @@ export function StepDetailPage() {
       return;
     }
 
-    if (input.estado === "completado") {
-      await completeStep(step.id, {
-        usuario: DEFAULT_ACTOR,
-        comentario: input.comentario ?? "",
-        resultado: null,
-        observaciones: null,
-        attachments: input.attachments ?? [],
-        siguiente_paso: input.siguiente_paso
-          ? {
-              nombre: input.siguiente_paso.nombre,
-              descripcion: input.siguiente_paso.descripcion ?? null,
-            }
-          : null,
-        finalizar_workflow: Boolean(input.finalizar_workflow),
-      });
-      await loadStepData();
-      return;
-    }
-
     await updateStepStatus(step.id, {
       estado: input.estado,
       usuario: DEFAULT_ACTOR,
@@ -79,9 +77,19 @@ export function StepDetailPage() {
     await loadStepData();
   }
 
+  async function handleCompleteTask(stepId: string, input: StepCompleteInput) {
+    await completeStep(stepId, input);
+    await loadStepData();
+  }
+
   async function handleRegisterExternal(input: ExternalEventCreateInput) {
     if (!step) return;
     await registerExternalEvent(step.id, input);
+    await loadStepData();
+  }
+
+  async function handleResolveExternal(stepId: string, input: ExternalResponseDecisionInput) {
+    await resolveExternalResponse(stepId, input);
     await loadStepData();
   }
 
@@ -106,10 +114,10 @@ export function StepDetailPage() {
         </Link>
         {step && (
           <Link component={RouterLink} underline="hover" color="inherit" to={`/workflows/${step.workflow_id}`}>
-            Workflow
+            Flow
           </Link>
         )}
-        <Typography color="text.primary">Paso</Typography>
+        <Typography color="text.primary">Tarea</Typography>
       </Breadcrumbs>
 
       <StepDetailPanel
@@ -120,7 +128,9 @@ export function StepDetailPage() {
         standalone
         error={error}
         onSubmitJournal={handleSubmitJournal}
+        onCompleteTask={handleCompleteTask}
         onRegisterExternalEvent={handleRegisterExternal}
+        onResolveExternalResponse={handleResolveExternal}
       />
     </Stack>
   );

@@ -5,6 +5,7 @@ from app.core.errors import BusinessRuleError, EntityNotFoundError
 from app.schemas.workflow import (
     CommentCreate,
     CommentPublic,
+    ExternalResponseDecisionPayload,
     ExternalEventCreate,
     ExternalEventPublic,
     StepCompletePayload,
@@ -91,6 +92,20 @@ def register_external_event(
 ) -> ExternalEventPublic:
     try:
         return service.register_external_event(step_id, payload)
+    except EntityNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except BusinessRuleError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/{step_id}/external-response/resolve", response_model=StepInstancePublic)
+def resolve_external_response(
+    step_id: str,
+    payload: ExternalResponseDecisionPayload,
+    service: WorkflowService = Depends(get_workflow_service),
+) -> StepInstancePublic:
+    try:
+        return service.resolve_external_response(step_id, payload)
     except EntityNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except BusinessRuleError as exc:

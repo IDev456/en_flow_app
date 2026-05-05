@@ -17,11 +17,23 @@ import {
   MenuItem,
   Stack,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
 
-import type { AttachmentInput, ExternalEventCreateInput, Step, StepComment, StepHistoryEntry, StepJournalEntryInput } from "../types";
+import type {
+  AttachmentInput,
+  ExternalEventCreateInput,
+  ExternalResponseDecisionInput,
+  Step,
+  StepComment,
+  StepCompleteInput,
+  StepHistoryEntry,
+  StepJournalEntryInput,
+  StepTransitionType,
+} from "../types";
 import { DEFAULT_ACTOR } from "../utils";
 import { Journal } from "./Journal";
 import { StatusBadge } from "./StatusBadge";
@@ -36,7 +48,9 @@ type StepDetailPanelProps = {
   onClose?: () => void;
   error?: string | null;
   onSubmitJournal: (input: StepJournalEntryInput) => Promise<void>;
+  onCompleteTask: (stepId: string, input: StepCompleteInput) => Promise<void>;
   onRegisterExternalEvent?: (input: ExternalEventCreateInput) => Promise<void>;
+  onResolveExternalResponse?: (stepId: string, input: ExternalResponseDecisionInput) => Promise<void>;
 };
 
 export function StepDetailPanel({
@@ -49,20 +63,52 @@ export function StepDetailPanel({
   onClose,
   error,
   onSubmitJournal,
+  onCompleteTask,
   onRegisterExternalEvent,
+  onResolveExternalResponse,
 }: StepDetailPanelProps) {
-  const [selectedStatus, setSelectedStatus] = useState<"" | "espera" | "completado">("");
+  const [selectedStatus, setSelectedStatus] = useState<"" | "espera" | "problema">("");
   const [composerExpanded, setComposerExpanded] = useState(false);
   const [focusRequestToken, setFocusRequestToken] = useState(0);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+
+  const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
+  const [completeTransition, setCompleteTransition] = useState<StepTransitionType>("next_task");
+  const [completeResult, setCompleteResult] = useState("");
+  const [completeObservations, setCompleteObservations] = useState("");
+  const [nextTaskName, setNextTaskName] = useState("");
+  const [nextTaskDescription, setNextTaskDescription] = useState("");
+  const [nextTaskAssignee, setNextTaskAssignee] = useState("");
+  const [nextTaskDueDate, setNextTaskDueDate] = useState("");
+  const [waitExpected, setWaitExpected] = useState("");
+  const [waitSource, setWaitSource] = useState("");
+  const [waitDetail, setWaitDetail] = useState("");
+  const [waitReference, setWaitReference] = useState("");
+  const [finishReason, setFinishReason] = useState("");
+  const [completeAttachments, setCompleteAttachments] = useState<AttachmentInput[]>([]);
+  const [completeError, setCompleteError] = useState<string | null>(null);
+  const [completing, setCompleting] = useState(false);
+
   const [externalDialogOpen, setExternalDialogOpen] = useState(false);
-  const [externalEventType, setExternalEventType] = useState("");
+  const [externalEventType, setExternalEventType] = useState("external_response_received");
   const [externalComment, setExternalComment] = useState("");
   const [externalSource, setExternalSource] = useState("manual");
   const [externalActor, setExternalActor] = useState(DEFAULT_ACTOR);
   const [externalAttachments, setExternalAttachments] = useState<AttachmentInput[]>([]);
   const [registeringExternal, setRegisteringExternal] = useState(false);
   const [externalError, setExternalError] = useState<string | null>(null);
+
+  const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
+  const [resolveTransition, setResolveTransition] = useState<"next_task" | "finish_flow">("next_task");
+  const [resolveResult, setResolveResult] = useState("");
+  const [resolveNextTaskName, setResolveNextTaskName] = useState("");
+  const [resolveNextTaskDescription, setResolveNextTaskDescription] = useState("");
+  const [resolveNextTaskAssignee, setResolveNextTaskAssignee] = useState("");
+  const [resolveNextTaskDueDate, setResolveNextTaskDueDate] = useState("");
+  const [resolveFinishReason, setResolveFinishReason] = useState("");
+  const [resolveAttachments, setResolveAttachments] = useState<AttachmentInput[]>([]);
+  const [resolving, setResolving] = useState(false);
+  const [resolveError, setResolveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!step) {
@@ -71,43 +117,67 @@ export function StepDetailPanel({
     setSelectedStatus("");
     setComposerExpanded(false);
     setMenuAnchor(null);
+
+    setCompleteDialogOpen(false);
+    setCompleteTransition("next_task");
+    setCompleteResult("");
+    setCompleteObservations("");
+    setNextTaskName("");
+    setNextTaskDescription("");
+    setNextTaskAssignee("");
+    setNextTaskDueDate("");
+    setWaitExpected(step.expected_external_event ?? "");
+    setWaitSource("");
+    setWaitDetail(step.external_wait_reason ?? "");
+    setWaitReference(step.external_reference ?? "");
+    setFinishReason("");
+    setCompleteAttachments([]);
+    setCompleteError(null);
+
     setExternalDialogOpen(false);
-    setExternalError(null);
-    setExternalEventType(step.expected_external_event ?? "");
+    setExternalEventType(step.expected_external_event || "external_response_received");
     setExternalComment("");
     setExternalSource("manual");
     setExternalActor(DEFAULT_ACTOR);
     setExternalAttachments([]);
-  }, [step?.id, step?.expected_external_event, step?.estado]);
+    setExternalError(null);
+
+    setResolveDialogOpen(false);
+    setResolveTransition("next_task");
+    setResolveResult("");
+    setResolveNextTaskName("");
+    setResolveNextTaskDescription("");
+    setResolveNextTaskAssignee("");
+    setResolveNextTaskDueDate("");
+    setResolveFinishReason("");
+    setResolveAttachments([]);
+    setResolveError(null);
+  }, [step?.id, step?.estado, step?.expected_external_event, step?.external_reference, step?.external_wait_reason]);
 
   if (!step) {
     return (
       <Card
         sx={{
-          ...(drawer
-            ? { position: { xl: "sticky" }, top: { xl: 96 } }
-            : {}),
+          ...(drawer ? { position: { xl: "sticky" }, top: { xl: 96 } } : {}),
           ...(standalone ? { maxWidth: 980, mx: "auto" } : {}),
         }}
       >
         <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-            <Stack spacing={1}>
-              <Typography variant="h5">Sin paso seleccionado</Typography>
-              <Typography color="text.secondary">
-                Selecciona una tarea del flow para revisar su bitacora, entender el contexto y registrar avance.
-              </Typography>
-            </Stack>
+          <Stack spacing={1}>
+            <Typography variant="h5">Sin tarea seleccionada</Typography>
+            <Typography color="text.secondary">
+              Selecciona una tarea del flow para revisar su bitacora, entender el contexto y registrar avance.
+            </Typography>
+          </Stack>
         </CardContent>
       </Card>
     );
   }
 
   const canChangeStatus = ["activo", "espera", "problema"].includes(step.estado);
-  const latestMessage =
-    step.ultimo_comentario?.trim() ||
-    (step.orden === 1 && step.descripcion?.trim() ? step.descripcion.trim() : "Sin registros todavia");
-  const waitsExternal = step.waits_for_external_response || step.action_type === "wait_external";
-  const actionLabel = step.action_label?.trim() || humanizeActionType(step.action_type);
+  const canCompleteTask = ["activo", "espera", "problema"].includes(step.estado);
+  const isWaitingExternal = step.estado === "esperando_respuesta";
+  const latestMessage = step.ultimo_comentario?.trim() || (step.orden === 1 && step.descripcion?.trim() ? step.descripcion.trim() : "Sin registros todavia");
 
   async function handleSubmitJournal(input: StepJournalEntryInput) {
     await onSubmitJournal(input);
@@ -116,7 +186,7 @@ export function StepDetailPanel({
     setMenuAnchor(null);
   }
 
-  function handleStatusIntent(status: "" | "espera" | "completado") {
+  function handleStatusIntent(status: "" | "espera" | "problema") {
     setSelectedStatus(status);
     setComposerExpanded(true);
     setMenuAnchor(null);
@@ -142,14 +212,82 @@ export function StepDetailPanel({
     };
   }
 
-  async function handleExternalFileChange(files: FileList | null) {
+  async function handleAttachmentSelection(files: FileList | null, target: "complete" | "external" | "resolve") {
     if (!files || files.length === 0) return;
     try {
       const parsed = await Promise.all(Array.from(files).map((file) => readFileAsAttachment(file)));
-      setExternalAttachments((current) => [...current, ...parsed]);
+      if (target === "complete") setCompleteAttachments((current) => [...current, ...parsed]);
+      if (target === "external") setExternalAttachments((current) => [...current, ...parsed]);
+      if (target === "resolve") setResolveAttachments((current) => [...current, ...parsed]);
+      setCompleteError(null);
       setExternalError(null);
+      setResolveError(null);
     } catch (err) {
-      setExternalError(err instanceof Error ? err.message : "No se pudieron adjuntar archivos");
+      const message = err instanceof Error ? err.message : "No se pudieron adjuntar archivos";
+      if (target === "complete") setCompleteError(message);
+      if (target === "external") setExternalError(message);
+      if (target === "resolve") setResolveError(message);
+    }
+  }
+
+  async function handleCompleteTask() {
+    const resultTrimmed = completeResult.trim();
+    if (resultTrimmed.length < 3) {
+      setCompleteError("Debes indicar el resultado de la tarea.");
+      return;
+    }
+    if (completeTransition === "next_task" && !nextTaskName.trim()) {
+      setCompleteError("Debes indicar el nombre de la proxima tarea.");
+      return;
+    }
+    if (completeTransition === "wait_external" && !waitExpected.trim()) {
+      setCompleteError("Debes indicar que respuesta externa se espera.");
+      return;
+    }
+
+    try {
+      setCompleting(true);
+      setCompleteError(null);
+      await onCompleteTask(step.id, {
+        usuario: DEFAULT_ACTOR,
+        resultado_cierre: resultTrimmed,
+        comentario: resultTrimmed,
+        observaciones: completeObservations.trim() || null,
+        transition_type: completeTransition,
+        next_task:
+          completeTransition === "next_task"
+            ? {
+                nombre: nextTaskName.trim(),
+                descripcion: nextTaskDescription.trim() || null,
+                asignado_a: nextTaskAssignee.trim() || null,
+                fecha_vencimiento: nextTaskDueDate || null,
+              }
+            : null,
+        external_wait:
+          completeTransition === "wait_external"
+            ? {
+                que_se_espera: waitExpected.trim(),
+                origen: waitSource.trim() || "externo",
+                detalle: waitDetail.trim() || null,
+                referencia_externa: waitReference.trim() || null,
+                attachments: completeAttachments,
+              }
+            : null,
+        finish_data:
+          completeTransition === "finish_flow"
+            ? {
+                resultado_final: resultTrimmed,
+                motivo_cierre: finishReason.trim() || null,
+                attachments: completeAttachments,
+              }
+            : null,
+        attachments: completeAttachments,
+      });
+      setCompleteDialogOpen(false);
+    } catch (err) {
+      setCompleteError(err instanceof Error ? err.message : "No se pudo completar la tarea");
+    } finally {
+      setCompleting(false);
     }
   }
 
@@ -175,8 +313,8 @@ export function StepDetailPanel({
         attachments: externalAttachments,
       });
       setExternalDialogOpen(false);
-      setExternalComment("");
-      setExternalAttachments([]);
+      setResolveDialogOpen(true);
+      setResolveResult(externalComment.trim() || "Respuesta externa recibida");
     } catch (err) {
       setExternalError(err instanceof Error ? err.message : "No se pudo registrar la respuesta externa");
     } finally {
@@ -184,13 +322,58 @@ export function StepDetailPanel({
     }
   }
 
+  async function handleResolveAfterExternal() {
+    if (!onResolveExternalResponse) return;
+    const resultTrimmed = resolveResult.trim();
+    if (resultTrimmed.length < 3) {
+      setResolveError("Debes indicar el resultado de cierre de la tarea.");
+      return;
+    }
+    if (resolveTransition === "next_task" && !resolveNextTaskName.trim()) {
+      setResolveError("Debes indicar el nombre de la proxima tarea.");
+      return;
+    }
+
+    try {
+      setResolving(true);
+      setResolveError(null);
+      await onResolveExternalResponse(step.id, {
+        usuario: DEFAULT_ACTOR,
+        resultado_cierre: resultTrimmed,
+        comentario: resultTrimmed,
+        transition_type: resolveTransition,
+        next_task:
+          resolveTransition === "next_task"
+            ? {
+                nombre: resolveNextTaskName.trim(),
+                descripcion: resolveNextTaskDescription.trim() || null,
+                asignado_a: resolveNextTaskAssignee.trim() || null,
+                fecha_vencimiento: resolveNextTaskDueDate || null,
+              }
+            : null,
+        finish_data:
+          resolveTransition === "finish_flow"
+            ? {
+                resultado_final: resultTrimmed,
+                motivo_cierre: resolveFinishReason.trim() || null,
+                attachments: resolveAttachments,
+              }
+            : null,
+        attachments: resolveAttachments,
+      });
+      setResolveDialogOpen(false);
+    } catch (err) {
+      setResolveError(err instanceof Error ? err.message : "No se pudo resolver la tarea en espera externa");
+    } finally {
+      setResolving(false);
+    }
+  }
+
   return (
     <Card
       sx={{
         minWidth: 0,
-        ...(drawer
-          ? { position: { xl: "sticky" }, top: { xl: 96 } }
-          : {}),
+        ...(drawer ? { position: { xl: "sticky" }, top: { xl: 96 } } : {}),
         ...(standalone ? { maxWidth: 980, mx: "auto" } : {}),
       }}
       onPointerDown={(event) => event.stopPropagation()}
@@ -201,7 +384,7 @@ export function StepDetailPanel({
             <Stack direction="row" spacing={1.5} sx={{ justifyContent: "space-between", alignItems: "flex-start" }}>
               <Box>
                 <Typography variant="overline" color="primary.light">
-                  Paso {step.orden}
+                  Tarea {step.orden}
                 </Typography>
                 <Typography variant="h5" sx={{ mt: 0.25 }}>
                   {step.nombre}
@@ -214,13 +397,13 @@ export function StepDetailPanel({
               </Box>
 
               <Stack direction="row" spacing={1}>
-                {step.estado === "esperando_respuesta" && onRegisterExternalEvent && (
-                  <Button
-                    variant="outlined"
-                    color="info"
-                    onClick={() => setExternalDialogOpen(true)}
-                    sx={{ textTransform: "none" }}
-                  >
+                {canCompleteTask && (
+                  <Button variant="contained" onClick={() => setCompleteDialogOpen(true)} sx={{ textTransform: "none" }}>
+                    Completar tarea
+                  </Button>
+                )}
+                {isWaitingExternal && onRegisterExternalEvent && (
+                  <Button variant="outlined" color="info" onClick={() => setExternalDialogOpen(true)} sx={{ textTransform: "none" }}>
                     Registrar respuesta recibida
                   </Button>
                 )}
@@ -231,12 +414,12 @@ export function StepDetailPanel({
                     </IconButton>
                     <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
                       <MenuItem onClick={() => handleStatusIntent("espera")}>Pausar tarea</MenuItem>
-                      <MenuItem onClick={() => handleStatusIntent("completado")}>Completar tarea</MenuItem>
+                      <MenuItem onClick={() => handleStatusIntent("problema")}>Registrar problema</MenuItem>
                     </Menu>
                   </>
                 )}
                 {drawer && onClose && (
-                  <IconButton onClick={onClose} aria-label="Cerrar detalle del paso">
+                  <IconButton onClick={onClose} aria-label="Cerrar detalle de la tarea">
                     <CloseRoundedIcon />
                   </IconButton>
                 )}
@@ -262,54 +445,19 @@ export function StepDetailPanel({
               </CardContent>
             </Card>
 
-            <Card variant="outlined">
-              <CardContent sx={{ p: 1.75 }}>
-                <Stack spacing={0.9}>
-                  <Typography variant="subtitle2" color="text.secondary">
-                    Accion al completar
-                  </Typography>
-                  <Typography variant="body2">{actionLabel}</Typography>
-                  {waitsExternal ? (
-                    <Typography variant="body2" color="text.secondary">
-                      El flow quedara detenido hasta registrar la respuesta externa.
-                    </Typography>
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">
-                      El flow continuara automaticamente si las dependencias quedan cumplidas.
-                    </Typography>
-                  )}
-                  {step.expected_external_event && (
-                    <Typography variant="body2" color="text.secondary">
-                      Dato esperado: {step.expected_external_event}
-                    </Typography>
-                  )}
-                  {step.external_wait_reason && (
-                    <Typography variant="body2" color="text.secondary">
-                      Motivo: {step.external_wait_reason}
-                    </Typography>
-                  )}
-                  {step.external_reference && (
-                    <Typography variant="body2" color="text.secondary">
-                      Referencia: {step.external_reference}
-                    </Typography>
-                  )}
-                </Stack>
-              </CardContent>
-            </Card>
-
-            {step.estado === "esperando_respuesta" && (
+            {isWaitingExternal ? (
               <Card variant="outlined">
                 <CardContent sx={{ p: 1.75 }}>
                   <Stack spacing={1}>
                     <Alert severity="info">Esperando respuesta externa</Alert>
                     {step.expected_external_event && (
                       <Typography variant="body2" color="text.secondary">
-                        Dato esperado: {step.expected_external_event}
+                        Que se espera: {step.expected_external_event}
                       </Typography>
                     )}
                     {step.external_wait_reason && (
                       <Typography variant="body2" color="text.secondary">
-                        Motivo: {step.external_wait_reason}
+                        Detalle: {step.external_wait_reason}
                       </Typography>
                     )}
                     {step.external_reference && (
@@ -317,6 +465,19 @@ export function StepDetailPanel({
                         Referencia: {step.external_reference}
                       </Typography>
                     )}
+                  </Stack>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card variant="outlined">
+                <CardContent sx={{ p: 1.75 }}>
+                  <Stack spacing={0.9}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Al completar tarea
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Deberas decidir el proximo movimiento del flow: crear proxima tarea, esperar respuesta externa o finalizar flow.
+                    </Typography>
                   </Stack>
                 </CardContent>
               </Card>
@@ -355,76 +516,119 @@ export function StepDetailPanel({
             <Divider />
             <Box sx={{ px: { xs: 2.5, md: 3 }, py: 2.25 }}>
               <Button component={RouterLink} to={`/workflows/${workflowId}`} variant="text" color="inherit">
-                Volver al workflow
+                Volver al flow
               </Button>
             </Box>
           </>
         )}
       </CardContent>
 
+      <Dialog open={completeDialogOpen} onClose={completing ? undefined : () => setCompleteDialogOpen(false)} fullWidth maxWidth="md">
+        <DialogTitle>Completar tarea</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            <TextField
+              label="Resultado de la tarea *"
+              multiline
+              minRows={3}
+              value={completeResult}
+              onChange={(event) => setCompleteResult(event.target.value)}
+              disabled={completing}
+            />
+            <TextField
+              label="Observaciones"
+              multiline
+              minRows={2}
+              value={completeObservations}
+              onChange={(event) => setCompleteObservations(event.target.value)}
+              disabled={completing}
+            />
+
+            <Typography variant="subtitle2" color="text.secondary">
+              Que debe pasar ahora?
+            </Typography>
+            <ToggleButtonGroup
+              exclusive
+              value={completeTransition}
+              onChange={(_, value: StepTransitionType | null) => value && setCompleteTransition(value)}
+            >
+              <ToggleButton value="next_task">Crear proxima tarea</ToggleButton>
+              <ToggleButton value="wait_external">Esperar respuesta externa</ToggleButton>
+              <ToggleButton value="finish_flow">Finalizar flow</ToggleButton>
+            </ToggleButtonGroup>
+
+            {completeTransition === "next_task" && (
+              <Stack spacing={1.5}>
+                <TextField label="Nombre de la proxima tarea *" value={nextTaskName} onChange={(event) => setNextTaskName(event.target.value)} />
+                <TextField label="Descripcion / contexto" multiline minRows={2} value={nextTaskDescription} onChange={(event) => setNextTaskDescription(event.target.value)} />
+                <TextField label="Asignado a" value={nextTaskAssignee} onChange={(event) => setNextTaskAssignee(event.target.value)} />
+                <TextField
+                  label="Fecha de vencimiento"
+                  type="datetime-local"
+                  value={nextTaskDueDate}
+                  onChange={(event) => setNextTaskDueDate(event.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Stack>
+            )}
+
+            {completeTransition === "wait_external" && (
+              <Stack spacing={1.5}>
+                <TextField label="Que se espera *" value={waitExpected} onChange={(event) => setWaitExpected(event.target.value)} />
+                <TextField label="Origen / proveedor / persona *" value={waitSource} onChange={(event) => setWaitSource(event.target.value)} />
+                <TextField label="Detalle de la espera" multiline minRows={2} value={waitDetail} onChange={(event) => setWaitDetail(event.target.value)} />
+                <TextField label="Referencia externa" value={waitReference} onChange={(event) => setWaitReference(event.target.value)} />
+              </Stack>
+            )}
+
+            {completeTransition === "finish_flow" && (
+              <TextField label="Motivo de cierre" multiline minRows={2} value={finishReason} onChange={(event) => setFinishReason(event.target.value)} />
+            )}
+
+            <Button component="label" variant="outlined" color="inherit" disabled={completing}>
+              Adjuntar archivos (opcional)
+              <input hidden multiple type="file" onChange={(event) => void handleAttachmentSelection(event.target.files, "complete")} />
+            </Button>
+            {completeAttachments.length > 0 && (
+              <Stack spacing={0.5}>
+                {completeAttachments.map((item, index) => (
+                  <Typography key={`${item.nombre}-${index}`} variant="body2" color="text.secondary">
+                    {item.nombre} ({Math.round(item.size_bytes / 1024)} KB)
+                  </Typography>
+                ))}
+              </Stack>
+            )}
+            {completeError && <Alert severity="error">{completeError}</Alert>}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCompleteDialogOpen(false)} disabled={completing} color="inherit">
+            Cancelar
+          </Button>
+          <Button onClick={() => void handleCompleteTask()} disabled={completing} variant="contained">
+            {completing ? "Guardando..." : "Confirmar cierre"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Dialog open={externalDialogOpen} onClose={registeringExternal ? undefined : () => setExternalDialogOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>Registrar respuesta recibida</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
-            <TextField
-              label="Tipo de respuesta / evento *"
-              value={externalEventType}
-              onChange={(event) => setExternalEventType(event.target.value)}
-              disabled={registeringExternal}
-            />
-            <TextField
-              label="Detalle recibido"
-              multiline
-              minRows={3}
-              value={externalComment}
-              onChange={(event) => setExternalComment(event.target.value)}
-              disabled={registeringExternal}
-            />
-            <TextField
-              label="Usuario / actor"
-              value={externalActor}
-              onChange={(event) => setExternalActor(event.target.value)}
-              disabled={registeringExternal}
-            />
-            <TextField
-              label="Origen"
-              value={externalSource}
-              onChange={(event) => setExternalSource(event.target.value)}
-              disabled={registeringExternal}
-            />
+            <TextField label="Tipo de respuesta / evento *" value={externalEventType} onChange={(event) => setExternalEventType(event.target.value)} disabled={registeringExternal} />
+            <TextField label="Respuesta recibida / detalle" multiline minRows={3} value={externalComment} onChange={(event) => setExternalComment(event.target.value)} disabled={registeringExternal} />
+            <TextField label="Origen" value={externalSource} onChange={(event) => setExternalSource(event.target.value)} disabled={registeringExternal} />
+            <TextField label="Usuario / actor" value={externalActor} onChange={(event) => setExternalActor(event.target.value)} disabled={registeringExternal} />
             <Button component="label" variant="outlined" color="inherit" disabled={registeringExternal}>
               Adjuntar archivos (opcional)
-              <input hidden multiple type="file" onChange={(event) => void handleExternalFileChange(event.target.files)} />
+              <input hidden multiple type="file" onChange={(event) => void handleAttachmentSelection(event.target.files, "external")} />
             </Button>
             {externalAttachments.length > 0 && (
               <Stack spacing={0.5}>
                 {externalAttachments.map((item, index) => (
-                  <Box
-                    key={`${item.nombre}-${index}`}
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      px: 1.25,
-                      py: 0.8,
-                      borderRadius: 1.1,
-                      border: "1px solid",
-                      borderColor: "divider",
-                    }}
-                  >
-                    <Typography variant="body2">{`${item.nombre} (${Math.round(item.size_bytes / 1024)} KB)`}</Typography>
-                    <Button
-                      size="small"
-                      color="inherit"
-                      onClick={() =>
-                        setExternalAttachments((current) =>
-                          current.filter((_, currentIndex) => currentIndex !== index)
-                        )
-                      }
-                    >
-                      Quitar
-                    </Button>
-                  </Box>
+                  <Typography key={`${item.nombre}-${index}`} variant="body2" color="text.secondary">
+                    {item.nombre} ({Math.round(item.size_bytes / 1024)} KB)
+                  </Typography>
                 ))}
               </Stack>
             )}
@@ -436,19 +640,75 @@ export function StepDetailPanel({
             Cancelar
           </Button>
           <Button onClick={() => void handleRegisterExternalEvent()} disabled={registeringExternal} variant="contained">
-            {registeringExternal ? "Registrando..." : "Registrar y continuar flow"}
+            {registeringExternal ? "Registrando..." : "Registrar respuesta"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={resolveDialogOpen} onClose={resolving ? undefined : () => setResolveDialogOpen(false)} fullWidth maxWidth="md">
+        <DialogTitle>Que debe pasar ahora?</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            <TextField
+              label="Resultado de cierre de la tarea *"
+              multiline
+              minRows={3}
+              value={resolveResult}
+              onChange={(event) => setResolveResult(event.target.value)}
+            />
+            <ToggleButtonGroup
+              exclusive
+              value={resolveTransition}
+              onChange={(_, value: "next_task" | "finish_flow" | null) => value && setResolveTransition(value)}
+            >
+              <ToggleButton value="next_task">Crear proxima tarea</ToggleButton>
+              <ToggleButton value="finish_flow">Finalizar flow</ToggleButton>
+            </ToggleButtonGroup>
+
+            {resolveTransition === "next_task" && (
+              <Stack spacing={1.5}>
+                <TextField label="Nombre de la proxima tarea *" value={resolveNextTaskName} onChange={(event) => setResolveNextTaskName(event.target.value)} />
+                <TextField label="Descripcion / contexto" multiline minRows={2} value={resolveNextTaskDescription} onChange={(event) => setResolveNextTaskDescription(event.target.value)} />
+                <TextField label="Asignado a" value={resolveNextTaskAssignee} onChange={(event) => setResolveNextTaskAssignee(event.target.value)} />
+                <TextField
+                  label="Fecha de vencimiento"
+                  type="datetime-local"
+                  value={resolveNextTaskDueDate}
+                  onChange={(event) => setResolveNextTaskDueDate(event.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Stack>
+            )}
+
+            {resolveTransition === "finish_flow" && (
+              <TextField label="Motivo de cierre" multiline minRows={2} value={resolveFinishReason} onChange={(event) => setResolveFinishReason(event.target.value)} />
+            )}
+
+            <Button component="label" variant="outlined" color="inherit" disabled={resolving}>
+              Adjuntar archivos (opcional)
+              <input hidden multiple type="file" onChange={(event) => void handleAttachmentSelection(event.target.files, "resolve")} />
+            </Button>
+            {resolveAttachments.length > 0 && (
+              <Stack spacing={0.5}>
+                {resolveAttachments.map((item, index) => (
+                  <Typography key={`${item.nombre}-${index}`} variant="body2" color="text.secondary">
+                    {item.nombre} ({Math.round(item.size_bytes / 1024)} KB)
+                  </Typography>
+                ))}
+              </Stack>
+            )}
+            {resolveError && <Alert severity="error">{resolveError}</Alert>}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setResolveDialogOpen(false)} disabled={resolving} color="inherit">
+            Cancelar
+          </Button>
+          <Button onClick={() => void handleResolveAfterExternal()} disabled={resolving} variant="contained">
+            {resolving ? "Guardando..." : "Confirmar"}
           </Button>
         </DialogActions>
       </Dialog>
     </Card>
   );
-}
-
-function humanizeActionType(actionType: string | null) {
-  const normalized = (actionType ?? "continue").trim().toLowerCase();
-  if (normalized === "wait_external") return "Esperar respuesta externa";
-  if (normalized === "manual_review") return "Revision manual";
-  if (normalized === "finish_flow") return "Finalizar flow";
-  if (normalized === "continue") return "Continuar flow";
-  return normalized.replaceAll("_", " ");
 }

@@ -30,8 +30,8 @@ type JournalProps = {
   comments: StepComment[];
   history: StepHistoryEntry[];
   canChangeStatus: boolean;
-  selectedStatus: "" | "espera" | "completado";
-  onSelectedStatusChange: (status: "" | "espera" | "completado") => void;
+  selectedStatus: "" | "espera" | "problema";
+  onSelectedStatusChange: (status: "" | "espera" | "problema") => void;
   composerExpanded: boolean;
   onComposerExpandedChange: (expanded: boolean) => void;
   focusRequestToken: number;
@@ -47,11 +47,11 @@ const MAX_CHARS = 1000;
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const SHAPE_RADIUS = 1.1;
 
-type StatusOptionValue = "espera" | "completado";
+type StatusOptionValue = "espera" | "problema";
 
 const STATUS_ACCENTS: Record<StatusOptionValue, string> = {
   espera: "#f59e0b",
-  completado: "#22c55e",
+  problema: "#ff6b8d",
 };
 
 function getStatusToggleSx(status: StatusOptionValue) {
@@ -102,7 +102,6 @@ export function Journal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const items = useMemo(() => buildJournalItems(history, comments), [history, comments]);
-  const isCompleting = selectedStatus === "completado";
   const commentTrimmed = text.trim();
   const canComment = step.puede_tener_comentarios;
   const hasAttachments = attachments.length > 0;
@@ -196,8 +195,6 @@ export function Journal({
           size_bytes: item.size_bytes,
           content_base64: item.content_base64,
         })),
-        siguiente_paso: null,
-        finalizar_workflow: false,
       });
       setText("");
       setAttachments([]);
@@ -242,9 +239,6 @@ export function Journal({
   }
 
   function getSubmitLabel() {
-    if (selectedStatus === "completado") {
-      return "Completar tarea";
-    }
     if (selectedStatus) {
       return "Guardar avance y cambiar estado";
     }
@@ -255,8 +249,8 @@ export function Journal({
     if (selectedStatus === "espera") {
       return "Describe por que la tarea queda pausada y que falta para retomarla...";
     }
-    if (selectedStatus === "completado") {
-      return "Describe el resultado de la tarea, evidencias y siguiente estado operativo...";
+    if (selectedStatus === "problema") {
+      return "Describe el problema operativo y que impacto tiene en la tarea...";
     }
     return "Registra avance operativo, resultado parcial o evidencia...";
   }
@@ -392,7 +386,7 @@ export function Journal({
               <ToggleButtonGroup
                 exclusive
                 value={selectedStatus || null}
-                onChange={(_, value: "" | "espera" | "completado" | null) => {
+                onChange={(_, value: "" | "espera" | "problema" | null) => {
                   onSelectedStatusChange(value ?? "");
                   setError(null);
                 }}
@@ -416,25 +410,6 @@ export function Journal({
                 ))}
               </ToggleButtonGroup>
             </Stack>
-          )}
-
-          {isCompleting && composerExpanded && (
-            <Card variant="outlined">
-              <CardContent sx={{ display: "grid", gap: 2 }}>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Al completar esta tarea
-                </Typography>
-                {step.waits_for_external_response || step.action_type === "wait_external" ? (
-                  <Alert severity="info">
-                    La tarea quedara en espera externa hasta recibir la respuesta esperada. Luego el flow se reanudara automaticamente.
-                  </Alert>
-                ) : (
-                  <Alert severity="info">
-                    La tarea se completara y el flow avanzara automaticamente segun la plantilla y dependencias.
-                  </Alert>
-                )}
-              </CardContent>
-            </Card>
           )}
 
           {error && <Alert severity="error">{error}</Alert>}

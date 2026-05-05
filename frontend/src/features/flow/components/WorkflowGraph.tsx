@@ -260,7 +260,7 @@ function VerticalWorkflowGraph({
                     }}
                   >
                     <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.1, color: stateColors.textColor }}>
-                      Paso {step.orden}
+                      Tarea {step.orden}
                     </Typography>
                     <Typography variant="caption" sx={{ mt: 0.5, px: 1, color: stateColors.textColor }}>
                       {humanizeStatus(step.estado)}
@@ -386,9 +386,9 @@ function VerticalWorkflowGraph({
               <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: 0.8, textTransform: "uppercase" }}>
                 Cierre
               </Typography>
-              <Typography variant="h6">{workflowClosed ? "Workflow finalizado" : "Cierre pendiente"}</Typography>
+              <Typography variant="h6">{workflowClosed ? "Flow finalizado" : "Cierre pendiente"}</Typography>
               <Typography variant="body2" color="text.secondary">
-                {workflowClosed ? "El requerimiento ya completo su recorrido." : "El flow se cerrara cuando no queden pasos pendientes."}
+                {workflowClosed ? "El requerimiento ya completo su recorrido." : "El flow se cerrara cuando no queden tareas pendientes."}
               </Typography>
             </Stack>
           </Box>
@@ -466,7 +466,7 @@ function GitLogWorkflowGraph({
                 <Stack spacing={1.25}>
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
                     <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", gap: 1 }}>
-                      <Chip label={`P${step.orden.toString().padStart(2, "0")}`} size="small" variant="outlined" />
+                      <Chip label={`T${step.orden.toString().padStart(2, "0")}`} size="small" variant="outlined" />
                       <Typography variant="h6">{step.nombre}</Typography>
                       <StatusBadge value={step.estado} />
                     </Stack>
@@ -532,7 +532,7 @@ function GitLogWorkflowGraph({
                 variant="outlined"
                 sx={{ alignSelf: "flex-start", fontWeight: 700 }}
               />
-              <Typography variant="h6">{workflowClosed ? "Workflow finalizado" : "Cierre pendiente"}</Typography>
+              <Typography variant="h6">{workflowClosed ? "Flow finalizado" : "Cierre pendiente"}</Typography>
             </Stack>
           </Box>
         </Card>

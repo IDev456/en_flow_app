@@ -374,17 +374,17 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         payload: WorkflowInstanceBase,
     ) -> WorkflowDetail:
         now = utc_now()
-        ordered_templates = _normalize_template_steps(template.steps)
-        root_templates = [step for step in ordered_templates if not step.depends_on]
+        first_step_override = getattr(payload, "primer_paso", None)
+        first_step_name = first_step_override.nombre if first_step_override and first_step_override.nombre else "Tarea inicial"
         workflow = WorkflowSummary(
             id=str(uuid4()),
             trigger_id=trigger_id,
             workflow_template_id=template.id,
             workflow_template_nombre=template.nombre,
-            estado=WorkflowStatus.EN_PROCESO if root_templates else WorkflowStatus.FINALIZADO,
-            pasos_activos=[step.orden for step in root_templates],
-            paso_actual=root_templates[0].orden if root_templates else None,
-            total_pasos=len(root_templates),
+            estado=WorkflowStatus.EN_PROCESO,
+            pasos_activos=[1],
+            paso_actual=1,
+            total_pasos=1,
             fecha_inicio=now,
             fecha_fin=None,
             objetivo_final=payload.objetivo_final,
@@ -394,60 +394,41 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         self._step_ids_by_workflow[workflow.id] = []
         self._workflow_ids_by_trigger.setdefault(trigger_id, []).append(workflow.id)
 
-        if root_templates:
-            first_step_override = getattr(payload, "primer_paso", None)
-            override_applied = False
-            for template_step in root_templates:
-                should_apply_override = bool(first_step_override and not override_applied)
-                step = StepInstancePublic(
-                    id=str(uuid4()),
-                    workflow_id=workflow.id,
-                    step_template_id=template_step.id,
-                    codigo=template_step.codigo,
-                    depends_on=list(template_step.depends_on),
-                    nombre=(
-                        first_step_override.nombre
-                        if should_apply_override and first_step_override and first_step_override.nombre
-                        else template_step.nombre
-                    ),
-                    descripcion=(
-                        first_step_override.descripcion
-                        if should_apply_override and first_step_override and first_step_override.descripcion is not None
-                        else template_step.descripcion
-                    ),
-                    orden=template_step.orden,
-                    tipo=template_step.tipo,
-                    requiere_aprobacion=template_step.requiere_aprobacion,
-                    puede_tener_comentarios=template_step.puede_tener_comentarios,
-                    action_type=template_step.action_type,
-                    action_config=template_step.action_config,
-                    action_label=template_step.action_label,
-                    waits_for_external_response=template_step.waits_for_external_response,
-                    expected_external_event=template_step.expected_external_event,
-                    external_wait_reason=template_step.external_wait_reason,
-                    external_reference=template_step.external_reference,
-                    estado=StepStatus.ACTIVO,
-                    fecha_estado_actual=now,
-                    asignado_a=first_step_override.asignado_a if should_apply_override and first_step_override else None,
-                    fecha_creacion=now,
-                    fecha_inicio=now,
-                    fecha_vencimiento=(
-                        first_step_override.fecha_vencimiento
-                        if should_apply_override and first_step_override
-                        else None
-                    ),
-                    fecha_cierre=None,
-                    resultado=None,
-                    observaciones=None,
-                )
-                if should_apply_override:
-                    override_applied = True
-                self._steps[step.id] = step
-                self._step_ids_by_workflow[workflow.id].append(step.id)
-                self._comments_by_step[step.id] = []
-                self._history_by_step[step.id] = []
-                self._external_events_by_step[step.id] = []
-                self._external_events_by_workflow.setdefault(workflow.id, [])
+        step = StepInstancePublic(
+            id=str(uuid4()),
+            workflow_id=workflow.id,
+            step_template_id=None,
+            codigo=None,
+            depends_on=[],
+            nombre=first_step_name,
+            descripcion=first_step_override.descripcion if first_step_override else None,
+            orden=1,
+            tipo="manual",
+            requiere_aprobacion=False,
+            puede_tener_comentarios=True,
+            action_type="continue",
+            action_config=None,
+            action_label="Continuar flow",
+            waits_for_external_response=False,
+            expected_external_event=None,
+            external_wait_reason=None,
+            external_reference=None,
+            estado=StepStatus.ACTIVO,
+            fecha_estado_actual=now,
+            asignado_a=first_step_override.asignado_a if first_step_override else None,
+            fecha_creacion=now,
+            fecha_inicio=now,
+            fecha_vencimiento=first_step_override.fecha_vencimiento if first_step_override else None,
+            fecha_cierre=None,
+            resultado=None,
+            observaciones=None,
+        )
+        self._steps[step.id] = step
+        self._step_ids_by_workflow[workflow.id].append(step.id)
+        self._comments_by_step[step.id] = []
+        self._history_by_step[step.id] = []
+        self._external_events_by_step[step.id] = []
+        self._external_events_by_workflow.setdefault(workflow.id, [])
 
         return self.get_workflow(workflow.id)  # type: ignore[return-value]
 
@@ -577,7 +558,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         return [
             workflow
             for workflow in self.list_workflows()
-            if workflow.estado in {WorkflowStatus.PENDIENTE, WorkflowStatus.EN_PROCESO}
+            if workflow.estado in {WorkflowStatus.PENDIENTE, WorkflowStatus.EN_PROCESO, WorkflowStatus.ESPERANDO_RESPUESTA}
         ]
 
     def list_workflow_templates(self) -> list[WorkflowTemplatePublic]:
@@ -789,63 +770,52 @@ class PostgresWorkflowRepository(WorkflowRepository):
         payload: WorkflowInstanceBase,
     ) -> WorkflowDetail:
         now = utc_now()
-        ordered_templates = _normalize_template_steps(template.steps)
-        root_templates = [step for step in ordered_templates if not step.depends_on]
+        first_step_override = getattr(payload, "primer_paso", None)
+        first_step_name = first_step_override.nombre if first_step_override and first_step_override.nombre else "Tarea inicial"
         workflow = WorkflowModel(
             id=str(uuid4()),
             trigger_id=trigger_id,
             workflow_template_id=template.id,
             workflow_template_nombre=template.nombre,
-            estado=WorkflowStatus.EN_PROCESO.value if root_templates else WorkflowStatus.FINALIZADO.value,
-            paso_actual=root_templates[0].orden if root_templates else None,
-            total_pasos=len(root_templates),
+            estado=WorkflowStatus.EN_PROCESO.value,
+            paso_actual=1,
+            total_pasos=1,
             fecha_inicio=now,
             fecha_fin=None,
             objetivo_final=payload.objetivo_final,
             resolucion_esperada=payload.resolucion_esperada,
         )
 
-        if root_templates:
-            first_step_override = getattr(payload, "primer_paso", None)
-            override_applied = False
-            for template_step in root_templates:
-                use_override = bool(first_step_override and not override_applied)
-                workflow.steps.append(
-                    StepModel(
-                        id=str(uuid4()),
-                        step_template_id=template_step.id,
-                        codigo=template_step.codigo,
-                        depends_on=list(template_step.depends_on),
-                        nombre=first_step_override.nombre if use_override and first_step_override and first_step_override.nombre else template_step.nombre,
-                        descripcion=(
-                            first_step_override.descripcion
-                            if use_override and first_step_override and first_step_override.descripcion is not None
-                            else template_step.descripcion
-                        ),
-                        orden=template_step.orden,
-                        tipo=template_step.tipo,
-                        requiere_aprobacion=template_step.requiere_aprobacion,
-                        puede_tener_comentarios=template_step.puede_tener_comentarios,
-                        action_type=template_step.action_type,
-                        action_config=template_step.action_config,
-                        action_label=template_step.action_label,
-                        waits_for_external_response=template_step.waits_for_external_response,
-                        expected_external_event=template_step.expected_external_event,
-                        external_wait_reason=template_step.external_wait_reason,
-                        external_reference=template_step.external_reference,
-                        estado=StepStatus.ACTIVO.value,
-                        fecha_estado_actual=now,
-                        asignado_a=first_step_override.asignado_a if use_override and first_step_override else None,
-                        fecha_creacion=now,
-                        fecha_inicio=now,
-                        fecha_vencimiento=first_step_override.fecha_vencimiento if use_override and first_step_override else None,
-                        fecha_cierre=None,
-                        resultado=None,
-                        observaciones=None,
-                    )
-                )
-                if use_override:
-                    override_applied = True
+        workflow.steps.append(
+            StepModel(
+                id=str(uuid4()),
+                step_template_id=None,
+                codigo=None,
+                depends_on=[],
+                nombre=first_step_name,
+                descripcion=first_step_override.descripcion if first_step_override else None,
+                orden=1,
+                tipo="manual",
+                requiere_aprobacion=False,
+                puede_tener_comentarios=True,
+                action_type="continue",
+                action_config=None,
+                action_label="Continuar flow",
+                waits_for_external_response=False,
+                expected_external_event=None,
+                external_wait_reason=None,
+                external_reference=None,
+                estado=StepStatus.ACTIVO.value,
+                fecha_estado_actual=now,
+                asignado_a=first_step_override.asignado_a if first_step_override else None,
+                fecha_creacion=now,
+                fecha_inicio=now,
+                fecha_vencimiento=first_step_override.fecha_vencimiento if first_step_override else None,
+                fecha_cierre=None,
+                resultado=None,
+                observaciones=None,
+            )
+        )
 
         with session_scope() as session:
             session.add(workflow)
@@ -1119,7 +1089,15 @@ class PostgresWorkflowRepository(WorkflowRepository):
             workflows = session.scalars(
                 select(WorkflowModel)
                 .options(selectinload(WorkflowModel.steps))
-                .where(WorkflowModel.estado.in_([WorkflowStatus.PENDIENTE.value, WorkflowStatus.EN_PROCESO.value]))
+                .where(
+                    WorkflowModel.estado.in_(
+                        [
+                            WorkflowStatus.PENDIENTE.value,
+                            WorkflowStatus.EN_PROCESO.value,
+                            WorkflowStatus.ESPERANDO_RESPUESTA.value,
+                        ]
+                    )
+                )
                 .order_by(WorkflowModel.fecha_inicio.desc())
             ).all()
             return [self._workflow_to_summary(workflow) for workflow in workflows]

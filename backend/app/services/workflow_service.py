@@ -7,6 +7,7 @@ from app.schemas.workflow import (
     AttachmentBase,
     CommentCreate,
     CommentPublic,
+    ExternalResponseDecisionPayload,
     ExternalEventCreate,
     ExternalEventPublic,
     StepCompletePayload,
@@ -14,6 +15,7 @@ from app.schemas.workflow import (
     StepHistoryPublic,
     StepInstancePublic,
     StepStatus,
+    StepTransitionType,
     StepStatusUpdate,
     TriggerCreate,
     TriggerDetail,
@@ -28,6 +30,7 @@ from app.schemas.workflow import (
 )
 
 OPEN_STEP_STATUSES = {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA, StepStatus.ESPERANDO_RESPUESTA}
+ACTIONABLE_STEP_STATUSES = {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA}
 
 
 class WorkflowService:
@@ -85,7 +88,7 @@ class WorkflowService:
             raise EntityNotFoundError("Trigger not found")
 
         if not payload.primer_paso.nombre.strip():
-            raise BusinessRuleError("El primer paso es obligatorio para iniciar el workflow")
+            raise BusinessRuleError("La tarea inicial es obligatoria para iniciar el flow")
 
         template = (
             self.repository.get_workflow_template(payload.workflow_template_id)
@@ -118,7 +121,7 @@ class WorkflowService:
     def create_workflow_step(self, workflow_id: str, payload: StepCreate) -> StepInstancePublic:
         workflow = self.get_workflow(workflow_id)
         if workflow.estado == WorkflowStatus.FINALIZADO:
-            raise BusinessRuleError("No se pueden agregar pasos a un workflow finalizado")
+            raise BusinessRuleError("No se pueden agregar tareas a un flow finalizado")
 
         steps = workflow.steps
         next_order = max((step.orden for step in steps), default=0) + 1
@@ -127,7 +130,7 @@ class WorkflowService:
             payload,
             next_order,
             StepStatus.ACTIVO,
-            codigo=f"manual_{created_step_id_suffix()}",
+            codigo=None,
             depends_on=[],
         )
         updated_workflow = workflow.model_copy(
@@ -154,7 +157,7 @@ class WorkflowService:
         previous_status = step.estado
 
         if payload.estado == StepStatus.COMPLETADO:
-            raise BusinessRuleError("Usa el endpoint de completar paso para cerrar un step")
+            raise BusinessRuleError("Usa el cierre dinamico para completar la tarea")
 
         if payload.estado == StepStatus.ACTIVO:
             raise BusinessRuleError("El estado en proceso no se modifica manualmente")
@@ -163,7 +166,7 @@ class WorkflowService:
             raise BusinessRuleError("Solo se puede cambiar manualmente a espera o problema")
 
         if step.estado not in {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA}:
-            raise BusinessRuleError("Solo un step abierto puede cambiar de estado")
+            raise BusinessRuleError("Solo una tarea abierta puede cambiar de estado")
 
         if not payload.nota or len(payload.nota.strip()) < 3:
             raise BusinessRuleError("Todo cambio de estado debe incluir un comentario justificando el motivo")
@@ -190,26 +193,81 @@ class WorkflowService:
     def complete_step(self, step_id: str, payload: StepCompletePayload) -> StepInstancePublic:
         step = self.get_step(step_id)
         if step.estado not in OPEN_STEP_STATUSES:
-            raise BusinessRuleError("Solo se puede completar un step abierto")
-        if step.estado == StepStatus.ESPERANDO_RESPUESTA:
-            raise BusinessRuleError("Este paso espera respuesta externa. Registra el evento externo para reanudar.")
-
-        if len(payload.comentario.strip()) < 3:
-            raise BusinessRuleError("Completar un paso requiere un comentario justificando el cierre")
+            raise BusinessRuleError("Solo se puede completar una tarea abierta")
 
         workflow = self.get_workflow(step.workflow_id)
         now = utc_now()
+        closing_note = self._resolve_closing_note(payload.resultado_cierre, payload.comentario)
 
-        waits_external = step.waits_for_external_response or step.action_type == "wait_external"
-        next_status = StepStatus.ESPERANDO_RESPUESTA if waits_external else StepStatus.COMPLETADO
+        if step.estado == StepStatus.ESPERANDO_RESPUESTA and payload.transition_type == StepTransitionType.WAIT_EXTERNAL:
+            raise BusinessRuleError("La tarea ya esta esperando respuesta externa")
+
+        if step.estado == StepStatus.ESPERANDO_RESPUESTA and payload.transition_type in {
+            StepTransitionType.NEXT_TASK,
+            StepTransitionType.FINISH_FLOW,
+        }:
+            events = self.repository.list_step_external_events(step.id)
+            if not events:
+                raise BusinessRuleError("Primero debes registrar una respuesta externa para continuar o finalizar")
+
+        if payload.transition_type == StepTransitionType.WAIT_EXTERNAL:
+            if payload.external_wait is None:
+                raise BusinessRuleError("Debes indicar la informacion de espera externa")
+            wait = payload.external_wait
+            wait_note = wait.detalle or f"Esperando respuesta de {wait.origen}"
+            updated_step = step.model_copy(
+                update={
+                    "estado": StepStatus.ESPERANDO_RESPUESTA,
+                    "fecha_estado_actual": now,
+                    "resultado": closing_note,
+                    "observaciones": payload.observaciones,
+                    "fecha_cierre": None,
+                    "action_type": "wait_external",
+                    "action_label": "Esperar respuesta externa",
+                    "waits_for_external_response": True,
+                    "expected_external_event": wait.que_se_espera,
+                    "external_wait_reason": wait_note,
+                    "external_reference": wait.referencia_externa,
+                }
+            )
+            self.repository.save_step(updated_step)
+            self._record_history(
+                updated_step.id,
+                "estado",
+                step.estado,
+                StepStatus.ESPERANDO_RESPUESTA,
+                payload.usuario,
+                note=closing_note,
+                attachments=payload.attachments,
+            )
+            self._record_history(
+                updated_step.id,
+                "espera_externa",
+                None,
+                wait.que_se_espera,
+                payload.usuario,
+                note=f"Esperando respuesta externa de {wait.origen}. {wait_note}".strip(),
+                attachments=wait.attachments,
+            )
+            self._sync_workflow_and_trigger_status(workflow.id, now)
+            return updated_step
+
+        if payload.transition_type == StepTransitionType.FINISH_FLOW:
+            open_other_steps = [
+                workflow_step
+                for workflow_step in workflow.steps
+                if workflow_step.id != step.id and workflow_step.estado in OPEN_STEP_STATUSES
+            ]
+            if open_other_steps:
+                raise BusinessRuleError("No puedes finalizar el flow con otras tareas abiertas")
 
         updated_step = step.model_copy(
             update={
-                "estado": next_status,
+                "estado": StepStatus.COMPLETADO,
                 "fecha_estado_actual": now,
-                "resultado": payload.resultado,
+                "resultado": closing_note,
                 "observaciones": payload.observaciones,
-                "fecha_cierre": None if waits_external else now,
+                "fecha_cierre": now,
             }
         )
         self.repository.save_step(updated_step)
@@ -217,46 +275,86 @@ class WorkflowService:
             updated_step.id,
             "estado",
             step.estado,
-            next_status,
+            StepStatus.COMPLETADO,
             payload.usuario,
-            note=payload.comentario.strip(),
+            note=closing_note,
             attachments=payload.attachments,
         )
-
-        if step.resultado != payload.resultado:
-            self._record_history(updated_step.id, "resultado", step.resultado, payload.resultado, payload.usuario)
+        if step.resultado != closing_note:
+            self._record_history(updated_step.id, "resultado", step.resultado, closing_note, payload.usuario)
         if step.observaciones != payload.observaciones:
             self._record_history(updated_step.id, "observaciones", step.observaciones, payload.observaciones, payload.usuario)
 
-        if waits_external:
-            wait_detail_parts = []
-            if updated_step.expected_external_event:
-                wait_detail_parts.append(f"evento esperado: {updated_step.expected_external_event}")
-            if updated_step.external_wait_reason:
-                wait_detail_parts.append(f"motivo: {updated_step.external_wait_reason}")
-            if updated_step.external_reference:
-                wait_detail_parts.append(f"referencia: {updated_step.external_reference}")
-            wait_note = "El paso quedo esperando respuesta externa."
-            if wait_detail_parts:
-                wait_note = f"{wait_note} ({'; '.join(wait_detail_parts)})"
+        if payload.transition_type == StepTransitionType.NEXT_TASK:
+            if payload.next_task is None:
+                raise BusinessRuleError("Debes indicar la proxima tarea")
+            next_order = max((item.orden for item in workflow.steps), default=0) + 1
+            next_step = self.repository.create_step(
+                workflow.id,
+                StepCreate(
+                    nombre=payload.next_task.nombre,
+                    descripcion=payload.next_task.descripcion,
+                    tipo="manual",
+                    requiere_aprobacion=False,
+                    puede_tener_comentarios=True,
+                    asignado_a=payload.next_task.asignado_a,
+                    fecha_vencimiento=payload.next_task.fecha_vencimiento,
+                    action_type="continue",
+                    action_config=None,
+                    action_label="Continuar flow",
+                    waits_for_external_response=False,
+                    expected_external_event=None,
+                    external_wait_reason=None,
+                    external_reference=None,
+                ),
+                next_order,
+                StepStatus.ACTIVO,
+                codigo=None,
+                depends_on=[],
+            )
+            self._record_history(next_step.id, "estado", None, StepStatus.ACTIVO, payload.usuario, note="Tarea creada desde cierre dinamico")
             self._record_history(
                 updated_step.id,
-                "espera_externa",
+                "siguiente_tarea",
                 None,
-                updated_step.expected_external_event,
+                next_step.nombre,
                 payload.usuario,
-                note=wait_note,
+                note=f"Se creo la proxima tarea: {next_step.nombre}",
             )
-        else:
-            self._activate_available_steps(workflow.id, payload.usuario)
 
-        self._sync_workflow_and_trigger_status(workflow.id, now)
+        if payload.transition_type == StepTransitionType.FINISH_FLOW:
+            finish_note = payload.finish_data.resultado_final if payload.finish_data else None
+            self._record_history(
+                updated_step.id,
+                "flow_cierre",
+                None,
+                workflow.id,
+                payload.usuario,
+                note=finish_note or "Flow finalizado desde cierre de tarea",
+                attachments=payload.finish_data.attachments if payload.finish_data else [],
+            )
+
+        self._sync_workflow_and_trigger_status(workflow.id, now, force_finish=payload.transition_type == StepTransitionType.FINISH_FLOW)
         return updated_step
+
+    def resolve_external_response(self, step_id: str, payload: ExternalResponseDecisionPayload) -> StepInstancePublic:
+        complete_payload = StepCompletePayload(
+            usuario=payload.usuario,
+            resultado_cierre=payload.resultado_cierre,
+            comentario=payload.comentario,
+            observaciones=None,
+            transition_type=payload.transition_type,
+            next_task=payload.next_task,
+            external_wait=None,
+            finish_data=payload.finish_data,
+            attachments=payload.attachments,
+        )
+        return self.complete_step(step_id, complete_payload)
 
     def add_comment(self, step_id: str, payload: CommentCreate) -> CommentPublic:
         step = self.get_step(step_id)
         if not step.puede_tener_comentarios:
-            raise BusinessRuleError("Este step no admite comentarios")
+            raise BusinessRuleError("Esta tarea no admite registros")
         return self.repository.add_comment(step_id, payload)
 
     def list_comments(self, step_id: str) -> list[CommentPublic]:
@@ -281,7 +379,7 @@ class WorkflowService:
     def register_external_event(self, step_id: str, payload: ExternalEventCreate) -> ExternalEventPublic:
         step = self.get_step(step_id)
         if step.estado != StepStatus.ESPERANDO_RESPUESTA:
-            raise BusinessRuleError("Solo puedes registrar respuesta externa en pasos esperando respuesta")
+            raise BusinessRuleError("Solo puedes registrar respuesta externa en tareas esperando respuesta")
 
         event = self.repository.add_external_event(step_id, payload)
         self._record_history(
@@ -293,112 +391,47 @@ class WorkflowService:
             note=payload.comentario or f"Evento externo recibido: {payload.event_type}",
             attachments=payload.attachments,
         )
-
-        expected_event = (step.expected_external_event or "").strip().lower()
-        incoming_event = payload.event_type.strip().lower()
-        event_matches = not expected_event or expected_event == incoming_event
-
-        if event_matches:
-            now = utc_now()
-            resumed_step = step.model_copy(
-                update={
-                    "estado": StepStatus.COMPLETADO,
-                    "fecha_estado_actual": now,
-                    "fecha_cierre": now,
-                }
-            )
-            self.repository.save_step(resumed_step)
-            self._record_history(
-                step.id,
-                "estado",
-                StepStatus.ESPERANDO_RESPUESTA,
-                StepStatus.COMPLETADO,
-                payload.registrado_por,
-                note=f"Respuesta externa valida ({payload.event_type}). Se reanuda el flujo.",
-            )
-            self._activate_available_steps(step.workflow_id, payload.registrado_por)
-            self._sync_workflow_and_trigger_status(step.workflow_id, now)
-
+        self._sync_workflow_and_trigger_status(step.workflow_id, utc_now())
         return event
 
-    def _activate_available_steps(self, workflow_id: str, actor: str) -> list[StepInstancePublic]:
+    def _sync_workflow_and_trigger_status(self, workflow_id: str, now: datetime, *, force_finish: bool = False) -> None:
         workflow = self.get_workflow(workflow_id)
-        template = self.repository.get_workflow_template(workflow.workflow_template_id)
-        if template is None:
-            raise EntityNotFoundError("Workflow template not found")
-
-        existing_steps = workflow.steps
-        existing_by_code = {
-            step.codigo: step
-            for step in existing_steps
-            if step.codigo is not None
-        }
-        completed_codes = {
-            step.codigo
-            for step in existing_steps
-            if step.codigo is not None and step.estado == StepStatus.COMPLETADO
-        }
-        created_steps: list[StepInstancePublic] = []
-
-        for template_step in sorted(template.steps, key=lambda item: (item.orden, item.codigo, item.id)):
-            if template_step.codigo in existing_by_code:
-                continue
-            if not set(template_step.depends_on).issubset(completed_codes):
-                continue
-
-            step_payload = StepCreate(
-                nombre=template_step.nombre,
-                descripcion=template_step.descripcion,
-                tipo=template_step.tipo,
-                requiere_aprobacion=template_step.requiere_aprobacion,
-                puede_tener_comentarios=template_step.puede_tener_comentarios,
-                asignado_a=None,
-                fecha_vencimiento=None,
-                action_type=template_step.action_type,
-                action_config=template_step.action_config,
-                action_label=template_step.action_label,
-                waits_for_external_response=template_step.waits_for_external_response,
-                expected_external_event=template_step.expected_external_event,
-                external_wait_reason=template_step.external_wait_reason,
-                external_reference=template_step.external_reference,
-            )
-            created_step = self.repository.create_step(
-                workflow_id,
-                step_payload,
-                template_step.orden,
-                StepStatus.ACTIVO,
-                step_template_id=template_step.id,
-                codigo=template_step.codigo,
-                depends_on=template_step.depends_on,
-            )
-            self._record_history(created_step.id, "estado", None, StepStatus.ACTIVO, actor)
-            created_steps.append(created_step)
-            existing_by_code[template_step.codigo] = created_step
-            completed_codes = {
-                step.codigo
-                for step in [*existing_steps, *created_steps]
-                if step.codigo is not None and step.estado == StepStatus.COMPLETADO
-            }
-
-        return created_steps
-
-    def _sync_workflow_and_trigger_status(self, workflow_id: str, now: datetime) -> None:
-        workflow = self.get_workflow(workflow_id)
-        template = self.repository.get_workflow_template(workflow.workflow_template_id)
-        if template is None:
-            raise EntityNotFoundError("Workflow template not found")
-
+        active_steps = [step for step in workflow.steps if step.estado in ACTIONABLE_STEP_STATUSES]
+        waiting_external_steps = [step for step in workflow.steps if step.estado == StepStatus.ESPERANDO_RESPUESTA]
         open_steps = [step for step in workflow.steps if step.estado in OPEN_STEP_STATUSES]
         active_orders = sorted(step.orden for step in open_steps)
-        template_codes = {step.codigo for step in template.steps}
-        completed_template_codes = {
-            step.codigo
-            for step in workflow.steps
-            if step.codigo in template_codes and step.estado == StepStatus.COMPLETADO
-        }
-        all_template_steps_completed = template_codes.issubset(completed_template_codes)
 
-        if all_template_steps_completed and not open_steps:
+        if force_finish:
+            workflow_update = workflow.model_copy(
+                update={
+                    "estado": WorkflowStatus.FINALIZADO,
+                    "pasos_activos": [],
+                    "paso_actual": None,
+                    "fecha_fin": now,
+                    "total_pasos": len(workflow.steps),
+                }
+            )
+        elif active_steps:
+            workflow_update = workflow.model_copy(
+                update={
+                    "estado": WorkflowStatus.EN_PROCESO,
+                    "pasos_activos": active_orders,
+                    "paso_actual": active_orders[0] if active_orders else None,
+                    "fecha_fin": None,
+                    "total_pasos": len(workflow.steps),
+                }
+            )
+        elif waiting_external_steps:
+            workflow_update = workflow.model_copy(
+                update={
+                    "estado": WorkflowStatus.ESPERANDO_RESPUESTA,
+                    "pasos_activos": active_orders,
+                    "paso_actual": active_orders[0] if active_orders else None,
+                    "fecha_fin": None,
+                    "total_pasos": len(workflow.steps),
+                }
+            )
+        elif workflow.steps and all(step.estado == StepStatus.COMPLETADO for step in workflow.steps):
             workflow_update = workflow.model_copy(
                 update={
                     "estado": WorkflowStatus.FINALIZADO,
@@ -411,9 +444,9 @@ class WorkflowService:
         else:
             workflow_update = workflow.model_copy(
                 update={
-                    "estado": WorkflowStatus.EN_PROCESO if open_steps else WorkflowStatus.PENDIENTE,
-                    "pasos_activos": active_orders,
-                    "paso_actual": active_orders[0] if active_orders else None,
+                    "estado": WorkflowStatus.PENDIENTE,
+                    "pasos_activos": [],
+                    "paso_actual": None,
                     "fecha_fin": None,
                     "total_pasos": len(workflow.steps),
                 }
@@ -435,7 +468,7 @@ class WorkflowService:
             workflow = self.repository.get_workflow(workflow_id)
             if workflow is None:
                 continue
-            if workflow.estado in {WorkflowStatus.PENDIENTE, WorkflowStatus.EN_PROCESO}:
+            if workflow.estado in {WorkflowStatus.PENDIENTE, WorkflowStatus.EN_PROCESO, WorkflowStatus.ESPERANDO_RESPUESTA}:
                 open_workflows.append(workflow)
 
         if open_workflows:
@@ -458,6 +491,12 @@ class WorkflowService:
                 }
             )
         self.repository.save_trigger(trigger_update)
+
+    def _resolve_closing_note(self, resultado_cierre: str | None, comentario: str | None) -> str:
+        note = (resultado_cierre or comentario or "").strip()
+        if len(note) < 3:
+            raise BusinessRuleError("Debes registrar el resultado de cierre de la tarea")
+        return note
 
     def _record_history(
         self,
@@ -499,7 +538,3 @@ class WorkflowService:
         if hasattr(value, "astimezone"):
             return value.astimezone(timezone.utc).isoformat()  # type: ignore[union-attr]
         return str(value)
-
-
-def created_step_id_suffix() -> str:
-    return str(uuid4()).split("-", maxsplit=1)[0]

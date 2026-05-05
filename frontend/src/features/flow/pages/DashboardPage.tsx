@@ -51,9 +51,9 @@ export function DashboardPage() {
               <Typography variant="subtitle2" color="primary.light">
                 Vista operativa
               </Typography>
-              <Typography variant="h2">Workflows activos y pasos abiertos</Typography>
+              <Typography variant="h2">Flows activos y tareas abiertas</Typography>
               <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
-                Deteccion rapida de que flujo necesita atencion y en que estado esta cada paso.
+                Deteccion rapida de que flow necesita atencion y en que estado esta cada tarea.
               </Typography>
             </Box>
 
@@ -72,8 +72,8 @@ export function DashboardPage() {
                   gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" },
                 }}
               >
-                <MetricCard label="Workflows activos" value={workflows.length} />
-                <MetricCard label="Pasos abiertos" value={steps.length} />
+                <MetricCard label="Flows activos" value={workflows.length} />
+                <MetricCard label="Tareas abiertas" value={steps.length} />
               </Box>
             )}
           </Stack>
@@ -92,13 +92,13 @@ export function DashboardPage() {
             <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
               <Stack spacing={2}>
                 <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
-                  <Typography variant="h5">Workflows activos</Typography>
+                  <Typography variant="h5">Flows activos</Typography>
                   <Button component={RouterLink} to="/triggers" variant="text" color="inherit">
                     Ver todos
                   </Button>
                 </Stack>
                 {workflows.length === 0 ? (
-                  <Alert severity="info">Todavia no hay workflows activos.</Alert>
+                  <Alert severity="info">Todavia no hay flows activos.</Alert>
                 ) : (
                   workflows.map((workflow) => (
                     <Card key={workflow.id} variant="outlined" className="hover-entity-parent" sx={{ position: "relative" }}>
@@ -107,9 +107,11 @@ export function DashboardPage() {
                       />
                       <CardContent sx={{ display: "flex", justifyContent: "space-between", gap: 2 }}>
                         <Box>
-                          <Typography sx={{ fontWeight: 700 }}>{workflow.workflow_template_nombre}</Typography>
+                          <Typography sx={{ fontWeight: 700 }}>
+                            {workflow.objetivo_final?.trim() || `Flow ${workflow.id.slice(0, 8)}`}
+                          </Typography>
                           <Typography variant="body2" color="text.secondary">
-                            Pasos activos: {workflow.pasos_activos.length > 0 ? workflow.pasos_activos.join(", ") : "sin pasos activos"}
+                            Tareas activas: {workflow.pasos_activos.length > 0 ? workflow.pasos_activos.join(", ") : "sin tareas activas"}
                           </Typography>
                         </Box>
                         <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
@@ -129,9 +131,9 @@ export function DashboardPage() {
           <Card>
             <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
               <Stack spacing={2}>
-                <Typography variant="h5">Pasos abiertos</Typography>
+                <Typography variant="h5">Tareas abiertas</Typography>
                 {steps.length === 0 ? (
-                  <Alert severity="info">No hay pasos abiertos.</Alert>
+                  <Alert severity="info">No hay tareas abiertas.</Alert>
                 ) : (
                   steps.map((step) => (
                     <Card key={step.id} variant="outlined" className="hover-entity-parent" sx={{ position: "relative" }}>
@@ -141,7 +143,7 @@ export function DashboardPage() {
                       <CardContent sx={{ display: "flex", justifyContent: "space-between", gap: 2 }}>
                         <Box>
                           <Typography sx={{ fontWeight: 700 }}>
-                            Paso {step.orden}: {step.nombre}
+                            Tarea {step.orden}: {step.nombre}
                           </Typography>
                           <Typography variant="body2" color="text.secondary">
                             {step.asignado_a ?? DEFAULT_ACTOR} | {formatDate(step.fecha_vencimiento)}

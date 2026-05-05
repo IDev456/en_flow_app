@@ -37,7 +37,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
 
   async function handleSubmit() {
     if (!canSubmit) {
-      setError("Debes definir la descripcion del primer paso");
+      setError("Debes definir la descripcion de la tarea inicial");
       return;
     }
 
@@ -52,7 +52,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
     }
 
     if (firstDescription.trim().length > STEP_DESCRIPTION_MAX) {
-      setError(`Descripcion del paso supera ${STEP_DESCRIPTION_MAX} caracteres`);
+      setError(`Descripcion de la tarea supera ${STEP_DESCRIPTION_MAX} caracteres`);
       return;
     }
 
@@ -74,9 +74,9 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
 
       const workflow = await startWorkflow(trigger.id, {
         objetivo_final: objetivoFinal,
-        resolucion_esperada: "Workflow resuelto y validado",
+        resolucion_esperada: "Flow resuelto y validado",
         primer_paso: {
-          nombre: "Paso inicial",
+          nombre: "Tarea inicial",
           descripcion: firstDescription.trim() || null,
           asignado_a: DEFAULT_ACTOR,
           fecha_vencimiento: null,
@@ -101,7 +101,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
           </Typography>
           <Typography variant="h4">Iniciar un flujo</Typography>
           <Typography variant="body2" color="text.secondary">
-            Define el primer paso para arrancar. Solicitante y descripcion son opcionales.
+            Define la tarea inicial para arrancar. Solicitante y descripcion son opcionales.
           </Typography>
         </Stack>
       </DialogTitle>
@@ -143,14 +143,14 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
           >
             <Stack spacing={2}>
               <Stack spacing={0.75}>
-                <Typography variant="h6">Primer paso</Typography>
+                <Typography variant="h6">Tarea inicial</Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Todo flujo arranca con un paso. Describe que hay que hacer para comenzar.
+                  Todo flow arranca con una tarea. Describe que hay que hacer para comenzar.
                 </Typography>
               </Stack>
 
               <TextField
-                label="Descripcion del paso *"
+                label="Descripcion de la tarea *"
                 multiline
                 minRows={4}
                 value={firstDescription}
@@ -166,7 +166,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
 
       <DialogActions sx={{ p: 3, justifyContent: "space-between" }}>
         <Typography variant="body2" color="text.secondary">
-          Se creara el trigger y el workflow inicial en una sola accion.
+          Se creara el requerimiento y el flow inicial en una sola accion.
         </Typography>
         <Stack direction="row" spacing={1.25}>
           <Button variant="text" color="inherit" onClick={onClose} disabled={submitting}>
