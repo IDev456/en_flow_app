@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type MouseEvent } from "react";
 import AttachmentRoundedIcon from "@mui/icons-material/AttachmentRounded";
 import ImageRoundedIcon from "@mui/icons-material/ImageRounded";
 import type { Theme } from "@mui/material/styles";
@@ -118,7 +118,7 @@ function VerticalWorkflowGraph({
 }: WorkflowGraphProps) {
   const theme = useTheme();
   const viewportRef = useRef<HTMLDivElement>(null);
-  const selectedCardRef = useRef<HTMLButtonElement | null>(null);
+  const selectedCardRef = useRef<HTMLDivElement | null>(null);
   const orderedSteps = [...steps].sort((left, right) => right.orden - left.orden);
 
   useEffect(() => {
@@ -233,6 +233,7 @@ function VerticalWorkflowGraph({
                 </Box>
 
                 <Card
+                  ref={isSelected ? selectedCardRef : null}
                   variant="outlined"
                   sx={{
                     position: "relative",
@@ -251,7 +252,7 @@ function VerticalWorkflowGraph({
                       className="complete-step-button"
                       size="small"
                       variant="contained"
-                      onClick={(event) => {
+                      onClick={(event: MouseEvent<HTMLButtonElement>) => {
                         event.stopPropagation();
                         onCompleteStepIntent(step.id);
                       }}
@@ -282,7 +283,6 @@ function VerticalWorkflowGraph({
 
                       {shouldExpand ? (
                         <ButtonBase
-                          ref={isSelected ? selectedCardRef : null}
                           onClick={() => {
                             onSelectStep(step.id);
                             onOpenStep(step.id);
@@ -293,58 +293,58 @@ function VerticalWorkflowGraph({
                             width: "100%",
                             textAlign: "left",
                             borderRadius: 1.5,
-                            overflow: "hidden",
+                            px: 0,
+                            py: 0,
                             transition: "background-color 180ms ease",
                             "&:hover": {
-                              backgroundColor: alpha(theme.palette.action.hover, 0.08),
+                              backgroundColor: alpha(theme.palette.action.hover, 0.06),
                             },
-                            "&.Mui-focusVisible": {
-                              backgroundColor: alpha(theme.palette.primary.main, 0.08),
+                            "&:focus-visible": {
+                              outline: `2px solid ${alpha(theme.palette.primary.main, 0.4)}`,
+                              outlineOffset: "2px",
                             },
                           }}
                         >
-                          <Box sx={{ p: 0 }}>
-                            <Box>
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                                sx={{ mb: 0.75, letterSpacing: 0.75, textTransform: "uppercase" }}
-                              >
-                                Ultimo registro
+                          <Box>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ mb: 0.75, letterSpacing: 0.75, textTransform: "uppercase" }}
+                            >
+                              Ultimo registro
+                            </Typography>
+                            <Box
+                              sx={{
+                                borderRadius: 1.5,
+                                px: 1.25,
+                                py: 1,
+                                backgroundColor: getMutedSurface(theme),
+                                border: "1px solid",
+                                borderColor: alpha(theme.palette.divider, 0.85),
+                              }}
+                            >
+                              {renderLatestStepMovement(step)}
+                            </Box>
+                            <Stack direction="row" spacing={1} sx={{ mt: 0.75, flexWrap: "wrap", gap: 1 }}>
+                              <Typography variant="caption" color="text.secondary">
+                                {lastCommentAt ? `Fecha: ${formatDate(lastCommentAt)}` : "Fecha: sin registro"}
                               </Typography>
-                              <Box
-                                sx={{
-                                  borderRadius: 1.5,
-                                  px: 1.25,
-                                  py: 1,
-                                  backgroundColor: getMutedSurface(theme),
-                                  border: "1px solid",
-                                  borderColor: alpha(theme.palette.divider, 0.85),
-                                }}
-                              >
-                                {renderLatestStepMovement(step)}
-                              </Box>
-                              <Stack direction="row" spacing={1} sx={{ mt: 0.75, flexWrap: "wrap", gap: 1 }}>
+                              {lastCommentElapsed && (
                                 <Typography variant="caption" color="text.secondary">
-                                  {lastCommentAt ? `Fecha: ${formatDate(lastCommentAt)}` : "Fecha: sin registro"}
-                                </Typography>
-                                {lastCommentElapsed && (
-                                  <Typography variant="caption" color="text.secondary">
-                                    {lastCommentElapsed}
-                                  </Typography>
-                                )}
-                                {stateElapsed && (
-                                  <Typography variant="caption" color="text.secondary">
-                                    Estado actual: {stateElapsed}
-                                  </Typography>
-                                )}
-                              </Stack>
-                              {step.estado === "esperando_respuesta" && step.expected_external_event && (
-                                <Typography variant="caption" color="info.light" sx={{ display: "block", mt: 0.75 }}>
-                                  Dato esperado: {step.expected_external_event}
+                                  {lastCommentElapsed}
                                 </Typography>
                               )}
-                            </Box>
+                              {stateElapsed && (
+                                <Typography variant="caption" color="text.secondary">
+                                  Estado actual: {stateElapsed}
+                                </Typography>
+                              )}
+                            </Stack>
+                            {step.estado === "esperando_respuesta" && step.expected_external_event && (
+                              <Typography variant="caption" color="info.light" sx={{ display: "block", mt: 0.75 }}>
+                                Dato esperado: {step.expected_external_event}
+                              </Typography>
+                            )}
                           </Box>
                         </ButtonBase>
                       ) : (
