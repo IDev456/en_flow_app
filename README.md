@@ -1,202 +1,219 @@
 # En Flow App
 
-Aplicacion web para gestionar requerimientos mediante **flujos secuenciales de tareas**.
+Aplicación web para gestionar requerimientos mediante **flujos secuenciales de tareas**.
 
-Cada requerimiento nace desde un disparador, inicia un workflow y avanza paso a paso hasta su resolucion final. El foco del proyecto esta en la **trazabilidad**, la **operacion guiada** y la **continuidad del flujo**: cuando un paso se completa, habilita automaticamente el siguiente.
+Cada requerimiento nace desde un disparador, inicia un workflow y avanza paso a paso hasta su resolución final. El foco del proyecto está en la **trazabilidad**, la **operación guiada** y la **continuidad del flujo**: cuando un paso se completa, habilita automáticamente el siguiente.
 
-## Stack
+## 🚀 Características principales
 
-- **Backend:** FastAPI
-- **Frontend:** React + Vite + TypeScript
+- **Gestión de requerimientos**: Creación y seguimiento de solicitudes con workflow automatizado
+- **Flujos secuenciales**: Pasos ordenados con estados controlados (activo, espera, problema, completado)
+- **Interfaz intuitiva**: Dashboard operativo con navegación fluida entre requerimientos y workflows
+- **Trazabilidad completa**: Historial de cambios, comentarios y timeline por paso
+- **Operación guiada**: Solo un paso operativo a la vez, con restricciones automáticas
+- **Persistencia robusta**: PostgreSQL con migraciones automáticas
+- **Arquitectura escalable**: Backend FastAPI + Frontend React/TypeScript
+
+## 🛠️ Stack Tecnológico
+
+- **Backend:** FastAPI (Python)
+- **Frontend:** React + Vite + TypeScript + Material-UI
 - **Base de datos:** PostgreSQL
-- **Ejecucion local:** Docker Compose
-- **Persistencia actual:** PostgreSQL
+- **Contenedorización:** Docker & Docker Compose
+- **ORM:** SQLAlchemy
+- **Validación:** Pydantic
 
-## Estado actual
+## 📊 Estado actual
 
-El proyecto ya tiene un flujo funcional de punta a punta:
+El proyecto cuenta con un flujo funcional completo de punta a punta:
 
-1. Crear un requerimiento
-2. Definir obligatoriamente el primer paso
-3. Iniciar un workflow
-4. Operar el paso activo
-5. Marcar un paso como completado
-6. Crear automaticamente el siguiente paso
-7. Finalizar el workflow cuando se completa el ultimo paso
-8. Resolver el requerimiento al cierre del flujo
+### ✅ Funcionalidades implementadas
 
-Todavia es una version temprana, pero ya tiene estructura de proyecto real, API integrada, frontend navegable, reglas de negocio consistentes y persistencia relacional.
+- **Gestión de requerimientos**
+  - Creación con solicitante y descripción opcionales
+  - Primer paso obligatorio para iniciar workflow
+  - Estados: sin flujo, en proceso, finalizado, cancelado
 
-## Concepto funcional
+- **Workflows operativos**
+  - Plantilla semilla con 3 etapas (Diagnóstico, Ejecución, Verificación)
+  - Generación secuencial automática de pasos
+  - Restricción de creación de nuevos pasos hasta completar el actual
 
-En Flow modela el trabajo como una secuencia controlada:
+- **Operación de pasos**
+  - Estados: activo, espera, problema, completado
+  - Comentarios y notas por paso
+  - Historial completo de cambios
+  - Timeline visual con indicadores de estado
 
-- Un **requerimiento** representa una solicitud, problema o evento.
-- Ese requerimiento puede disparar un **workflow**.
-- Un workflow tiene **pasos ordenados**.
-- Solo hay **un paso operativo a la vez**.
-- El usuario trabaja sobre ese paso y puede cambiarlo a:
-  - `en espera`
-  - `problema`
-  - `completado`
-- Cuando un paso queda en `completado`, el sistema:
-  - registra historial
-  - conserva comentarios/notas
-  - crea el siguiente paso
-  - o finaliza el workflow si ya no hay mas pasos
+- **Interfaz de usuario**
+  - Dashboard con KPIs y filtros
+  - Lista principal de requerimientos
+  - Vista detallada de workflow con secuenciador visual
+  - Panel lateral de detalle de pasos
+  - Modal de creación sin salir de contexto
+  - Navegación breadcrumbs consistente
 
-## Funcionalidades implementadas
+### 🎯 Mejoras recientes
 
-- Creacion de requerimientos con:
-  - `solicitante` opcional
-  - `descripcion` opcional
-  - `primer paso` obligatorio
-- Inicio de workflow desde un requerimiento
-- Plantilla semilla de workflow con 3 etapas:
-  - `Diagnostico`
-  - `Ejecucion`
-  - `Verificacion final`
-- Generacion secuencial de pasos
-- Restriccion para no crear un nuevo paso si el actual sigue abierto
-- Cambio de estado de pasos con nota opcional
-- Comentarios por paso
-- Historial de cambios por paso
-- Dashboard operativo
-- Lista principal de requerimientos con KPIs, filtros y cantidad de pasos creados
-- Vista de workflow con navegacion entre pasos y panel lateral de detalle
-- Creacion de requerimiento mediante modal, sin salir de la pantalla principal
+- **Secuenciador optimizado**: Eliminación de elementos redundantes (bloque de cierre, chips duplicados)
+- **Interacción precisa**: Botón "Listo" aislado para completar tareas, área de registro exclusiva para abrir panel lateral
+- **UX mejorada**: Flujo más limpio y directo en la gestión de workflows
 
-## Arquitectura
+## 🏗️ Arquitectura
 
-### Backend
+### Backend (FastAPI)
 
-El backend sigue una estructura por capas:
+Estructura por capas desacopladas:
 
-- `schemas`: contratos Pydantic y tipos del dominio
-- `repositories`: abstraccion de persistencia e implementacion sobre PostgreSQL
-- `services`: reglas de negocio y orquestacion del workflow
-- `api`: endpoints FastAPI
-- `core`: configuracion y errores compartidos
-
-La API y la logica principal siguen desacopladas de la infraestructura gracias a la capa de repositorios.
-
-### Frontend
-
-El frontend esta organizado por feature:
-
-- `dashboard`
-- `triggers`
-- `workflows`
-- `steps`
-
-Las llamadas HTTP estan centralizadas y la UI se compone desde componentes reutilizables para badges, timeline, panel de paso, historial y modal de creacion.
-
-## Estructura del repositorio
-
-```text
-.
-|-- backend
-|   |-- app
-|   |   |-- api
-|   |   |-- core
-|   |   |-- db
-|   |   |-- repositories
-|   |   |-- schemas
-|   |   `-- services
-|   |-- .dockerignore
-|   |-- .env.example
-|   |-- Dockerfile
-|   `-- requirements.txt
-|-- docker-compose.yml
-|-- frontend
-|   |-- .dockerignore
-|   |-- public
-|   |-- Dockerfile
-|   `-- src
-|       |-- api
-|       |-- components
-|       `-- features
-`-- README.md
+```
+backend/app/
+├── api/           # Endpoints REST
+├── core/          # Configuración y utilidades compartidas
+├── db/            # Conexión y modelos de base de datos
+├── repositories/  # Abstracción de persistencia
+├── schemas/       # Contratos Pydantic y tipos de dominio
+└── services/      # Reglas de negocio y orquestación
 ```
 
-## Puesta en marcha
+### Frontend (React/TypeScript)
 
-### Opcion recomendada: Docker
+Organización por features:
+
+```
+frontend/src/
+├── api/           # Cliente HTTP centralizado
+├── components/    # Componentes reutilizables
+└── features/      # Módulos funcionales
+    ├── dashboard/
+    ├── flow/
+    ├── tasks/
+    └── triggers/
+```
+
+## 📁 Estructura del repositorio
+
+```
+.
+├── backend/
+│   ├── app/
+│   │   ├── api/
+│   │   ├── core/
+│   │   ├── db/
+│   │   ├── repositories/
+│   │   ├── schemas/
+│   │   └── services/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── .env.example
+├── frontend/
+│   ├── public/
+│   ├── src/
+│   │   ├── api/
+│   │   ├── components/
+│   │   └── features/
+│   ├── Dockerfile
+│   ├── package.json
+│   └── vite.config.ts
+├── docker-compose.yml
+└── README.md
+```
+
+## 🚀 Puesta en marcha
+
+### Opción recomendada: Docker Compose
 
 ```bash
+# Clonar el repositorio
+git clone <repository-url>
+cd en_flow_app
+
+# Construir e iniciar servicios
 docker compose up --build
 ```
 
-Servicios disponibles:
+**Servicios disponibles:**
+- **Frontend:** http://localhost:5173
+- **Backend API:** http://localhost:8000
+- **Documentación API:** http://localhost:8000/docs
+- **Base de datos:** localhost:5432
 
-- Frontend: `http://localhost:5173`
-- Backend API: `http://localhost:8000`
-- Swagger UI: `http://localhost:8000/docs`
-- PostgreSQL: `localhost:5432`
+### Desarrollo local sin Docker
 
-Notas:
-
-- el backend corre con `uvicorn --reload`
-- el frontend corre con `vite`
-- PostgreSQL se inicializa automaticamente al arrancar el backend
-- la configuracion actual esta orientada a desarrollo local
-
-## Desarrollo local sin Docker
-
-### Backend
-
-Desde `backend/`:
+#### Backend
 
 ```bash
+cd backend
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Variables minimas del backend para desarrollo local:
-
+Variables de entorno mínimas:
 ```bash
 DATABASE_URL=postgresql+psycopg://enflow:enflow@localhost:5432/enflow
 ```
 
-### Frontend
-
-Desde `frontend/`:
+#### Frontend
 
 ```bash
+cd frontend
 npm install
 npm run dev
 ```
 
-## Variables de entorno
+## ⚙️ Variables de entorno
 
-Hay ejemplos base en:
-
+Ejemplos base disponibles en:
 - `backend/.env.example`
 - `frontend/.env.example`
 
-Cuando se usa Docker Compose, las variables principales ya estan definidas en `docker-compose.yml`.
+Con Docker Compose, las variables principales están predefinidas en `docker-compose.yml`.
 
-## Modelo de dominio
+## 📋 Modelo de dominio
 
-Entidades principales implementadas:
+### Entidades principales
 
-- `Trigger`
-- `WorkflowInstance`
-- `WorkflowTemplate`
-- `StepTemplate`
-- `StepInstance`
-- `Comment`
-- `StepHistory`
+- **Trigger**: Disparador de requerimiento
+- **WorkflowInstance**: Instancia ejecutándose de un workflow
+- **WorkflowTemplate**: Plantilla de workflow
+- **StepTemplate**: Plantilla de paso
+- **StepInstance**: Paso en ejecución
+- **Comment**: Comentarios por paso
+- **StepHistory**: Historial de cambios
 
-Estados visibles hoy:
+### Estados del sistema
 
-- Requerimiento: `sin flujo`, `en proceso`, `finalizado`, `cancelado`
-- Workflow: `en proceso`, `finalizado`, `cancelado`
-- Paso: `en proceso`, `en espera`, `problema`, `completado`
+**Requerimientos:**
+- `sin flujo` - Pendiente de iniciar workflow
+- `en proceso` - Workflow activo
+- `finalizado` - Resuelto exitosamente
+- `cancelado` - Cancelado por usuario
 
-Nota:
+**Workflows:**
+- `en proceso` - Pasos en ejecución
+- `finalizado` - Todos los pasos completados
+- `cancelado` - Workflow cancelado
 
-- internamente todavia existen algunos estados tecnicos para compatibilidad entre capas, pero la UI ya esta unificada con este vocabulario.
+**Pasos:**
+- `activo` - En ejecución actual
+- `espera` - Pausado temporalmente
+- `problema` - Requiere atención especial
+- `completado` - Finalizado exitosamente
+
+## 🤝 Contribuir
+
+1. Fork el proyecto
+2. Crea una rama para tu feature (`git checkout -b feature/nueva-funcionalidad`)
+3. Commit tus cambios (`git commit -am 'Agrega nueva funcionalidad'`)
+4. Push a la rama (`git push origin feature/nueva-funcionalidad`)
+5. Abre un Pull Request
+
+## 📄 Licencia
+
+Este proyecto está bajo la Licencia MIT. Ver el archivo `LICENSE` para más detalles.
+
+---
+
+**Nota:** Este es un proyecto en desarrollo activo. La documentación y funcionalidades pueden evolucionar con el tiempo.
 
 ## Reglas de negocio principales
 
