@@ -97,7 +97,7 @@ export function StepDetailPage() {
     return (
       <Stack direction="row" spacing={1.5} sx={{ py: 8, alignItems: "center", justifyContent: "center" }}>
         <CircularProgress size={24} />
-        <Typography color="text.secondary">Cargando paso...</Typography>
+        <Typography color="text.secondary">Cargando tarea...</Typography>
       </Stack>
     );
   }
@@ -109,7 +109,7 @@ export function StepDetailPage() {
   return (
     <Stack spacing={3}>
       <Breadcrumbs>
-        <Link component={RouterLink} underline="hover" color="inherit" to="/triggers">
+        <Link component={RouterLink} underline="hover" color="inherit" to="/requirements">
           Requerimientos
         </Link>
         {step && (

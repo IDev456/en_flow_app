@@ -124,6 +124,14 @@ def _migrate_workflow_schema() -> None:
     is_postgres = engine.url.get_backend_name().startswith("postgres")
     empty_json_literal = "'[]'::json" if is_postgres else "'[]'"
     migration_statements = [
+        """
+        CREATE TABLE IF NOT EXISTS requirement_flow_links (
+            requirement_id VARCHAR(36) NOT NULL REFERENCES triggers(id) ON DELETE CASCADE,
+            workflow_id VARCHAR(36) NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+            fecha_vinculacion TIMESTAMPTZ NOT NULL,
+            PRIMARY KEY (requirement_id, workflow_id)
+        )
+        """,
         "ALTER TABLE workflow_template_steps ADD COLUMN IF NOT EXISTS codigo VARCHAR(120)",
         "ALTER TABLE workflow_template_steps ADD COLUMN IF NOT EXISTS depends_on JSON",
         "ALTER TABLE workflow_template_steps ADD COLUMN IF NOT EXISTS action_type VARCHAR(80)",
@@ -148,7 +156,16 @@ def _migrate_workflow_schema() -> None:
         f"UPDATE steps SET depends_on = {empty_json_literal} WHERE depends_on IS NULL",
         "UPDATE steps SET action_type = 'continue' WHERE action_type IS NULL",
         "UPDATE steps SET waits_for_external_response = FALSE WHERE waits_for_external_response IS NULL",
+        """
+        INSERT INTO requirement_flow_links (requirement_id, workflow_id, fecha_vinculacion)
+        SELECT w.trigger_id, w.id, w.fecha_inicio
+        FROM workflows w
+        WHERE w.trigger_id IS NOT NULL
+        ON CONFLICT (requirement_id, workflow_id) DO NOTHING
+        """,
     ]
+    if is_postgres:
+        migration_statements.insert(1, "ALTER TABLE workflows ALTER COLUMN trigger_id DROP NOT NULL")
     with engine.begin() as connection:
         for statement in migration_statements:
             connection.execute(text(statement))

@@ -215,6 +215,12 @@ export function TriggerDetailPage() {
     if (workflow.estado === "esperando_respuesta") {
       return "esperando_respuesta";
     }
+    if (workflow.estado === "en_espera") {
+      return "en_espera";
+    }
+    if (workflow.estado === "con_problema") {
+      return "con_problema";
+    }
     if (workflow.estado === "finalizado" || workflow.estado === "cancelado") {
       return workflow.estado;
     }
@@ -227,6 +233,17 @@ export function TriggerDetailPage() {
   function countExternalWaitingSteps(workflow: WorkflowDetail) {
     return workflow.steps.filter((step) => step.estado === "esperando_respuesta").length;
   }
+
+  const linkedWorkflows = (trigger?.workflow_ids ?? [])
+    .map((workflowId) => workflowsById[workflowId])
+    .filter((workflow): workflow is WorkflowDetail => Boolean(workflow));
+  const requirementStats = {
+    abiertos: linkedWorkflows.filter((workflow) =>
+      ["en_proceso", "en_espera", "con_problema", "pendiente"].includes(workflow.estado)
+    ).length,
+    esperando: linkedWorkflows.filter((workflow) => workflow.estado === "esperando_respuesta").length,
+    finalizados: linkedWorkflows.filter((workflow) => ["finalizado", "cancelado"].includes(workflow.estado)).length,
+  };
 
   if (loading) {
     return (
@@ -248,7 +265,7 @@ export function TriggerDetailPage() {
   return (
     <Stack spacing={3}>
       <Breadcrumbs>
-        <Link component={RouterLink} underline="hover" color="inherit" to="/triggers">
+        <Link component={RouterLink} underline="hover" color="inherit" to="/requirements">
           Requerimientos
         </Link>
         <Typography color="text.primary">Detalle</Typography>
@@ -332,6 +349,9 @@ export function TriggerDetailPage() {
                 <InfoItem label="Registrado por" value={trigger.creado_por} />
                 <InfoItem label="Creado" value={formatDate(trigger.fecha_creacion)} />
                 <InfoItem label="Actualizado" value={formatDate(trigger.fecha_actualizacion)} />
+                <InfoItem label="Flows abiertos" value={String(requirementStats.abiertos)} />
+                <InfoItem label="Flows esperando" value={String(requirementStats.esperando)} />
+                <InfoItem label="Flows finalizados" value={String(requirementStats.finalizados)} />
               </Box>
 
               {trigger.metadata && (

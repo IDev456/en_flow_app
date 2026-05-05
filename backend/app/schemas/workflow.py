@@ -6,8 +6,10 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class TriggerStatus(StrEnum):
-    NUEVO = "nuevo"
+    SIN_FLOWS = "sin_flows"
     EN_PROCESO = "en_proceso"
+    ESPERANDO_RESPUESTA = "esperando_respuesta"
+    CON_PROBLEMA = "con_problema"
     RESUELTO = "resuelto"
     CANCELADO = "cancelado"
 
@@ -16,6 +18,8 @@ class WorkflowStatus(StrEnum):
     PENDIENTE = "pendiente"
     EN_PROCESO = "en_proceso"
     ESPERANDO_RESPUESTA = "esperando_respuesta"
+    EN_ESPERA = "en_espera"
+    CON_PROBLEMA = "con_problema"
     FINALIZADO = "finalizado"
     CANCELADO = "cancelado"
 
@@ -26,6 +30,7 @@ class StepStatus(StrEnum):
     PROBLEMA = "problema"
     ESPERANDO_RESPUESTA = "esperando_respuesta"
     COMPLETADO = "completado"
+    CANCELADA = "cancelada"
 
 
 class StepTransitionType(StrEnum):
@@ -115,7 +120,8 @@ class WorkflowStartRequest(WorkflowInstanceBase):
 
 class WorkflowSummary(WorkflowInstanceBase):
     id: str
-    trigger_id: str
+    trigger_id: str | None = None
+    requirement_ids: list[str] = Field(default_factory=list)
     workflow_template_id: str
     workflow_template_nombre: str
     estado: WorkflowStatus
@@ -212,7 +218,7 @@ class NextTaskInput(BaseModel):
 
 class ExternalWaitInput(BaseModel):
     que_se_espera: str = Field(min_length=1, max_length=200)
-    origen: str = Field(min_length=1, max_length=120)
+    origen: str | None = Field(default=None, max_length=120)
     detalle: str | None = Field(default=None, max_length=1000)
     referencia_externa: str | None = Field(default=None, max_length=200)
     attachments: list[AttachmentBase] = Field(default_factory=list)
@@ -271,6 +277,33 @@ class ExternalResponseDecisionPayload(BaseModel):
         if self.transition_type == StepTransitionType.FINISH_FLOW and self.finish_data is None:
             raise ValueError("Debes indicar los datos de cierre del flow")
         return self
+
+
+class QuickCaptureRequest(BaseModel):
+    titulo: str = Field(min_length=3, max_length=200)
+    detalle: str | None = Field(default=None, max_length=1000)
+    asignado_a: str | None = Field(default=None, max_length=120)
+    fecha_vencimiento: datetime | None = None
+    creado_por: str = Field(default="sistema", min_length=1, max_length=120)
+
+
+class RequirementLinkPayload(BaseModel):
+    requirement_id: str
+
+
+class RequirementCreateFromFlowPayload(BaseModel):
+    descripcion: str = Field(min_length=3, max_length=1000)
+    solicitante: str | None = Field(default=None, max_length=150)
+    creado_por: str = Field(default="sistema", min_length=1, max_length=120)
+
+
+class DailyBoardResponse(BaseModel):
+    tareas_activas: list[StepInstancePublic] = Field(default_factory=list)
+    tareas_esperando_respuesta: list[StepInstancePublic] = Field(default_factory=list)
+    tareas_en_pausa: list[StepInstancePublic] = Field(default_factory=list)
+    tareas_con_problema: list[StepInstancePublic] = Field(default_factory=list)
+    flows_recientes: list[WorkflowSummary] = Field(default_factory=list)
+    flows_cerrados_recientes: list[WorkflowSummary] = Field(default_factory=list)
 
 
 class CommentCreate(BaseModel):

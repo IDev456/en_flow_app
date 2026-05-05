@@ -9,6 +9,7 @@ from app.db.models import (
     DEFAULT_WORKFLOW_TEMPLATE_ID,
     CommentModel,
     ExternalEventModel,
+    RequirementFlowLinkModel,
     StepHistoryModel,
     StepModel,
     TriggerModel,
@@ -118,10 +119,22 @@ class WorkflowRepository(ABC):
     @abstractmethod
     def create_workflow(
         self,
-        trigger_id: str,
+        trigger_id: str | None,
         template: WorkflowTemplatePublic,
         payload: WorkflowInstanceBase,
     ) -> WorkflowDetail:
+        raise NotImplementedError
+
+    @abstractmethod
+    def link_requirement_to_workflow(self, requirement_id: str, workflow_id: str) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def unlink_requirement_from_workflow(self, requirement_id: str, workflow_id: str) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def list_workflow_requirement_ids(self, workflow_id: str) -> list[str]:
         raise NotImplementedError
 
     @abstractmethod
@@ -207,6 +220,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
     def __init__(self) -> None:
         self._triggers: dict[str, TriggerPublic] = {}
         self._workflow_ids_by_trigger: dict[str, list[str]] = {}
+        self._requirement_ids_by_workflow: dict[str, list[str]] = {}
         self._workflows: dict[str, WorkflowSummary] = {}
         self._steps: dict[str, StepInstancePublic] = {}
         self._step_ids_by_workflow: dict[str, list[str]] = {}
@@ -301,7 +315,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
             solicitante=payload.solicitante,
             descripcion=payload.descripcion,
             tipo=payload.tipo,
-            estado_general=TriggerStatus.NUEVO,
+            estado_general=TriggerStatus.SIN_FLOWS,
             fecha_creacion=now,
             fecha_actualizacion=now,
             creado_por=payload.creado_por,
@@ -319,14 +333,19 @@ class InMemoryWorkflowRepository(WorkflowRepository):
             return False
 
         for workflow_id in workflow_ids:
-            step_ids = self._step_ids_by_workflow.pop(workflow_id, [])
-            self._workflows.pop(workflow_id, None)
-            self._external_events_by_workflow.pop(workflow_id, None)
-            for step_id in step_ids:
-                self._steps.pop(step_id, None)
-                self._comments_by_step.pop(step_id, None)
-                self._history_by_step.pop(step_id, None)
-                self._external_events_by_step.pop(step_id, None)
+            requirement_ids = self._requirement_ids_by_workflow.get(workflow_id, [])
+            self._requirement_ids_by_workflow[workflow_id] = [item for item in requirement_ids if item != trigger_id]
+            workflow = self._workflows.get(workflow_id)
+            if workflow:
+                next_trigger_id = workflow.trigger_id
+                if workflow.trigger_id == trigger_id:
+                    next_trigger_id = self._requirement_ids_by_workflow[workflow_id][0] if self._requirement_ids_by_workflow[workflow_id] else None
+                self._workflows[workflow_id] = workflow.model_copy(
+                    update={
+                        "trigger_id": next_trigger_id,
+                        "requirement_ids": list(self._requirement_ids_by_workflow[workflow_id]),
+                    }
+                )
 
         return True
 
@@ -340,9 +359,13 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         for workflow in sorted(self._workflows.values(), key=lambda item: item.fecha_inicio, reverse=True):
             steps = self.list_workflow_steps(workflow.id)
             active_orders = _active_step_orders(steps)
+            requirement_ids = list(self._requirement_ids_by_workflow.get(workflow.id, workflow.requirement_ids))
+            primary_requirement_id = workflow.trigger_id or (requirement_ids[0] if requirement_ids else None)
             items.append(
                 workflow.model_copy(
                     update={
+                        "trigger_id": primary_requirement_id,
+                        "requirement_ids": requirement_ids,
                         "pasos_activos": active_orders,
                         "paso_actual": active_orders[0] if active_orders else None,
                         "total_pasos": len(steps),
@@ -358,8 +381,12 @@ class InMemoryWorkflowRepository(WorkflowRepository):
 
         steps = self.list_workflow_steps(workflow_id)
         active_orders = _active_step_orders(steps)
+        requirement_ids = list(self._requirement_ids_by_workflow.get(workflow.id, workflow.requirement_ids))
+        primary_requirement_id = workflow.trigger_id or (requirement_ids[0] if requirement_ids else None)
         summary = workflow.model_copy(
             update={
+                "trigger_id": primary_requirement_id,
+                "requirement_ids": requirement_ids,
                 "pasos_activos": active_orders,
                 "paso_actual": active_orders[0] if active_orders else None,
                 "total_pasos": len(steps),
@@ -369,7 +396,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
 
     def create_workflow(
         self,
-        trigger_id: str,
+        trigger_id: str | None,
         template: WorkflowTemplatePublic,
         payload: WorkflowInstanceBase,
     ) -> WorkflowDetail:
@@ -379,6 +406,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         workflow = WorkflowSummary(
             id=str(uuid4()),
             trigger_id=trigger_id,
+            requirement_ids=[trigger_id] if trigger_id else [],
             workflow_template_id=template.id,
             workflow_template_nombre=template.nombre,
             estado=WorkflowStatus.EN_PROCESO,
@@ -392,7 +420,9 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         )
         self._workflows[workflow.id] = workflow
         self._step_ids_by_workflow[workflow.id] = []
-        self._workflow_ids_by_trigger.setdefault(trigger_id, []).append(workflow.id)
+        self._requirement_ids_by_workflow[workflow.id] = [trigger_id] if trigger_id else []
+        if trigger_id:
+            self._workflow_ids_by_trigger.setdefault(trigger_id, []).append(workflow.id)
 
         step = StepInstancePublic(
             id=str(uuid4()),
@@ -435,7 +465,38 @@ class InMemoryWorkflowRepository(WorkflowRepository):
     def save_workflow(self, workflow: WorkflowSummary) -> WorkflowSummary:
         normalized = WorkflowSummary(**workflow.model_dump(exclude={"steps"}))
         self._workflows[workflow.id] = normalized
+        self._requirement_ids_by_workflow[workflow.id] = list(workflow.requirement_ids)
+        if workflow.trigger_id and workflow.trigger_id not in self._requirement_ids_by_workflow[workflow.id]:
+            self._requirement_ids_by_workflow[workflow.id].append(workflow.trigger_id)
         return normalized
+
+    def link_requirement_to_workflow(self, requirement_id: str, workflow_id: str) -> None:
+        requirement_ids = self._requirement_ids_by_workflow.setdefault(workflow_id, [])
+        if requirement_id not in requirement_ids:
+            requirement_ids.append(requirement_id)
+        workflow_ids = self._workflow_ids_by_trigger.setdefault(requirement_id, [])
+        if workflow_id not in workflow_ids:
+            workflow_ids.append(workflow_id)
+        workflow = self._workflows.get(workflow_id)
+        if workflow and not workflow.trigger_id:
+            self._workflows[workflow_id] = workflow.model_copy(update={"trigger_id": requirement_id, "requirement_ids": requirement_ids})
+
+    def unlink_requirement_from_workflow(self, requirement_id: str, workflow_id: str) -> None:
+        requirement_ids = self._requirement_ids_by_workflow.get(workflow_id, [])
+        self._requirement_ids_by_workflow[workflow_id] = [item for item in requirement_ids if item != requirement_id]
+        workflow_ids = self._workflow_ids_by_trigger.get(requirement_id, [])
+        self._workflow_ids_by_trigger[requirement_id] = [item for item in workflow_ids if item != workflow_id]
+        workflow = self._workflows.get(workflow_id)
+        if workflow:
+            next_trigger_id = workflow.trigger_id
+            if workflow.trigger_id == requirement_id:
+                next_trigger_id = self._requirement_ids_by_workflow[workflow_id][0] if self._requirement_ids_by_workflow[workflow_id] else None
+            self._workflows[workflow_id] = workflow.model_copy(
+                update={"trigger_id": next_trigger_id, "requirement_ids": list(self._requirement_ids_by_workflow[workflow_id])}
+            )
+
+    def list_workflow_requirement_ids(self, workflow_id: str) -> list[str]:
+        return list(self._requirement_ids_by_workflow.get(workflow_id, []))
 
     def list_workflow_steps(self, workflow_id: str) -> list[StepInstancePublic]:
         step_ids = self._step_ids_by_workflow.get(workflow_id, [])
@@ -558,7 +619,14 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         return [
             workflow
             for workflow in self.list_workflows()
-            if workflow.estado in {WorkflowStatus.PENDIENTE, WorkflowStatus.EN_PROCESO, WorkflowStatus.ESPERANDO_RESPUESTA}
+            if workflow.estado
+            in {
+                WorkflowStatus.PENDIENTE,
+                WorkflowStatus.EN_PROCESO,
+                WorkflowStatus.ESPERANDO_RESPUESTA,
+                WorkflowStatus.EN_ESPERA,
+                WorkflowStatus.CON_PROBLEMA,
+            }
         ]
 
     def list_workflow_templates(self) -> list[WorkflowTemplatePublic]:
@@ -697,7 +765,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             solicitante=payload.solicitante,
             descripcion=payload.descripcion,
             tipo=payload.tipo,
-            estado_general=TriggerStatus.NUEVO.value,
+            estado_general=TriggerStatus.SIN_FLOWS.value,
             fecha_creacion=now,
             fecha_actualizacion=now,
             creado_por=payload.creado_por,
@@ -744,7 +812,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
         with session_scope() as session:
             workflows = session.scalars(
                 select(WorkflowModel)
-                .options(selectinload(WorkflowModel.steps))
+                .options(selectinload(WorkflowModel.steps), selectinload(WorkflowModel.requirements))
                 .order_by(WorkflowModel.fecha_inicio.desc())
             ).all()
             return [self._workflow_to_summary(workflow) for workflow in workflows]
@@ -754,6 +822,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             workflow = session.scalar(
                 select(WorkflowModel)
                 .options(
+                    selectinload(WorkflowModel.requirements),
                     selectinload(WorkflowModel.steps).selectinload(StepModel.comments),
                     selectinload(WorkflowModel.steps).selectinload(StepModel.history_entries),
                 )
@@ -765,7 +834,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
 
     def create_workflow(
         self,
-        trigger_id: str,
+        trigger_id: str | None,
         template: WorkflowTemplatePublic,
         payload: WorkflowInstanceBase,
     ) -> WorkflowDetail:
@@ -820,15 +889,67 @@ class PostgresWorkflowRepository(WorkflowRepository):
         with session_scope() as session:
             session.add(workflow)
             session.flush()
+            if trigger_id:
+                session.merge(
+                    RequirementFlowLinkModel(
+                        requirement_id=trigger_id,
+                        workflow_id=workflow.id,
+                        fecha_vinculacion=now,
+                    )
+                )
             workflow = session.scalar(
                 select(WorkflowModel)
                 .options(
+                    selectinload(WorkflowModel.requirements),
                     selectinload(WorkflowModel.steps).selectinload(StepModel.comments),
                     selectinload(WorkflowModel.steps).selectinload(StepModel.history_entries),
                 )
                 .where(WorkflowModel.id == workflow.id)
             )
             return self._workflow_to_detail(workflow)  # type: ignore[arg-type]
+
+    def link_requirement_to_workflow(self, requirement_id: str, workflow_id: str) -> None:
+        with session_scope() as session:
+            link = session.get(RequirementFlowLinkModel, {"requirement_id": requirement_id, "workflow_id": workflow_id})
+            if link is None:
+                session.add(
+                    RequirementFlowLinkModel(
+                        requirement_id=requirement_id,
+                        workflow_id=workflow_id,
+                        fecha_vinculacion=utc_now(),
+                    )
+                )
+
+            workflow = session.get(WorkflowModel, workflow_id)
+            if workflow and not workflow.trigger_id:
+                workflow.trigger_id = requirement_id
+            session.flush()
+
+    def unlink_requirement_from_workflow(self, requirement_id: str, workflow_id: str) -> None:
+        with session_scope() as session:
+            link = session.get(RequirementFlowLinkModel, {"requirement_id": requirement_id, "workflow_id": workflow_id})
+            if link is not None:
+                session.delete(link)
+                session.flush()
+
+            workflow = session.get(WorkflowModel, workflow_id)
+            if workflow and workflow.trigger_id == requirement_id:
+                next_requirement_id = session.scalar(
+                    select(RequirementFlowLinkModel.requirement_id)
+                    .where(RequirementFlowLinkModel.workflow_id == workflow_id)
+                    .order_by(RequirementFlowLinkModel.fecha_vinculacion.asc())
+                )
+                workflow.trigger_id = next_requirement_id
+            session.flush()
+
+    def list_workflow_requirement_ids(self, workflow_id: str) -> list[str]:
+        with session_scope() as session:
+            ids = session.scalars(
+                select(RequirementFlowLinkModel.requirement_id)
+                .where(RequirementFlowLinkModel.workflow_id == workflow_id)
+                .order_by(RequirementFlowLinkModel.fecha_vinculacion.asc())
+            ).all()
+            return list(ids)
 
     def save_workflow(self, workflow: WorkflowSummary) -> WorkflowSummary:
         with session_scope() as session:
@@ -1088,13 +1209,15 @@ class PostgresWorkflowRepository(WorkflowRepository):
         with session_scope() as session:
             workflows = session.scalars(
                 select(WorkflowModel)
-                .options(selectinload(WorkflowModel.steps))
+                .options(selectinload(WorkflowModel.steps), selectinload(WorkflowModel.requirements))
                 .where(
                     WorkflowModel.estado.in_(
                         [
                             WorkflowStatus.PENDIENTE.value,
                             WorkflowStatus.EN_PROCESO.value,
                             WorkflowStatus.ESPERANDO_RESPUESTA.value,
+                            WorkflowStatus.EN_ESPERA.value,
+                            WorkflowStatus.CON_PROBLEMA.value,
                         ]
                     )
                 )
@@ -1160,9 +1283,12 @@ class PostgresWorkflowRepository(WorkflowRepository):
     def _workflow_to_summary(self, workflow: WorkflowModel) -> WorkflowSummary:
         steps = _sort_step_instances([self._step_to_public(item) for item in workflow.steps])
         active_orders = _active_step_orders(steps)
+        requirement_ids = [item.id for item in sorted(workflow.requirements, key=lambda requirement: requirement.fecha_creacion)]
+        primary_requirement_id = workflow.trigger_id or (requirement_ids[0] if requirement_ids else None)
         return WorkflowSummary(
             id=workflow.id,
-            trigger_id=workflow.trigger_id,
+            trigger_id=primary_requirement_id,
+            requirement_ids=requirement_ids,
             workflow_template_id=workflow.workflow_template_id,
             workflow_template_nombre=workflow.workflow_template_nombre,
             estado=WorkflowStatus(workflow.estado),

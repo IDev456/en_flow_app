@@ -1,5 +1,5 @@
 import { Navigate } from "react-router-dom";
 
 export function TriggerCreatePage() {
-  return <Navigate to="/triggers?modal=new" replace />;
+  return <Navigate to="/board?modal=capture" replace />;
 }

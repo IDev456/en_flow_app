@@ -1,5 +1,8 @@
-import { apiDelete, apiGet, apiPatch, apiPost } from "../../api/client";
+import { apiDelete, apiGet, apiPatch, apiPost, apiRequest } from "../../api/client";
 import type {
+  CreateRequirementFromFlowInput,
+  DailyBoardData,
+  LinkRequirementInput,
   Step,
   StepComment,
   StepCommentInput,
@@ -8,6 +11,7 @@ import type {
   ExternalEvent,
   ExternalEventCreateInput,
   StepHistoryEntry,
+  QuickCaptureInput,
   StepStatusUpdateInput,
   Trigger,
   TriggerCreateInput,
@@ -19,27 +23,27 @@ import type {
 } from "./types";
 
 export function listTriggers() {
-  return apiGet<TriggerDetail[]>("/triggers/");
+  return apiGet<TriggerDetail[]>("/requirements/");
 }
 
 export function createTrigger(input: TriggerCreateInput) {
-  return apiPost<Trigger>("/triggers/", input);
+  return apiPost<Trigger>("/requirements/", input);
 }
 
 export function deleteTrigger(triggerId: string) {
-  return apiDelete(`/triggers/${triggerId}`);
+  return apiDelete(`/requirements/${triggerId}`);
 }
 
 export function getTrigger(triggerId: string) {
-  return apiGet<TriggerDetail>(`/triggers/${triggerId}`);
+  return apiGet<TriggerDetail>(`/requirements/${triggerId}`);
 }
 
 export function updateTrigger(triggerId: string, input: TriggerUpdateInput) {
-  return apiPatch<TriggerDetail>(`/triggers/${triggerId}`, input);
+  return apiPatch<TriggerDetail>(`/requirements/${triggerId}`, input);
 }
 
 export function startWorkflow(triggerId: string, input: WorkflowStartInput) {
-  return apiPost<WorkflowDetail>(`/triggers/${triggerId}/start-workflow`, input);
+  return apiPost<WorkflowDetail>(`/requirements/${triggerId}/start-workflow`, input);
 }
 
 export function listWorkflows() {
@@ -54,8 +58,28 @@ export function listPendingSteps() {
   return apiGet<Step[]>("/dashboard/pending-steps");
 }
 
+export function getDailyBoard() {
+  return apiGet<DailyBoardData>("/dashboard/daily-board");
+}
+
 export function getWorkflow(workflowId: string) {
   return apiGet<WorkflowDetail>(`/workflows/${workflowId}`);
+}
+
+export function quickCaptureFlow(input: QuickCaptureInput) {
+  return apiPost<WorkflowDetail>("/workflows/quick-capture", input);
+}
+
+export function linkWorkflowRequirement(workflowId: string, input: LinkRequirementInput) {
+  return apiPost<WorkflowDetail>(`/workflows/${workflowId}/link-requirement`, input);
+}
+
+export function unlinkWorkflowRequirement(workflowId: string, requirementId: string) {
+  return apiRequest<WorkflowDetail>(`/workflows/${workflowId}/unlink-requirement/${requirementId}`, { method: "DELETE" });
+}
+
+export function createRequirementFromFlow(workflowId: string, input: CreateRequirementFromFlowInput) {
+  return apiPost<TriggerDetail>(`/workflows/${workflowId}/create-requirement`, input);
 }
 
 export function getWorkflowSteps(workflowId: string) {

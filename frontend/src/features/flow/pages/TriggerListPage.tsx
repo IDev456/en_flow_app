@@ -32,6 +32,11 @@ import { formatDate, getStatusTone } from "../utils";
 
 type ViewMode = "requirements" | "flows";
 type WorkflowStateFilter = "all" | "in_progress" | "waiting" | "done";
+type TriggerListPageProps = {
+  defaultView?: ViewMode;
+  lockView?: boolean;
+  title?: string;
+};
 
 type TriggerWorkflowRow = {
   rowId: string;
@@ -73,11 +78,11 @@ function getFilterSx(filter: WorkflowStateFilter) {
   return {};
 }
 
-export function TriggerListPage() {
+export function TriggerListPage({ defaultView = "requirements", lockView = false, title = "Requerimientos" }: TriggerListPageProps) {
   const [triggers, setTriggers] = useState<TriggerDetail[]>([]);
   const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
   const [query, setQuery] = useState("");
-  const [viewMode, setViewMode] = useState<ViewMode>("requirements");
+  const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
   const [stateFilter, setStateFilter] = useState<WorkflowStateFilter>("all");
   const [loading, setLoading] = useState(true);
   const [deletingTriggerId, setDeletingTriggerId] = useState<string | null>(null);
@@ -87,6 +92,10 @@ export function TriggerListPage() {
   useEffect(() => {
     void loadData();
   }, []);
+
+  useEffect(() => {
+    setViewMode(defaultView);
+  }, [defaultView]);
 
   async function loadData() {
     try {
@@ -99,7 +108,7 @@ export function TriggerListPage() {
       const details = await Promise.all(workflowIds.map((workflowId) => getWorkflow(workflowId)));
       setWorkflowsById(Object.fromEntries(details.map((workflow) => [workflow.id, workflow])));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudieron cargar los requerimientos");
+      setError(err instanceof Error ? err.message : "No se pudieron cargar los datos");
     } finally {
       setLoading(false);
     }
@@ -116,6 +125,12 @@ export function TriggerListPage() {
   function getWorkflowDisplayStatus(workflow: WorkflowDetail, trigger: TriggerDetail) {
     if (workflow.estado === "esperando_respuesta") {
       return "esperando_respuesta";
+    }
+    if (workflow.estado === "en_espera") {
+      return "en_espera";
+    }
+    if (workflow.estado === "con_problema") {
+      return "con_problema";
     }
     if (workflow.estado === "finalizado" || workflow.estado === "cancelado") {
       return workflow.estado;
@@ -287,18 +302,20 @@ export function TriggerListPage() {
               spacing={1.5}
               sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", lg: "center" } }}
             >
-              <Typography variant="h2">Requerimientos</Typography>
-              <ToggleButtonGroup
-                exclusive
-                size="small"
-                value={viewMode}
-                onChange={(_, value: ViewMode | null) => {
-                  if (value) setViewMode(value);
-                }}
-              >
-                <ToggleButton value="requirements">Vista requerimientos</ToggleButton>
-                <ToggleButton value="flows">Vista flows</ToggleButton>
-              </ToggleButtonGroup>
+              <Typography variant="h2">{title}</Typography>
+              {!lockView && (
+                <ToggleButtonGroup
+                  exclusive
+                  size="small"
+                  value={viewMode}
+                  onChange={(_, value: ViewMode | null) => {
+                    if (value) setViewMode(value);
+                  }}
+                >
+                  <ToggleButton value="requirements">Vista requerimientos</ToggleButton>
+                  <ToggleButton value="flows">Vista flows</ToggleButton>
+                </ToggleButtonGroup>
+              )}
             </Stack>
 
             <Stack direction={{ xs: "column", lg: "row" }} spacing={1.5} sx={{ justifyContent: "space-between" }}>
@@ -353,7 +370,7 @@ export function TriggerListPage() {
             {loading && (
               <Stack direction="row" spacing={1.5} sx={{ py: 6, alignItems: "center", justifyContent: "center" }}>
                 <CircularProgress size={22} />
-                <Typography color="text.secondary">Cargando requerimientos...</Typography>
+                <Typography color="text.secondary">Cargando {viewMode === "requirements" ? "requerimientos" : "flows"}...</Typography>
               </Stack>
             )}
 
@@ -397,7 +414,7 @@ export function TriggerListPage() {
                               <TableRow
                                 key={trigger.id}
                                 hover
-                                onClick={() => navigate(`/triggers/${trigger.id}`)}
+                                onClick={() => navigate(`/requirements/${trigger.id}`)}
                                 className="hover-entity-parent"
                                 sx={{ cursor: "pointer" }}
                               >
@@ -433,7 +450,7 @@ export function TriggerListPage() {
                             key={trigger.id}
                             className="hover-entity-parent"
                             sx={{ position: "relative", cursor: "pointer" }}
-                            onClick={() => navigate(`/triggers/${trigger.id}`)}
+                            onClick={() => navigate(`/requirements/${trigger.id}`)}
                           >
                             <HoverEntityActions
                               onDelete={deletingTriggerId ? undefined : () => void handleDeleteTrigger(trigger)}

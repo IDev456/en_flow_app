@@ -64,7 +64,7 @@ export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInsp
       setObservaciones("");
       setComentarioFinal("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo completar el paso");
+      setError(err instanceof Error ? err.message : "No se pudo completar la tarea");
     } finally {
       setSubmitting(false);
     }
@@ -75,9 +75,9 @@ export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInsp
       <Card>
         <CardContent>
           <Stack spacing={1}>
-            <Typography variant="h6">Sin paso seleccionado</Typography>
+            <Typography variant="h6">Sin tarea seleccionada</Typography>
             <Typography color="text.secondary">
-              Selecciona un paso del flujo para ver sus propiedades y operar sobre el.
+              Selecciona una tarea del flow para ver sus propiedades y operar sobre ella.
             </Typography>
           </Stack>
         </CardContent>
@@ -128,7 +128,7 @@ export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInsp
               minRows={3}
               value={resultado}
               onChange={(event) => setResultado(event.target.value)}
-              placeholder="Que se obtuvo al finalizar este paso?"
+              placeholder="Que se obtuvo al finalizar esta tarea?"
             />
             <TextField
               label="Observaciones"
@@ -139,7 +139,7 @@ export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInsp
               placeholder="Detalles tecnicos o impedimentos encontrados durante la ejecucion..."
             />
             <TextField
-              label="Comentario final"
+              label="Resultado final"
               multiline
               minRows={3}
               value={comentarioFinal}
@@ -148,15 +148,15 @@ export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInsp
             />
             {error && <Alert severity="error">{error}</Alert>}
             <Button type="submit" variant="contained" disabled={submitting}>
-              {submitting ? "Completando..." : "Completar paso"}
+              {submitting ? "Completando..." : "Completar tarea"}
             </Button>
           </Stack>
         ) : (
-          <Alert severity="info">Este paso no esta listo para completarse desde la vista del workflow.</Alert>
+          <Alert severity="info">Esta tarea no esta lista para completarse desde la vista del flow.</Alert>
         )}
 
         <Link component={RouterLink} to={`/steps/${step.id}`} underline="hover">
-          Abrir detalle completo del paso
+          Abrir detalle completo de la tarea
         </Link>
       </CardContent>
     </Card>

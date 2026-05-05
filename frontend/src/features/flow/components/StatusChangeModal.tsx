@@ -60,7 +60,7 @@ export function StatusChangeModal({
 
   return (
     <Dialog open={open} onClose={submitting ? undefined : onCancel} fullWidth maxWidth="sm">
-      <DialogTitle>{targetStatus === "completado" ? "Completar paso" : "Cambiar estado"}</DialogTitle>
+      <DialogTitle>{targetStatus === "completado" ? "Completar tarea" : "Cambiar estado"}</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2.5}>
           <Stack direction="row" spacing={1.25} sx={{ alignItems: "center", flexWrap: "wrap", gap: 1.25 }}>
@@ -70,7 +70,7 @@ export function StatusChangeModal({
           </Stack>
 
           <Typography variant="body2" color="text.secondary">
-            La nota queda registrada en la bitacora del paso.
+            La nota queda registrada en la bitacora de la tarea.
           </Typography>
 
           <TextField
@@ -95,7 +95,7 @@ export function StatusChangeModal({
             Cancelar
           </Button>
           <Button variant="contained" onClick={() => void handleConfirm()} disabled={!isValid || submitting}>
-            {submitting ? "Guardando..." : targetStatus === "completado" ? "Completar paso" : "Confirmar"}
+            {submitting ? "Guardando..." : targetStatus === "completado" ? "Completar tarea" : "Confirmar"}
           </Button>
         </Stack>
       </DialogActions>

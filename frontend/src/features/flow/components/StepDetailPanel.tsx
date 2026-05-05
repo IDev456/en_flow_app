@@ -90,10 +90,8 @@ export function StepDetailPanel({
   const [completing, setCompleting] = useState(false);
 
   const [externalDialogOpen, setExternalDialogOpen] = useState(false);
-  const [externalEventType, setExternalEventType] = useState("external_response_received");
   const [externalComment, setExternalComment] = useState("");
   const [externalSource, setExternalSource] = useState("manual");
-  const [externalActor, setExternalActor] = useState(DEFAULT_ACTOR);
   const [externalAttachments, setExternalAttachments] = useState<AttachmentInput[]>([]);
   const [registeringExternal, setRegisteringExternal] = useState(false);
   const [externalError, setExternalError] = useState<string | null>(null);
@@ -135,10 +133,8 @@ export function StepDetailPanel({
     setCompleteError(null);
 
     setExternalDialogOpen(false);
-    setExternalEventType(step.expected_external_event || "external_response_received");
     setExternalComment("");
     setExternalSource("manual");
-    setExternalActor(DEFAULT_ACTOR);
     setExternalAttachments([]);
     setExternalError(null);
 
@@ -293,12 +289,8 @@ export function StepDetailPanel({
 
   async function handleRegisterExternalEvent() {
     if (!onRegisterExternalEvent) return;
-    if (!externalEventType.trim()) {
-      setExternalError("Debes indicar el tipo de respuesta externa.");
-      return;
-    }
-    if (!externalActor.trim()) {
-      setExternalError("Debes indicar quien registra la respuesta.");
+    if (externalComment.trim().length < 3) {
+      setExternalError("Debes indicar qué respuesta llegó.");
       return;
     }
 
@@ -306,10 +298,10 @@ export function StepDetailPanel({
       setRegisteringExternal(true);
       setExternalError(null);
       await onRegisterExternalEvent({
-        event_type: externalEventType.trim(),
+        event_type: "respuesta_externa_recibida",
         comentario: externalComment.trim() || null,
         source: externalSource.trim() || "manual",
-        registrado_por: externalActor.trim(),
+        registrado_por: DEFAULT_ACTOR,
         attachments: externalAttachments,
       });
       setExternalDialogOpen(false);
@@ -528,7 +520,7 @@ export function StepDetailPanel({
         <DialogContent dividers>
           <Stack spacing={2}>
             <TextField
-              label="Resultado de la tarea *"
+              label="¿Qué pasó? *"
               multiline
               minRows={3}
               value={completeResult}
@@ -545,21 +537,21 @@ export function StepDetailPanel({
             />
 
             <Typography variant="subtitle2" color="text.secondary">
-              Que debe pasar ahora?
+              ¿Qué sigue?
             </Typography>
             <ToggleButtonGroup
               exclusive
               value={completeTransition}
               onChange={(_, value: StepTransitionType | null) => value && setCompleteTransition(value)}
             >
-              <ToggleButton value="next_task">Crear proxima tarea</ToggleButton>
+              <ToggleButton value="next_task">Crear próxima tarea</ToggleButton>
               <ToggleButton value="wait_external">Esperar respuesta externa</ToggleButton>
               <ToggleButton value="finish_flow">Finalizar flow</ToggleButton>
             </ToggleButtonGroup>
 
             {completeTransition === "next_task" && (
               <Stack spacing={1.5}>
-                <TextField label="Nombre de la proxima tarea *" value={nextTaskName} onChange={(event) => setNextTaskName(event.target.value)} />
+                <TextField label="Nombre de la próxima tarea *" value={nextTaskName} onChange={(event) => setNextTaskName(event.target.value)} />
                 <TextField label="Descripcion / contexto" multiline minRows={2} value={nextTaskDescription} onChange={(event) => setNextTaskDescription(event.target.value)} />
                 <TextField label="Asignado a" value={nextTaskAssignee} onChange={(event) => setNextTaskAssignee(event.target.value)} />
                 <TextField
@@ -575,7 +567,7 @@ export function StepDetailPanel({
             {completeTransition === "wait_external" && (
               <Stack spacing={1.5}>
                 <TextField label="Que se espera *" value={waitExpected} onChange={(event) => setWaitExpected(event.target.value)} />
-                <TextField label="Origen / proveedor / persona *" value={waitSource} onChange={(event) => setWaitSource(event.target.value)} />
+                <TextField label="Origen / proveedor / persona" value={waitSource} onChange={(event) => setWaitSource(event.target.value)} />
                 <TextField label="Detalle de la espera" multiline minRows={2} value={waitDetail} onChange={(event) => setWaitDetail(event.target.value)} />
                 <TextField label="Referencia externa" value={waitReference} onChange={(event) => setWaitReference(event.target.value)} />
               </Stack>
@@ -615,10 +607,8 @@ export function StepDetailPanel({
         <DialogTitle>Registrar respuesta recibida</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
-            <TextField label="Tipo de respuesta / evento *" value={externalEventType} onChange={(event) => setExternalEventType(event.target.value)} disabled={registeringExternal} />
-            <TextField label="Respuesta recibida / detalle" multiline minRows={3} value={externalComment} onChange={(event) => setExternalComment(event.target.value)} disabled={registeringExternal} />
+            <TextField label="¿Qué respuesta llegó? *" multiline minRows={3} value={externalComment} onChange={(event) => setExternalComment(event.target.value)} disabled={registeringExternal} />
             <TextField label="Origen" value={externalSource} onChange={(event) => setExternalSource(event.target.value)} disabled={registeringExternal} />
-            <TextField label="Usuario / actor" value={externalActor} onChange={(event) => setExternalActor(event.target.value)} disabled={registeringExternal} />
             <Button component="label" variant="outlined" color="inherit" disabled={registeringExternal}>
               Adjuntar archivos (opcional)
               <input hidden multiple type="file" onChange={(event) => void handleAttachmentSelection(event.target.files, "external")} />
@@ -646,11 +636,11 @@ export function StepDetailPanel({
       </Dialog>
 
       <Dialog open={resolveDialogOpen} onClose={resolving ? undefined : () => setResolveDialogOpen(false)} fullWidth maxWidth="md">
-        <DialogTitle>Que debe pasar ahora?</DialogTitle>
+        <DialogTitle>¿Qué sigue ahora?</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
             <TextField
-              label="Resultado de cierre de la tarea *"
+              label="Resultado de la tarea *"
               multiline
               minRows={3}
               value={resolveResult}
@@ -661,13 +651,13 @@ export function StepDetailPanel({
               value={resolveTransition}
               onChange={(_, value: "next_task" | "finish_flow" | null) => value && setResolveTransition(value)}
             >
-              <ToggleButton value="next_task">Crear proxima tarea</ToggleButton>
+              <ToggleButton value="next_task">Crear próxima tarea</ToggleButton>
               <ToggleButton value="finish_flow">Finalizar flow</ToggleButton>
             </ToggleButtonGroup>
 
             {resolveTransition === "next_task" && (
               <Stack spacing={1.5}>
-                <TextField label="Nombre de la proxima tarea *" value={resolveNextTaskName} onChange={(event) => setResolveNextTaskName(event.target.value)} />
+                <TextField label="Nombre de la próxima tarea *" value={resolveNextTaskName} onChange={(event) => setResolveNextTaskName(event.target.value)} />
                 <TextField label="Descripcion / contexto" multiline minRows={2} value={resolveNextTaskDescription} onChange={(event) => setResolveNextTaskDescription(event.target.value)} />
                 <TextField label="Asignado a" value={resolveNextTaskAssignee} onChange={(event) => setResolveNextTaskAssignee(event.target.value)} />
                 <TextField

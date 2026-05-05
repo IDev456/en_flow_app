@@ -7,9 +7,12 @@ from app.schemas.workflow import (
     AttachmentBase,
     CommentCreate,
     CommentPublic,
+    DailyBoardResponse,
     ExternalResponseDecisionPayload,
     ExternalEventCreate,
     ExternalEventPublic,
+    QuickCaptureRequest,
+    RequirementCreateFromFlowPayload,
     StepCompletePayload,
     StepCreate,
     StepHistoryPublic,
@@ -31,6 +34,13 @@ from app.schemas.workflow import (
 
 OPEN_STEP_STATUSES = {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA, StepStatus.ESPERANDO_RESPUESTA}
 ACTIONABLE_STEP_STATUSES = {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA}
+WORKFLOW_OPEN_STATUSES = {
+    WorkflowStatus.PENDIENTE,
+    WorkflowStatus.EN_PROCESO,
+    WorkflowStatus.ESPERANDO_RESPUESTA,
+    WorkflowStatus.EN_ESPERA,
+    WorkflowStatus.CON_PROBLEMA,
+}
 
 
 class WorkflowService:
@@ -40,14 +50,23 @@ class WorkflowService:
     def list_triggers(self) -> list[TriggerDetail]:
         return self.repository.list_triggers()
 
+    def list_requirements(self) -> list[TriggerDetail]:
+        return self.list_triggers()
+
     def get_trigger(self, trigger_id: str) -> TriggerDetail:
         trigger = self.repository.get_trigger(trigger_id)
         if trigger is None:
             raise EntityNotFoundError("Trigger not found")
         return trigger
 
+    def get_requirement(self, requirement_id: str) -> TriggerDetail:
+        return self.get_trigger(requirement_id)
+
     def create_trigger(self, payload: TriggerCreate) -> TriggerPublic:
         return self.repository.create_trigger(payload)
+
+    def create_requirement(self, payload: TriggerCreate) -> TriggerPublic:
+        return self.create_trigger(payload)
 
     def update_trigger(self, trigger_id: str, payload: TriggerUpdate) -> TriggerDetail:
         trigger = self.repository.get_trigger(trigger_id)
@@ -74,10 +93,21 @@ class WorkflowService:
             raise EntityNotFoundError("Trigger not found")
         return refreshed
 
+    def update_requirement(self, requirement_id: str, payload: TriggerUpdate) -> TriggerDetail:
+        return self.update_trigger(requirement_id, payload)
+
     def delete_trigger(self, trigger_id: str) -> None:
+        trigger = self.repository.get_trigger(trigger_id)
+        if trigger is None:
+            raise EntityNotFoundError("Trigger not found")
+        if trigger.workflow_ids:
+            raise BusinessRuleError("No puedes eliminar un requerimiento con flows vinculados")
         deleted = self.repository.delete_trigger(trigger_id)
         if not deleted:
             raise EntityNotFoundError("Trigger not found")
+
+    def delete_requirement(self, requirement_id: str) -> None:
+        self.delete_trigger(requirement_id)
 
     def list_workflow_templates(self) -> list[WorkflowTemplatePublic]:
         return self.repository.list_workflow_templates()
@@ -102,6 +132,25 @@ class WorkflowService:
         self._reconcile_trigger_status(trigger_id, utc_now(), preferred_workflow_id=workflow.id)
         return workflow
 
+    def quick_capture_flow(self, payload: QuickCaptureRequest) -> WorkflowDetail:
+        template = self.repository.get_default_workflow_template()
+        workflow = self.repository.create_workflow(
+            None,
+            template,
+            WorkflowStartRequest(
+                workflow_template_id=template.id,
+                objetivo_final=payload.titulo.strip(),
+                resolucion_esperada=None,
+                primer_paso={
+                    "nombre": payload.titulo.strip(),
+                    "descripcion": payload.detalle,
+                    "asignado_a": payload.asignado_a,
+                    "fecha_vencimiento": payload.fecha_vencimiento,
+                },
+            ),
+        )
+        return workflow
+
     def list_workflows(self) -> list[WorkflowSummary]:
         return self.repository.list_workflows()
 
@@ -117,6 +166,41 @@ class WorkflowService:
     def get_workflow_steps(self, workflow_id: str) -> list[StepInstancePublic]:
         workflow = self.get_workflow(workflow_id)
         return workflow.steps
+
+    def link_workflow_to_requirement(self, workflow_id: str, requirement_id: str) -> WorkflowDetail:
+        workflow = self.get_workflow(workflow_id)
+        requirement = self.get_trigger(requirement_id)
+        self.repository.link_requirement_to_workflow(requirement.id, workflow.id)
+        self._reconcile_trigger_status(requirement.id, utc_now(), preferred_workflow_id=workflow.id)
+        refreshed = self.repository.get_workflow(workflow.id)
+        if refreshed is None:
+            raise EntityNotFoundError("Workflow not found")
+        return refreshed
+
+    def unlink_workflow_from_requirement(self, workflow_id: str, requirement_id: str) -> WorkflowDetail:
+        workflow = self.get_workflow(workflow_id)
+        self.get_trigger(requirement_id)
+        self.repository.unlink_requirement_from_workflow(requirement_id, workflow.id)
+        self._reconcile_trigger_status(requirement_id, utc_now(), preferred_workflow_id=workflow.id)
+        refreshed = self.repository.get_workflow(workflow.id)
+        if refreshed is None:
+            raise EntityNotFoundError("Workflow not found")
+        return refreshed
+
+    def create_requirement_from_flow(self, workflow_id: str, payload: RequirementCreateFromFlowPayload) -> TriggerDetail:
+        workflow = self.get_workflow(workflow_id)
+        requirement = self.create_trigger(
+            TriggerCreate(
+                solicitante=payload.solicitante,
+                descripcion=payload.descripcion,
+                tipo="requerimiento",
+                creado_por=payload.creado_por,
+                metadata=None,
+            )
+        )
+        self.repository.link_requirement_to_workflow(requirement.id, workflow.id)
+        self._reconcile_trigger_status(requirement.id, utc_now(), preferred_workflow_id=workflow.id)
+        return self.get_trigger(requirement.id)
 
     def create_workflow_step(self, workflow_id: str, payload: StepCreate) -> StepInstancePublic:
         workflow = self.get_workflow(workflow_id)
@@ -143,7 +227,9 @@ class WorkflowService:
         )
         self.repository.save_workflow(updated_workflow)
         self._record_history(created_step.id, "estado", None, StepStatus.ACTIVO, "sistema")
-        self._reconcile_trigger_status(workflow.trigger_id, utc_now(), preferred_workflow_id=workflow.id)
+        requirement_ids = self._collect_requirement_ids(workflow)
+        for requirement_id in requirement_ids:
+            self._reconcile_trigger_status(requirement_id, utc_now(), preferred_workflow_id=workflow.id)
         return created_step
 
     def get_step(self, step_id: str) -> StepInstancePublic:
@@ -188,7 +274,8 @@ class WorkflowService:
             attachments=payload.attachments,
         )
 
-        return updated_step
+        self._sync_workflow_and_trigger_status(step.workflow_id, utc_now())
+        return self.get_step(step_id)
 
     def complete_step(self, step_id: str, payload: StepCompletePayload) -> StepInstancePublic:
         step = self.get_step(step_id)
@@ -214,7 +301,8 @@ class WorkflowService:
             if payload.external_wait is None:
                 raise BusinessRuleError("Debes indicar la informacion de espera externa")
             wait = payload.external_wait
-            wait_note = wait.detalle or f"Esperando respuesta de {wait.origen}"
+            wait_source = (wait.origen or "").strip() or "externo"
+            wait_note = wait.detalle or f"Esperando respuesta de {wait_source}"
             updated_step = step.model_copy(
                 update={
                     "estado": StepStatus.ESPERANDO_RESPUESTA,
@@ -246,7 +334,7 @@ class WorkflowService:
                 None,
                 wait.que_se_espera,
                 payload.usuario,
-                note=f"Esperando respuesta externa de {wait.origen}. {wait_note}".strip(),
+                note=f"Esperando respuesta externa de {wait_source}. {wait_note}".strip(),
                 attachments=wait.attachments,
             )
             self._sync_workflow_and_trigger_status(workflow.id, now)
@@ -368,6 +456,22 @@ class WorkflowService:
     def list_pending_steps(self) -> list[StepInstancePublic]:
         return self.repository.list_pending_steps()
 
+    def get_daily_board(self) -> DailyBoardResponse:
+        pending = self.repository.list_pending_steps()
+        workflows = self.repository.list_workflows()
+        return DailyBoardResponse(
+            tareas_activas=[step for step in pending if step.estado == StepStatus.ACTIVO],
+            tareas_esperando_respuesta=[step for step in pending if step.estado == StepStatus.ESPERANDO_RESPUESTA],
+            tareas_en_pausa=[step for step in pending if step.estado == StepStatus.ESPERA],
+            tareas_con_problema=[step for step in pending if step.estado == StepStatus.PROBLEMA],
+            flows_recientes=workflows[:8],
+            flows_cerrados_recientes=[
+                workflow
+                for workflow in workflows
+                if workflow.estado in {WorkflowStatus.FINALIZADO, WorkflowStatus.CANCELADO}
+            ][:8],
+        )
+
     def list_step_external_events(self, step_id: str) -> list[ExternalEventPublic]:
         self.get_step(step_id)
         return self.repository.list_step_external_events(step_id)
@@ -396,8 +500,10 @@ class WorkflowService:
 
     def _sync_workflow_and_trigger_status(self, workflow_id: str, now: datetime, *, force_finish: bool = False) -> None:
         workflow = self.get_workflow(workflow_id)
-        active_steps = [step for step in workflow.steps if step.estado in ACTIONABLE_STEP_STATUSES]
+        active_steps = [step for step in workflow.steps if step.estado == StepStatus.ACTIVO]
         waiting_external_steps = [step for step in workflow.steps if step.estado == StepStatus.ESPERANDO_RESPUESTA]
+        paused_steps = [step for step in workflow.steps if step.estado == StepStatus.ESPERA]
+        problem_steps = [step for step in workflow.steps if step.estado == StepStatus.PROBLEMA]
         open_steps = [step for step in workflow.steps if step.estado in OPEN_STEP_STATUSES]
         active_orders = sorted(step.orden for step in open_steps)
 
@@ -431,6 +537,26 @@ class WorkflowService:
                     "total_pasos": len(workflow.steps),
                 }
             )
+        elif paused_steps:
+            workflow_update = workflow.model_copy(
+                update={
+                    "estado": WorkflowStatus.EN_ESPERA,
+                    "pasos_activos": active_orders,
+                    "paso_actual": active_orders[0] if active_orders else None,
+                    "fecha_fin": None,
+                    "total_pasos": len(workflow.steps),
+                }
+            )
+        elif problem_steps:
+            workflow_update = workflow.model_copy(
+                update={
+                    "estado": WorkflowStatus.CON_PROBLEMA,
+                    "pasos_activos": active_orders,
+                    "paso_actual": active_orders[0] if active_orders else None,
+                    "fecha_fin": None,
+                    "total_pasos": len(workflow.steps),
+                }
+            )
         elif workflow.steps and all(step.estado == StepStatus.COMPLETADO for step in workflow.steps):
             workflow_update = workflow.model_copy(
                 update={
@@ -453,7 +579,9 @@ class WorkflowService:
             )
 
         self.repository.save_workflow(workflow_update)
-        self._reconcile_trigger_status(workflow.trigger_id, now, preferred_workflow_id=workflow.id)
+        requirement_ids = self._collect_requirement_ids(workflow)
+        for requirement_id in requirement_ids:
+            self._reconcile_trigger_status(requirement_id, now, preferred_workflow_id=workflow.id)
 
     def _reconcile_trigger_status(
         self,
@@ -463,31 +591,47 @@ class WorkflowService:
         preferred_workflow_id: str | None = None,
     ) -> None:
         trigger = self.get_trigger(trigger_id)
-        open_workflows: list[WorkflowDetail] = []
+        if trigger.estado_general == TriggerStatus.CANCELADO:
+            return
+
+        workflows: list[WorkflowDetail] = []
         for workflow_id in trigger.workflow_ids:
             workflow = self.repository.get_workflow(workflow_id)
             if workflow is None:
                 continue
-            if workflow.estado in {WorkflowStatus.PENDIENTE, WorkflowStatus.EN_PROCESO, WorkflowStatus.ESPERANDO_RESPUESTA}:
-                open_workflows.append(workflow)
+            workflows.append(workflow)
 
-        if open_workflows:
-            selected_workflow_id = preferred_workflow_id
-            if not selected_workflow_id or all(item.id != selected_workflow_id for item in open_workflows):
-                selected_workflow_id = max(open_workflows, key=lambda item: item.fecha_inicio).id
+        if not workflows:
             trigger_update = trigger.model_copy(
-                update={
-                    "estado_general": TriggerStatus.EN_PROCESO,
-                    "fecha_actualizacion": now,
-                    "workflow_activo_id": selected_workflow_id,
-                }
+                update={"estado_general": TriggerStatus.SIN_FLOWS, "fecha_actualizacion": now, "workflow_activo_id": None}
             )
         else:
+            selected_workflow_id = preferred_workflow_id
+            if not selected_workflow_id or all(item.id != selected_workflow_id for item in workflows):
+                selected_workflow_id = max(workflows, key=lambda item: item.fecha_inicio).id
+
+            if any(workflow.estado == WorkflowStatus.CON_PROBLEMA for workflow in workflows):
+                next_status = TriggerStatus.CON_PROBLEMA
+            elif any(workflow.estado == WorkflowStatus.EN_PROCESO for workflow in workflows):
+                next_status = TriggerStatus.EN_PROCESO
+            elif any(workflow.estado == WorkflowStatus.EN_ESPERA for workflow in workflows):
+                next_status = TriggerStatus.EN_PROCESO
+            else:
+                open_workflows = [workflow for workflow in workflows if workflow.estado in WORKFLOW_OPEN_STATUSES]
+                if open_workflows and all(
+                    workflow.estado == WorkflowStatus.ESPERANDO_RESPUESTA for workflow in open_workflows
+                ):
+                    next_status = TriggerStatus.ESPERANDO_RESPUESTA
+                elif all(workflow.estado in {WorkflowStatus.FINALIZADO, WorkflowStatus.CANCELADO} for workflow in workflows):
+                    next_status = TriggerStatus.RESUELTO
+                else:
+                    next_status = TriggerStatus.EN_PROCESO
+
             trigger_update = trigger.model_copy(
                 update={
-                    "estado_general": TriggerStatus.RESUELTO,
+                    "estado_general": next_status,
                     "fecha_actualizacion": now,
-                    "workflow_activo_id": None,
+                    "workflow_activo_id": selected_workflow_id if next_status != TriggerStatus.RESUELTO else None,
                 }
             )
         self.repository.save_trigger(trigger_update)
@@ -538,3 +682,10 @@ class WorkflowService:
         if hasattr(value, "astimezone"):
             return value.astimezone(timezone.utc).isoformat()  # type: ignore[union-attr]
         return str(value)
+
+    def _collect_requirement_ids(self, workflow: WorkflowDetail | WorkflowSummary) -> list[str]:
+        ids: list[str] = []
+        if workflow.trigger_id:
+            ids.append(workflow.trigger_id)
+        ids.extend(workflow.requirement_ids)
+        return list(dict.fromkeys(ids))

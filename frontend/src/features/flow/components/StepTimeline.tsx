@@ -19,7 +19,7 @@ export function StepTimeline({ steps }: StepTimelineProps) {
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between" }}>
               <BoxBlock>
                 <Typography variant="subtitle2" color="text.secondary">
-                  Paso {step.orden}
+                  Tarea {step.orden}
                 </Typography>
                 <Typography variant="h6">{step.nombre}</Typography>
               </BoxBlock>
@@ -39,7 +39,7 @@ export function StepTimeline({ steps }: StepTimelineProps) {
               </Typography>
             </Stack>
             <Link component={RouterLink} to={`/steps/${step.id}`} underline="hover">
-              Ver detalle del paso
+              Ver detalle de la tarea
             </Link>
           </CardContent>
         </Card>

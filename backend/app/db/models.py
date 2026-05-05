@@ -38,6 +38,11 @@ class TriggerModel(Base):
     workflow_activo_id: Mapped[str | None] = mapped_column(String(36))
 
     workflows: Mapped[list["WorkflowModel"]] = relationship(
+        secondary="requirement_flow_links",
+        back_populates="requirements",
+        order_by=lambda: WorkflowModel.fecha_inicio.desc(),
+    )
+    legacy_workflows: Mapped[list["WorkflowModel"]] = relationship(
         back_populates="trigger",
         cascade="all, delete-orphan",
         order_by=lambda: WorkflowModel.fecha_inicio.desc(),
@@ -92,7 +97,7 @@ class WorkflowModel(Base):
     __tablename__ = "workflows"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    trigger_id: Mapped[str] = mapped_column(String(36), ForeignKey("triggers.id", ondelete="CASCADE"), nullable=False)
+    trigger_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("triggers.id", ondelete="SET NULL"), nullable=True)
     workflow_template_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("workflow_templates.id", ondelete="RESTRICT"),
@@ -107,7 +112,11 @@ class WorkflowModel(Base):
     objetivo_final: Mapped[str | None] = mapped_column(String(200))
     resolucion_esperada: Mapped[str | None] = mapped_column(String(500))
 
-    trigger: Mapped["TriggerModel"] = relationship(back_populates="workflows")
+    trigger: Mapped["TriggerModel | None"] = relationship(back_populates="legacy_workflows")
+    requirements: Mapped[list["TriggerModel"]] = relationship(
+        secondary="requirement_flow_links",
+        back_populates="workflows",
+    )
     steps: Mapped[list["StepModel"]] = relationship(
         back_populates="workflow",
         cascade="all, delete-orphan",
@@ -217,3 +226,19 @@ class ExternalEventModel(Base):
 
     workflow: Mapped["WorkflowModel"] = relationship(back_populates="external_events")
     step: Mapped["StepModel"] = relationship(back_populates="external_events")
+
+
+class RequirementFlowLinkModel(Base):
+    __tablename__ = "requirement_flow_links"
+
+    requirement_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("triggers.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    workflow_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("workflows.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    fecha_vinculacion: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

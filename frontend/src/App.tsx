@@ -5,6 +5,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-
 
 import { NotFoundPage } from "./features/flow/pages/NotFoundPage";
 import { TriggerCreateModal } from "./features/flow/components/TriggerCreateModal";
+import { DashboardPage } from "./features/flow/pages/DashboardPage";
 import { StepDetailPage } from "./features/flow/pages/StepDetailPage";
 import { TriggerCreatePage } from "./features/flow/pages/TriggerCreatePage";
 import { TriggerDetailPage } from "./features/flow/pages/TriggerDetailPage";
@@ -15,7 +16,7 @@ function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const params = new URLSearchParams(location.search);
-  const isCreateModalOpen = params.get("modal") === "new";
+  const isCreateModalOpen = params.get("modal") === "capture";
 
   function closeCreateModal() {
     const nextParams = new URLSearchParams(location.search);
@@ -54,7 +55,7 @@ function App() {
                   En Flow
                 </Typography>
                 <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                  Gestion secuencial de tareas
+                  Bandeja diaria de trabajo
                 </Typography>
               </Box>
             </Stack>
@@ -64,15 +65,21 @@ function App() {
               spacing={1.25}
               sx={{ alignItems: { xs: "stretch", sm: "center" } }}
             >
-              <Button variant="text" color="inherit" onClick={() => navigate("/triggers")}>
+              <Button variant="text" color="inherit" onClick={() => navigate("/board")}>
+                Bandeja
+              </Button>
+              <Button variant="text" color="inherit" onClick={() => navigate("/flows")}>
+                Flows
+              </Button>
+              <Button variant="text" color="inherit" onClick={() => navigate("/requirements")}>
                 Requerimientos
               </Button>
               <Button
                 variant="contained"
                 startIcon={<AddCircleOutlineRoundedIcon />}
-                onClick={() => navigate("/triggers?modal=new")}
+                onClick={() => navigate(`${location.pathname}?modal=capture`)}
               >
-                Nuevo requerimiento
+                Capturar tarea
               </Button>
             </Stack>
           </Toolbar>
@@ -87,10 +94,14 @@ function App() {
       >
         <Box>
           <Routes>
-            <Route path="/" element={<Navigate to="/triggers" replace />} />
-            <Route path="/dashboard" element={<Navigate to="/triggers" replace />} />
-            <Route path="/triggers" element={<TriggerListPage />} />
+            <Route path="/" element={<Navigate to="/board" replace />} />
+            <Route path="/dashboard" element={<Navigate to="/board" replace />} />
+            <Route path="/board" element={<DashboardPage />} />
+            <Route path="/flows" element={<TriggerListPage defaultView="flows" lockView title="Flows" />} />
+            <Route path="/requirements" element={<TriggerListPage defaultView="requirements" lockView title="Requerimientos" />} />
+            <Route path="/triggers" element={<Navigate to="/requirements" replace />} />
             <Route path="/triggers/new" element={<TriggerCreatePage />} />
+            <Route path="/requirements/:triggerId" element={<TriggerDetailPage />} />
             <Route path="/triggers/:triggerId" element={<TriggerDetailPage />} />
             <Route path="/workflows/:workflowId" element={<WorkflowDetailPage />} />
             <Route path="/steps/:stepId" element={<StepDetailPage />} />

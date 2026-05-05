@@ -3,11 +3,13 @@ import {
   Alert,
   Box,
   Breadcrumbs,
+  Button,
   Card,
   CardContent,
   CircularProgress,
   Link,
   Stack,
+  TextField,
   Typography,
 } from "@mui/material";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
@@ -15,12 +17,16 @@ import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import {
   addStepComment,
   completeStep,
+  createRequirementFromFlow,
   getStepComments,
-  registerExternalEvent,
-  resolveExternalResponse,
-  getStepHistory,
   getTrigger,
   getWorkflow,
+  getStepHistory,
+  linkWorkflowRequirement,
+  listTriggers,
+  registerExternalEvent,
+  resolveExternalResponse,
+  unlinkWorkflowRequirement,
   updateStepStatus,
 } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
@@ -53,9 +59,12 @@ export function WorkflowDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
+  const [allRequirements, setAllRequirements] = useState<TriggerDetail[]>([]);
+  const [linkRequirementId, setLinkRequirementId] = useState("");
+  const [newRequirementDescription, setNewRequirementDescription] = useState("");
 
   function getPrimaryRequirementLabel() {
-    return trigger?.descripcion?.trim() || workflow?.objetivo_final?.trim() || "Requerimiento sin detalle";
+    return trigger?.descripcion?.trim() || workflow?.objetivo_final?.trim() || "Flow sin requerimiento";
   }
 
   function getSecondaryRequesterLabel() {
@@ -79,8 +88,9 @@ export function WorkflowDetailPage() {
     try {
       setLoading(true);
       setError(null);
-      const workflowData = await getWorkflow(workflowId);
+      const [workflowData, requirements] = await Promise.all([getWorkflow(workflowId), listTriggers()]);
       setWorkflow(workflowData);
+      setAllRequirements(requirements);
       const stepExistsInWorkflow = workflowData.steps.some((step) => step.id === selectedStepId);
       const openStatuses = new Set(["activo", "espera", "problema", "esperando_respuesta"]);
       const nextSelectedStepId =
@@ -90,12 +100,37 @@ export function WorkflowDetailPage() {
         workflowData.steps[0]?.id ??
         null;
       setSelectedStepId(nextSelectedStepId);
-      setTrigger(await getTrigger(workflowData.trigger_id));
+      const primaryRequirementId = workflowData.trigger_id ?? workflowData.requirement_ids[0] ?? null;
+      if (primaryRequirementId) {
+        setTrigger(await getTrigger(primaryRequirementId));
+      } else {
+        setTrigger(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cargar el flow");
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleLinkRequirement() {
+    if (!workflow || !linkRequirementId) return;
+    await linkWorkflowRequirement(workflow.id, { requirement_id: linkRequirementId });
+    setLinkRequirementId("");
+    await loadWorkflow();
+  }
+
+  async function handleCreateRequirement() {
+    if (!workflow || newRequirementDescription.trim().length < 3) return;
+    await createRequirementFromFlow(workflow.id, { descripcion: newRequirementDescription.trim() });
+    setNewRequirementDescription("");
+    await loadWorkflow();
+  }
+
+  async function handleUnlinkRequirement(requirementId: string) {
+    if (!workflow) return;
+    await unlinkWorkflowRequirement(workflow.id, requirementId);
+    await loadWorkflow();
   }
 
   async function loadStepSideData(stepId: string) {
@@ -193,7 +228,9 @@ export function WorkflowDetailPage() {
     workflow.estado === "en_proceso"
       ? (openSteps.some((step) => step.estado === "esperando_respuesta")
           ? "esperando_respuesta"
-          : openSteps.some((step) => step.estado === "espera" || step.estado === "problema")
+          : openSteps.some((step) => step.estado === "problema")
+          ? "con_problema"
+          : openSteps.some((step) => step.estado === "espera")
           ? "espera"
           : openSteps[0]?.estado ?? workflow.estado)
       : workflow.estado;
@@ -201,12 +238,14 @@ export function WorkflowDetailPage() {
   return (
     <Stack spacing={3}>
       <Breadcrumbs>
-        <Link component={RouterLink} underline="hover" color="inherit" to="/triggers">
+        <Link component={RouterLink} underline="hover" color="inherit" to="/requirements">
           Requerimientos
         </Link>
-        <Link component={RouterLink} underline="hover" color="inherit" to={`/triggers/${workflow.trigger_id}`}>
-          {getPrimaryRequirementLabel()}
-        </Link>
+        {trigger && (
+          <Link component={RouterLink} underline="hover" color="inherit" to={`/requirements/${trigger.id}`}>
+            {getPrimaryRequirementLabel()}
+          </Link>
+        )}
         <Typography color="text.primary">Flow</Typography>
       </Breadcrumbs>
 
@@ -237,6 +276,91 @@ export function WorkflowDetailPage() {
                 </Typography>
               </Stack>
             )}
+
+            <Stack spacing={1.25}>
+              <Typography variant="subtitle2" color="text.secondary">
+                Requerimientos vinculados
+              </Typography>
+              {workflow.requirement_ids.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  Este flow todavia no esta vinculado a requerimientos.
+                </Typography>
+              ) : (
+                <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
+                  {workflow.requirement_ids.map((requirementId) => {
+                    const requirement = allRequirements.find((item) => item.id === requirementId);
+                    return (
+                      <Button
+                        key={requirementId}
+                        size="small"
+                        variant="outlined"
+                        color="inherit"
+                        onClick={() => navigate(`/requirements/${requirementId}`)}
+                        sx={{ textTransform: "none" }}
+                      >
+                        {requirement?.descripcion?.trim() || `Req ${requirementId.slice(0, 8)}`}
+                      </Button>
+                    );
+                  })}
+                </Stack>
+              )}
+
+              <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+                <TextField
+                  select
+                  label="Vincular a requerimiento"
+                  value={linkRequirementId}
+                  onChange={(event) => setLinkRequirementId(event.target.value)}
+                  SelectProps={{ native: true }}
+                  sx={{ minWidth: 260 }}
+                >
+                  <option value="">Seleccionar...</option>
+                  {allRequirements
+                    .filter((item) => !workflow.requirement_ids.includes(item.id))
+                    .map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.descripcion?.trim() || item.id.slice(0, 8)}
+                      </option>
+                    ))}
+                </TextField>
+                <Button variant="outlined" color="inherit" onClick={() => void handleLinkRequirement()} disabled={!linkRequirementId}>
+                  Vincular
+                </Button>
+              </Stack>
+
+              <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+                <TextField
+                  label="Crear requerimiento relacionado"
+                  value={newRequirementDescription}
+                  onChange={(event) => setNewRequirementDescription(event.target.value)}
+                  placeholder="Ej. Instalación grupo electrógeno"
+                  fullWidth
+                />
+                <Button
+                  variant="outlined"
+                  color="inherit"
+                  onClick={() => void handleCreateRequirement()}
+                  disabled={newRequirementDescription.trim().length < 3}
+                >
+                  Crear y vincular
+                </Button>
+              </Stack>
+              {workflow.requirement_ids.length > 0 && (
+                <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
+                  {workflow.requirement_ids.map((requirementId) => (
+                    <Button
+                      key={`unlink-${requirementId}`}
+                      size="small"
+                      variant="text"
+                      color="inherit"
+                      onClick={() => void handleUnlinkRequirement(requirementId)}
+                    >
+                      Desvincular {requirementId.slice(0, 8)}
+                    </Button>
+                  ))}
+                </Stack>
+              )}
+            </Stack>
           </Stack>
         </CardContent>
       </Card>
@@ -274,7 +398,10 @@ export function WorkflowDetailPage() {
                 selectedStepId={selectedStepId}
                 onSelectStep={handleSelectStep}
                 onOpenStep={handleOpenStep}
-                onOpenTrigger={() => navigate(`/triggers/${workflow.trigger_id}`)}
+                onOpenTrigger={() => {
+                  const requirementId = workflow.trigger_id ?? workflow.requirement_ids[0];
+                  if (requirementId) navigate(`/requirements/${requirementId}`);
+                }}
               />
             </Stack>
           </CardContent>

@@ -9,53 +9,55 @@ router = APIRouter()
 
 
 @router.get("/", response_model=list[TriggerDetail])
-def list_triggers(service: WorkflowService = Depends(get_workflow_service)) -> list[TriggerDetail]:
-    return service.list_triggers()
+def list_requirements(service: WorkflowService = Depends(get_workflow_service)) -> list[TriggerDetail]:
+    return service.list_requirements()
 
 
 @router.post("/", response_model=TriggerPublic, status_code=status.HTTP_201_CREATED)
-def create_trigger(payload: TriggerCreate, service: WorkflowService = Depends(get_workflow_service)) -> TriggerPublic:
-    return service.create_trigger(payload)
+def create_requirement(payload: TriggerCreate, service: WorkflowService = Depends(get_workflow_service)) -> TriggerPublic:
+    return service.create_requirement(payload)
 
 
-@router.patch("/{trigger_id}", response_model=TriggerDetail)
-def update_trigger(
-    trigger_id: str,
-    payload: TriggerUpdate,
-    service: WorkflowService = Depends(get_workflow_service),
-) -> TriggerDetail:
+@router.get("/{requirement_id}", response_model=TriggerDetail)
+def get_requirement(requirement_id: str, service: WorkflowService = Depends(get_workflow_service)) -> TriggerDetail:
     try:
-        return service.update_trigger(trigger_id, payload)
+        return service.get_requirement(requirement_id)
     except EntityNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
-@router.delete("/{trigger_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_trigger(trigger_id: str, service: WorkflowService = Depends(get_workflow_service)) -> None:
+@router.patch("/{requirement_id}", response_model=TriggerDetail)
+def update_requirement(
+    requirement_id: str,
+    payload: TriggerUpdate,
+    service: WorkflowService = Depends(get_workflow_service),
+) -> TriggerDetail:
     try:
-        service.delete_trigger(trigger_id)
+        return service.update_requirement(requirement_id, payload)
     except EntityNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except BusinessRuleError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
-@router.get("/{trigger_id}", response_model=TriggerDetail)
-def get_trigger(trigger_id: str, service: WorkflowService = Depends(get_workflow_service)) -> TriggerDetail:
+@router.delete("/{requirement_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_requirement(requirement_id: str, service: WorkflowService = Depends(get_workflow_service)) -> None:
     try:
-        return service.get_trigger(trigger_id)
+        service.delete_requirement(requirement_id)
     except EntityNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except BusinessRuleError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
-@router.post("/{trigger_id}/start-workflow", response_model=WorkflowDetail, status_code=status.HTTP_201_CREATED)
-def start_workflow(
-    trigger_id: str,
+@router.post("/{requirement_id}/start-workflow", response_model=WorkflowDetail, status_code=status.HTTP_201_CREATED)
+def start_workflow_for_requirement(
+    requirement_id: str,
     payload: WorkflowStartRequest,
     service: WorkflowService = Depends(get_workflow_service),
 ) -> WorkflowDetail:
     try:
-        return service.start_workflow(trigger_id, payload)
+        return service.start_workflow(requirement_id, payload)
     except EntityNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except BusinessRuleError as exc:

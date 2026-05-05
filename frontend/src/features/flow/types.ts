@@ -1,6 +1,6 @@
-export type TriggerStatus = "nuevo" | "en_proceso" | "resuelto" | "cancelado";
-export type WorkflowStatus = "pendiente" | "en_proceso" | "esperando_respuesta" | "finalizado" | "cancelado";
-export type StepStatus = "activo" | "espera" | "problema" | "esperando_respuesta" | "completado";
+export type TriggerStatus = "sin_flows" | "en_proceso" | "esperando_respuesta" | "con_problema" | "resuelto" | "cancelado";
+export type WorkflowStatus = "pendiente" | "en_proceso" | "esperando_respuesta" | "en_espera" | "con_problema" | "finalizado" | "cancelado";
+export type StepStatus = "activo" | "espera" | "problema" | "esperando_respuesta" | "completado" | "cancelada";
 export type StepTransitionType = "next_task" | "wait_external" | "finish_flow";
 
 export type Attachment = {
@@ -37,7 +37,8 @@ export type TriggerDetail = Trigger & {
 
 export type WorkflowSummary = {
   id: string;
-  trigger_id: string;
+  trigger_id: string | null;
+  requirement_ids: string[];
   workflow_template_id: string;
   workflow_template_nombre: string;
   estado: WorkflowStatus;
@@ -87,6 +88,15 @@ export type Step = {
 
 export type WorkflowDetail = WorkflowSummary & {
   steps: Step[];
+};
+
+export type DailyBoardData = {
+  tareas_activas: Step[];
+  tareas_esperando_respuesta: Step[];
+  tareas_en_pausa: Step[];
+  tareas_con_problema: Step[];
+  flows_recientes: WorkflowSummary[];
+  flows_cerrados_recientes: WorkflowSummary[];
 };
 
 export type StepComment = {
@@ -171,7 +181,7 @@ export type NextTaskInput = {
 
 export type ExternalWaitInput = {
   que_se_espera: string;
-  origen: string;
+  origen?: string | null;
   detalle?: string | null;
   referencia_externa?: string | null;
   attachments?: AttachmentInput[];
@@ -219,4 +229,22 @@ export type ExternalResponseDecisionInput = {
   next_task?: NextTaskInput | null;
   finish_data?: FinishFlowInput | null;
   attachments?: AttachmentInput[];
+};
+
+export type QuickCaptureInput = {
+  titulo: string;
+  detalle?: string | null;
+  asignado_a?: string | null;
+  fecha_vencimiento?: string | null;
+  creado_por?: string;
+};
+
+export type LinkRequirementInput = {
+  requirement_id: string;
+};
+
+export type CreateRequirementFromFlowInput = {
+  descripcion: string;
+  solicitante?: string | null;
+  creado_por?: string;
 };

@@ -3,11 +3,13 @@ import type { Attachment, StepComment, StepHistoryEntry, StepStatus } from "./ty
 export const DEFAULT_ACTOR = "sistema";
 
 const statusPresentationMap: Record<string, { label: string; tone: string }> = {
-  nuevo: { label: "nuevo", tone: "espera" },
+  sin_flows: { label: "sin flows", tone: "espera" },
   pendiente: { label: "pendiente", tone: "espera" },
   en_proceso: { label: "en proceso", tone: "en_proceso" },
   resuelto: { label: "resuelto", tone: "finalizado" },
   cancelado: { label: "cancelado", tone: "cancelado" },
+  con_problema: { label: "con problema", tone: "problema" },
+  en_espera: { label: "en espera", tone: "espera" },
   activo: { label: "en proceso", tone: "en_proceso" },
   espera: { label: "en espera", tone: "espera" },
   esperando_respuesta: { label: "esperando respuesta", tone: "espera_externa" },

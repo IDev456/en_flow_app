@@ -14,79 +14,43 @@ import {
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 
-import { createTrigger, startWorkflow } from "../api";
+import { quickCaptureFlow } from "../api";
 import { DEFAULT_ACTOR } from "../utils";
 
 type TriggerCreateModalProps = {
   onClose: () => void;
 };
 
-const SOLICITANTE_MAX = 150;
-const TRIGGER_DESCRIPTION_MAX = 1000;
-const STEP_DESCRIPTION_MAX = 1000;
-const OBJETIVO_FINAL_MAX = 200;
-
 export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
-  const [solicitante, setSolicitante] = useState("");
-  const [description, setDescription] = useState("");
-  const [firstDescription, setFirstDescription] = useState("");
+  const [title, setTitle] = useState("");
+  const [detail, setDetail] = useState("");
+  const [assignee, setAssignee] = useState("");
+  const [dueDate, setDueDate] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
-  const canSubmit = firstDescription.trim().length > 0;
+  const canSubmit = title.trim().length >= 3;
 
   async function handleSubmit() {
     if (!canSubmit) {
-      setError("Debes definir la descripcion de la tarea inicial");
-      return;
-    }
-
-    if (solicitante.trim().length > SOLICITANTE_MAX) {
-      setError(`Solicitante supera ${SOLICITANTE_MAX} caracteres`);
-      return;
-    }
-
-    if (description.trim().length > TRIGGER_DESCRIPTION_MAX) {
-      setError(`Descripcion supera ${TRIGGER_DESCRIPTION_MAX} caracteres`);
-      return;
-    }
-
-    if (firstDescription.trim().length > STEP_DESCRIPTION_MAX) {
-      setError(`Descripcion de la tarea supera ${STEP_DESCRIPTION_MAX} caracteres`);
+      setError("Escribe la tarea principal para capturar el flow.");
       return;
     }
 
     try {
       setSubmitting(true);
       setError(null);
-
-      const descriptionText = description.trim();
-      const objetivoFinal = descriptionText
-        ? descriptionText.slice(0, OBJETIVO_FINAL_MAX)
-        : "Gestionar requerimiento";
-
-      const trigger = await createTrigger({
-        solicitante: solicitante.trim() || null,
-        descripcion: descriptionText || null,
-        tipo: "requerimiento",
-        metadata: null,
+      const workflow = await quickCaptureFlow({
+        titulo: title.trim(),
+        detalle: detail.trim() || null,
+        asignado_a: assignee.trim() || DEFAULT_ACTOR,
+        fecha_vencimiento: dueDate || null,
+        creado_por: DEFAULT_ACTOR,
       });
-
-      const workflow = await startWorkflow(trigger.id, {
-        objetivo_final: objetivoFinal,
-        resolucion_esperada: "Flow resuelto y validado",
-        primer_paso: {
-          nombre: "Tarea inicial",
-          descripcion: firstDescription.trim() || null,
-          asignado_a: DEFAULT_ACTOR,
-          fecha_vencimiento: null,
-        },
-      });
-
       onClose();
       navigate(`/workflows/${workflow.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo crear el requerimiento");
+      setError(err instanceof Error ? err.message : "No se pudo capturar la tarea");
     } finally {
       setSubmitting(false);
     }
@@ -97,40 +61,23 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
       <DialogTitle sx={{ pb: 1 }}>
         <Stack spacing={1}>
           <Typography variant="subtitle2" color="primary.light">
-            Nuevo requerimiento
+            Captura rápida
           </Typography>
-          <Typography variant="h4">Iniciar un flujo</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Define la tarea inicial para arrancar. Solicitante y descripcion son opcionales.
-          </Typography>
+          <Typography variant="h4">Capturar tarea</Typography>
         </Stack>
       </DialogTitle>
 
       <DialogContent dividers sx={{ borderColor: "divider" }}>
-        <Stack spacing={3}>
-          <Box
-            sx={{
-              display: "grid",
-              gap: 2,
-              gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
-            }}
-          >
-            <TextField
-              autoFocus
-              label="Solicitante"
-              value={solicitante}
-              onChange={(event) => setSolicitante(event.target.value.slice(0, SOLICITANTE_MAX))}
-              placeholder="Ej. Cliente A, Sector Operaciones, Juan Perez..."
-            />
-            <TextField
-              label="Descripcion"
-              multiline
-              minRows={3}
-              value={description}
-              onChange={(event) => setDescription(event.target.value.slice(0, TRIGGER_DESCRIPTION_MAX))}
-              placeholder="De que se trata este requerimiento?"
-            />
-          </Box>
+        <Stack spacing={2.5}>
+          <TextField
+            autoFocus
+            label="¿Qué tenés que hacer? *"
+            multiline
+            minRows={3}
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Ej. Pedir layout actualizado al proveedor"
+          />
 
           <Box
             sx={{
@@ -141,21 +88,24 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
               backgroundColor: "rgba(12, 18, 31, 0.58)",
             }}
           >
-            <Stack spacing={2}>
-              <Stack spacing={0.75}>
-                <Typography variant="h6">Tarea inicial</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Todo flow arranca con una tarea. Describe que hay que hacer para comenzar.
-                </Typography>
-              </Stack>
-
+            <Stack spacing={1.5}>
+              <Typography variant="subtitle2" color="text.secondary">
+                Datos opcionales
+              </Typography>
               <TextField
-                label="Descripcion de la tarea *"
+                label="Detalle"
                 multiline
-                minRows={4}
-                value={firstDescription}
-                onChange={(event) => setFirstDescription(event.target.value.slice(0, STEP_DESCRIPTION_MAX))}
-                placeholder="Ej. Preguntarle a Orlando quien es Orlando."
+                minRows={2}
+                value={detail}
+                onChange={(event) => setDetail(event.target.value)}
+              />
+              <TextField label="Asignado a" value={assignee} onChange={(event) => setAssignee(event.target.value)} />
+              <TextField
+                label="Fecha"
+                type="datetime-local"
+                value={dueDate}
+                onChange={(event) => setDueDate(event.target.value)}
+                InputLabelProps={{ shrink: true }}
               />
             </Stack>
           </Box>
@@ -166,7 +116,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
 
       <DialogActions sx={{ p: 3, justifyContent: "space-between" }}>
         <Typography variant="body2" color="text.secondary">
-          Se creara el requerimiento y el flow inicial en una sola accion.
+          Se crea un flow con una tarea activa inicial.
         </Typography>
         <Stack direction="row" spacing={1.25}>
           <Button variant="text" color="inherit" onClick={onClose} disabled={submitting}>
@@ -178,7 +128,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
             disabled={submitting || !canSubmit}
             startIcon={<AddTaskRoundedIcon />}
           >
-            {submitting ? "Creando..." : "Crear requerimiento"}
+            {submitting ? "Guardando..." : "Capturar tarea"}
           </Button>
         </Stack>
       </DialogActions>
