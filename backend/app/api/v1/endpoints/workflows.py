@@ -13,6 +13,7 @@ from app.schemas.workflow import (
     WorkflowDetail,
     WorkflowSummary,
     WorkflowTemplatePublic,
+    WorkflowUpdate,
 )
 from app.services.workflow_service import WorkflowService
 
@@ -41,6 +42,33 @@ def get_workflow(workflow_id: str, service: WorkflowService = Depends(get_workfl
         return service.get_workflow(workflow_id)
     except EntityNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.patch("/{workflow_id}", response_model=WorkflowDetail)
+def update_workflow(
+    workflow_id: str,
+    payload: WorkflowUpdate,
+    service: WorkflowService = Depends(get_workflow_service),
+) -> WorkflowDetail:
+    try:
+        return service.update_workflow(workflow_id, payload)
+    except EntityNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except BusinessRuleError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.patch("/{workflow_id}/cancel", response_model=WorkflowDetail)
+def cancel_workflow(
+    workflow_id: str,
+    service: WorkflowService = Depends(get_workflow_service),
+) -> WorkflowDetail:
+    try:
+        return service.cancel_workflow(workflow_id)
+    except EntityNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except BusinessRuleError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.get("/{workflow_id}/steps", response_model=list[StepInstancePublic])

@@ -66,6 +66,14 @@ export function getWorkflow(workflowId: string) {
   return apiGet<WorkflowDetail>(`/workflows/${workflowId}`);
 }
 
+export function updateWorkflow(workflowId: string, input: { objetivo_final?: string | null }) {
+  return apiPatch<WorkflowDetail>(`/workflows/${workflowId}`, input);
+}
+
+export function cancelWorkflow(workflowId: string) {
+  return apiPatch<WorkflowDetail>(`/workflows/${workflowId}/cancel`, {});
+}
+
 export function quickCaptureFlow(input: QuickCaptureInput) {
   return apiPost<WorkflowDetail>("/workflows/quick-capture", input);
 }

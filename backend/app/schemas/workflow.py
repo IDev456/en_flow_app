@@ -118,6 +118,10 @@ class WorkflowStartRequest(WorkflowInstanceBase):
     primer_paso: InitialStepOverride
 
 
+class WorkflowUpdate(BaseModel):
+    objetivo_final: str | None = Field(default=None, min_length=1, max_length=200)
+
+
 class WorkflowSummary(WorkflowInstanceBase):
     id: str
     trigger_id: str | None = None

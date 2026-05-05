@@ -31,6 +31,7 @@ from app.schemas.workflow import (
     WorkflowStatus,
     WorkflowSummary,
     WorkflowTemplatePublic,
+    WorkflowUpdate,
 )
 
 OPEN_STEP_STATUSES = {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA, StepStatus.ESPERANDO_RESPUESTA}
@@ -163,6 +164,45 @@ class WorkflowService:
         if workflow is None:
             raise EntityNotFoundError("Workflow not found")
         return workflow
+
+    def update_workflow(self, workflow_id: str, payload: WorkflowUpdate) -> WorkflowDetail:
+        workflow = self.get_workflow(workflow_id)
+        patch_data = payload.model_dump(exclude_unset=True)
+        update_data: dict[str, object] = {}
+
+        if "objetivo_final" in patch_data:
+            next_title = (patch_data["objetivo_final"] or "").strip()
+            if not next_title:
+                raise BusinessRuleError("El nombre del flow es obligatorio")
+            update_data["objetivo_final"] = next_title
+
+        if not update_data:
+            raise BusinessRuleError("No hay cambios para guardar")
+
+        updated_workflow = workflow.model_copy(update=update_data)
+        self.repository.save_workflow(updated_workflow)
+        return self.get_workflow(workflow_id)
+
+    def cancel_workflow(self, workflow_id: str) -> WorkflowDetail:
+        workflow = self.get_workflow(workflow_id)
+        if workflow.estado == WorkflowStatus.FINALIZADO:
+            raise BusinessRuleError("No se puede cancelar un flow finalizado")
+        if workflow.estado == WorkflowStatus.CANCELADO:
+            raise BusinessRuleError("El flow ya está cancelado")
+
+        now = utc_now()
+        updated_workflow = workflow.model_copy(
+            update={
+                "estado": WorkflowStatus.CANCELADO,
+                "fecha_fin": now,
+            }
+        )
+        self.repository.save_workflow(updated_workflow)
+
+        for requirement_id in self._collect_requirement_ids(workflow):
+            self._reconcile_trigger_status(requirement_id, now, preferred_workflow_id=workflow.id)
+
+        return self.get_workflow(workflow_id)
 
     def get_workflow_steps(self, workflow_id: str) -> list[StepInstancePublic]:
         workflow = self.get_workflow(workflow_id)
