@@ -28,13 +28,13 @@ export const stepStatusOptions: Array<{
     value: "espera",
     label: "pausar tarea",
     requiresNote: true,
-    placeholder: "Describe por que la tarea queda pausada y que condicion falta para retomarla..."
+    placeholder: "Describe por qué la tarea queda pausada y qué condición falta para retomarla..."
   },
   {
     value: "problema",
     label: "registrar problema",
     requiresNote: true,
-    placeholder: "Describe el problema detectado y que hace falta para resolverlo..."
+    placeholder: "Describe el problema detectado y qué hace falta para resolverlo..."
   }
 ];
 

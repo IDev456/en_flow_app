@@ -199,7 +199,7 @@ export function StepDetailPanel({
   const canChangeStatus = ["activo", "espera", "problema"].includes(step.estado);
   const canCompleteTask = ["activo", "espera", "problema"].includes(step.estado);
   const isWaitingExternal = step.estado === "esperando_respuesta";
-  const latestMessage = step.ultimo_comentario?.trim() || (step.orden === 1 && step.descripcion?.trim() ? step.descripcion.trim() : "Sin registros todavia");
+  const latestMessage = step.ultimo_comentario?.trim() || (step.orden === 1 && step.descripcion?.trim() ? step.descripcion.trim() : "Sin registros todavía");
   const displayStepName = stepDraftName.trim() || step.nombre;
   const displayStepDescription = stepDraftDescription.trim();
 
@@ -270,7 +270,7 @@ export function StepDetailPanel({
       return;
     }
     if (completeTransition === "next_task" && !nextTaskName.trim()) {
-      setCompleteError("Debes indicar el nombre de la proxima tarea.");
+      setCompleteError("Debes indicar el nombre de la próxima tarea.");
       return;
     }
     if (completeTransition === "wait_external" && !waitExpected.trim()) {
@@ -361,7 +361,7 @@ export function StepDetailPanel({
       return;
     }
     if (resolveTransition === "next_task" && !resolveNextTaskName.trim()) {
-      setResolveError("Debes indicar el nombre de la proxima tarea.");
+      setResolveError("Debes indicar el nombre de la próxima tarea.");
       return;
     }
 
@@ -562,9 +562,9 @@ export function StepDetailPanel({
                   <StatusBadge value={step.estado} />
                   <Stack spacing={0.5}>
                     <Typography variant="body2" color="text.secondary">
-                      Ultimo registro
+                      Último registro
                     </Typography>
-                    <Typography variant="body2" color={latestMessage === "Sin registros todavia" ? "text.secondary" : "text.primary"}>
+                    <Typography variant="body2" color={latestMessage === "Sin registros todavía" ? "text.secondary" : "text.primary"}>
                       {latestMessage}
                     </Typography>
                   </Stack>
@@ -579,7 +579,7 @@ export function StepDetailPanel({
                     <Alert severity="info">Esperando respuesta externa</Alert>
                     {step.expected_external_event && (
                       <Typography variant="body2" color="text.secondary">
-                        Que se espera: {step.expected_external_event}
+                        Qué se espera: {step.expected_external_event}
                       </Typography>
                     )}
                     {step.external_wait_reason && (
@@ -694,7 +694,7 @@ export function StepDetailPanel({
 
             {completeTransition === "wait_external" && (
               <Stack spacing={1.5}>
-                <TextField label="Que se esta esperando *" value={waitExpected} onChange={(event) => setWaitExpected(event.target.value)} />
+                <TextField label="Qué se está esperando *" value={waitExpected} onChange={(event) => setWaitExpected(event.target.value)} />
               </Stack>
             )}
 
@@ -832,7 +832,7 @@ export function StepDetailPanel({
               <ToggleButton value="finish_flow">Finalizar flow</ToggleButton>
             </ToggleButtonGroup>
             <Typography variant="body2" color="text.secondary">
-              {resolveTransition === "next_task" && "Hay algo mas para hacer."}
+              {resolveTransition === "next_task" && "Hay algo más para hacer."}
               {resolveTransition === "finish_flow" && "El tema ya quedo resuelto."}
             </Typography>
 

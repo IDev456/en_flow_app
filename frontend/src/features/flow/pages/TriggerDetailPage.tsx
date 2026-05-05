@@ -525,11 +525,11 @@ export function TriggerDetailPage() {
                                   </Typography>
                                 )}
                                 <Typography variant="caption" color="text.secondary">
-                                  Ultimo registro: {commentElapsed ?? "sin registros"}
+                                  Último registro: {commentElapsed ?? "sin registros"}
                                 </Typography>
                                 {!commentElapsed && (
                                   <Typography variant="caption" color="text.secondary">
-                                    Ultimo movimiento: {formatElapsedTime(getLatestWorkflowMovementAt(workflowsById[workflowId])) ?? "sin actividad"}
+                                    Último movimiento: {formatElapsedTime(getLatestWorkflowMovementAt(workflowsById[workflowId])) ?? "sin actividad"}
                                   </Typography>
                                 )}
                               </>

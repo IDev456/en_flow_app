@@ -48,8 +48,8 @@ function renderLatestStepMovement(step: Step) {
 
   const fallbackText =
     step.ultimo_comentario?.trim() ||
-    (step.orden === 1 && step.descripcion?.trim() ? step.descripcion.trim() : "Sin registros todavia");
-  const hasComment = fallbackText !== "Sin registros todavia";
+    (step.orden === 1 && step.descripcion?.trim() ? step.descripcion.trim() : "Sin registros todavía");
+  const hasComment = fallbackText !== "Sin registros todavía";
 
   return (
     <Typography variant="body2" sx={{ fontWeight: hasComment ? 600 : 400, lineHeight: 1.45 }} color={hasComment ? "text.primary" : "text.secondary"}>
@@ -332,7 +332,7 @@ function VerticalWorkflowGraph({
                               color="text.secondary"
                               sx={{ mb: 0.45, opacity: 0.82 }}
                             >
-                              Ultimo registro
+                              Último registro
                             </Typography>
                             <Box
                               sx={{
@@ -464,7 +464,7 @@ function GitLogWorkflowGraph({
                   >
                     <Box sx={{ px: 0.25, py: 0.25 }}>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 0.45, opacity: 0.82 }}>
-                        Ultimo registro
+                        Último registro
                       </Typography>
                       <Box
                         sx={{
