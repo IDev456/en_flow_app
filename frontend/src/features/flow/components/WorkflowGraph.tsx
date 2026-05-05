@@ -7,7 +7,6 @@ import { Box, Button, ButtonBase, Card, Chip, Stack, Typography } from "@mui/mat
 
 import type { Step } from "../types";
 import { formatDate, formatElapsedTime, getStatusTone, humanizeStatus } from "../utils";
-import { StatusBadge } from "./StatusBadge";
 import type { WorkflowVariant } from "./WorkflowVariantSwitcher";
 
 type WorkflowGraphProps = {
@@ -138,48 +137,7 @@ function VerticalWorkflowGraph({
 
   return (
     <Box ref={viewportRef} sx={{ maxHeight: "72vh", overflow: "auto", pr: 0.5 }}>
-      <Stack spacing={2.5}>
-        <Card
-          variant="outlined"
-          sx={{
-            borderStyle: "dashed",
-            borderColor: workflowClosed ? alpha(theme.palette.success.main, 0.52) : alpha(theme.palette.warning.main, 0.44),
-            backgroundColor: workflowClosed ? alpha(theme.palette.success.main, 0.1) : alpha(theme.palette.warning.main, 0.08),
-            borderRadius: 2,
-          }}
-        >
-          <Box sx={{ p: 1.75 }}>
-            <Stack spacing={0.5}>
-              <Chip
-                label="CIERRE"
-                size="small"
-                color={workflowClosed ? "success" : "warning"}
-                variant="outlined"
-                sx={{ alignSelf: "flex-start", fontWeight: 700, letterSpacing: 0.6 }}
-              />
-              <Typography variant="h6">{workflowClosed ? "Flow finalizado" : "Cierre pendiente"}</Typography>
-              <Typography variant="body2" color="text.secondary">
-                {workflowClosed ? "No quedan tareas pendientes." : "El flow se cerrará cuando no queden tareas pendientes."}
-              </Typography>
-            </Stack>
-          </Box>
-        </Card>
-
-        {orderedSteps.length > 0 && (
-          <Box
-            aria-hidden="true"
-            sx={{
-              width: 2,
-              height: 24,
-              alignSelf: { xs: "center", md: "flex-start" },
-              ml: { md: "59px" },
-              borderRadius: 999,
-              background: `linear-gradient(180deg, ${alpha(theme.palette.warning.main, 0.3)}, ${alpha(theme.palette.primary.main, 0.3)})`,
-            }}
-          />
-        )}
-
-        <Stack spacing={2}>
+      <Stack spacing={2}>
           {orderedSteps.map((step, index) => {
             const isSelected = selectedStepId === step.id;
             const lastCommentAt = step.ultimo_comentario_fecha;
@@ -309,14 +267,9 @@ function VerticalWorkflowGraph({
                     {shouldExpand ? (
                       <Box sx={{ p: 2.25 }}>
                         <Stack spacing={1.25}>
-                          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
-                            <Box sx={{ flex: 1 }}>
-                              <Typography variant="h6" sx={{ mt: 1 }}>
-                                {step.nombre}
-                              </Typography>
-                            </Box>
-                            <StatusBadge value={step.estado} />
-                          </Stack>
+                          <Typography variant="h6" sx={{ mt: 1 }}>
+                            {step.nombre}
+                          </Typography>
 
                           <Box>
                             <Typography
@@ -407,32 +360,6 @@ function GitLogWorkflowGraph({
   return (
     <Box ref={viewportRef} sx={{ maxHeight: "72vh", overflow: "auto", pr: 0.5 }}>
       <Stack spacing={1.5}>
-        <Card
-          variant="outlined"
-          sx={{
-            borderRadius: 2,
-            borderStyle: "dashed",
-            borderColor: workflowClosed ? alpha(theme.palette.success.main, 0.52) : alpha(theme.palette.warning.main, 0.44),
-            backgroundColor: workflowClosed ? alpha(theme.palette.success.main, 0.1) : alpha(theme.palette.warning.main, 0.08),
-          }}
-        >
-          <Box sx={{ p: 1.75 }}>
-            <Stack spacing={0.5}>
-              <Chip
-                label="CIERRE"
-                size="small"
-                color={workflowClosed ? "success" : "warning"}
-                variant="outlined"
-                sx={{ alignSelf: "flex-start", fontWeight: 700 }}
-              />
-              <Typography variant="h6">{workflowClosed ? "Flow finalizado" : "Cierre pendiente"}</Typography>
-              <Typography variant="body2" color="text.secondary">
-                {workflowClosed ? "No quedan tareas pendientes." : "El flow se cerrará cuando no queden tareas pendientes."}
-              </Typography>
-            </Stack>
-          </Box>
-        </Card>
-
         {orderedSteps.map((step) => {
           const isSelected = selectedStepId === step.id;
           const lastCommentAt = step.ultimo_comentario_fecha;
@@ -461,7 +388,6 @@ function GitLogWorkflowGraph({
                     <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", gap: 1 }}>
                       <Chip label={`T${step.orden.toString().padStart(2, "0")}`} size="small" variant="outlined" />
                       <Typography variant="h6">{step.nombre}</Typography>
-                      <StatusBadge value={step.estado} />
                     </Stack>
                   </Stack>
                   <Box>
