@@ -3,14 +3,7 @@ import AttachmentRoundedIcon from "@mui/icons-material/AttachmentRounded";
 import ImageRoundedIcon from "@mui/icons-material/ImageRounded";
 import type { Theme } from "@mui/material/styles";
 import { alpha, useTheme } from "@mui/material/styles";
-import {
-  Box,
-  ButtonBase,
-  Card,
-  Chip,
-  Stack,
-  Typography,
-} from "@mui/material";
+import { Box, ButtonBase, Card, Chip, Stack, Typography } from "@mui/material";
 
 import type { Step } from "../types";
 import { formatDate, formatElapsedTime, getStatusTone, humanizeStatus } from "../utils";
@@ -59,11 +52,7 @@ function renderLatestStepMovement(step: Step) {
   const hasComment = fallbackText !== "Sin registros todavia";
 
   return (
-    <Typography
-      variant="body1"
-      sx={{ fontWeight: hasComment ? 600 : 400 }}
-      color={hasComment ? "text.primary" : "text.secondary"}
-    >
+    <Typography variant="body1" sx={{ fontWeight: hasComment ? 600 : 400 }} color={hasComment ? "text.primary" : "text.secondary"}>
       {fallbackText}
     </Typography>
   );
@@ -121,18 +110,16 @@ function getStepStateColors(theme: Theme, status: Step["estado"]) {
 }
 
 function VerticalWorkflowGraph({
-  triggerLabel,
   steps,
   workflowClosed,
   selectedStepId,
   onSelectStep,
   onOpenStep,
-  onOpenTrigger,
 }: WorkflowGraphProps) {
   const theme = useTheme();
   const viewportRef = useRef<HTMLDivElement>(null);
   const selectedCardRef = useRef<HTMLButtonElement | null>(null);
-  const orderedSteps = [...steps].sort((left, right) => left.orden - right.orden);
+  const orderedSteps = [...steps].sort((left, right) => right.orden - left.orden);
 
   useEffect(() => {
     if (!viewportRef.current || !selectedCardRef.current) {
@@ -154,43 +141,41 @@ function VerticalWorkflowGraph({
           variant="outlined"
           sx={{
             borderStyle: "dashed",
-            cursor: "pointer",
-            borderColor: alpha(theme.palette.info.main, 0.42),
-            backgroundColor: alpha(theme.palette.info.main, 0.08),
+            borderColor: workflowClosed ? alpha(theme.palette.success.main, 0.52) : alpha(theme.palette.warning.main, 0.44),
+            backgroundColor: workflowClosed ? alpha(theme.palette.success.main, 0.1) : alpha(theme.palette.warning.main, 0.08),
             borderRadius: 2,
           }}
         >
-          <ButtonBase onClick={onOpenTrigger} sx={{ p: 2.25, display: "block", textAlign: "left" }}>
-            <Stack spacing={0.75}>
+          <Box sx={{ p: 1.75 }}>
+            <Stack spacing={0.5}>
               <Chip
-                label="REQUERIMIENTO"
+                label="CIERRE"
                 size="small"
-                color="info"
+                color={workflowClosed ? "success" : "warning"}
                 variant="outlined"
                 sx={{ alignSelf: "flex-start", fontWeight: 700, letterSpacing: 0.6 }}
               />
-              <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: 0.8, textTransform: "uppercase" }}>
-                Requerimiento
-              </Typography>
-              <Typography variant="h6">{triggerLabel}</Typography>
+              <Typography variant="h6">{workflowClosed ? "Flow finalizado" : "Cierre pendiente"}</Typography>
               <Typography variant="body2" color="text.secondary">
-                Origen del flow operativo.
+                {workflowClosed ? "No quedan tareas pendientes." : "El flow se cerrará cuando no queden tareas pendientes."}
               </Typography>
             </Stack>
-          </ButtonBase>
+          </Box>
         </Card>
 
-        <Box
-          aria-hidden="true"
-          sx={{
-            width: 2,
-            height: 24,
-            alignSelf: { xs: "center", md: "flex-start" },
-            ml: { md: "59px" },
-            borderRadius: 999,
-            background: `linear-gradient(180deg, ${alpha(theme.palette.info.main, 0.35)}, ${alpha(theme.palette.primary.main, 0.3)})`,
-          }}
-        />
+        {orderedSteps.length > 0 && (
+          <Box
+            aria-hidden="true"
+            sx={{
+              width: 2,
+              height: 24,
+              alignSelf: { xs: "center", md: "flex-start" },
+              ml: { md: "59px" },
+              borderRadius: 999,
+              background: `linear-gradient(180deg, ${alpha(theme.palette.warning.main, 0.3)}, ${alpha(theme.palette.primary.main, 0.3)})`,
+            }}
+          />
+        )}
 
         <Stack spacing={2}>
           {orderedSteps.map((step, index) => {
@@ -198,8 +183,8 @@ function VerticalWorkflowGraph({
             const lastCommentAt = step.ultimo_comentario_fecha;
             const lastCommentElapsed = formatElapsedTime(lastCommentAt);
             const stateElapsed = formatElapsedTime(step.fecha_estado_actual);
-            const isLast = index === orderedSteps.length - 1;
             const isFirst = index === 0;
+            const isLast = index === orderedSteps.length - 1;
             const stateColors = getStepStateColors(theme, step.estado);
             const shouldExpand = isSelected || step.estado !== "completado";
 
@@ -356,65 +341,22 @@ function VerticalWorkflowGraph({
             );
           })}
         </Stack>
-
-        <Box
-          aria-hidden="true"
-          sx={{
-            width: 2,
-            height: 24,
-            alignSelf: { xs: "center", md: "flex-start" },
-            ml: { md: "59px" },
-            borderRadius: 999,
-            background: `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.28)}, ${alpha(theme.palette.text.primary, 0.12)})`,
-          }}
-        />
-
-        <Card
-          variant="outlined"
-          sx={{
-            borderStyle: "dashed",
-            borderColor: workflowClosed ? alpha(theme.palette.success.main, 0.52) : alpha(theme.palette.warning.main, 0.44),
-            backgroundColor: workflowClosed ? alpha(theme.palette.success.main, 0.1) : alpha(theme.palette.warning.main, 0.08),
-            borderRadius: 2,
-          }}
-        >
-          <Box sx={{ p: 2.25 }}>
-            <Stack spacing={0.75}>
-              <Chip
-                label="CIERRE"
-                size="small"
-                color={workflowClosed ? "success" : "warning"}
-                variant="outlined"
-                sx={{ alignSelf: "flex-start", fontWeight: 700, letterSpacing: 0.6 }}
-              />
-              <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: 0.8, textTransform: "uppercase" }}>
-                Cierre
-              </Typography>
-              <Typography variant="h6">{workflowClosed ? "Flow finalizado" : "Cierre pendiente"}</Typography>
-              <Typography variant="body2" color="text.secondary">
-                {workflowClosed ? "El flow ya quedó resuelto." : "El flow se cerrará cuando no queden tareas pendientes."}
-              </Typography>
-            </Stack>
-          </Box>
-        </Card>
       </Stack>
     </Box>
   );
 }
 
 function GitLogWorkflowGraph({
-  triggerLabel,
   steps,
   workflowClosed,
   selectedStepId,
   onSelectStep,
   onOpenStep,
-  onOpenTrigger,
 }: WorkflowGraphProps) {
   const theme = useTheme();
   const viewportRef = useRef<HTMLDivElement>(null);
   const selectedRowRef = useRef<HTMLButtonElement | null>(null);
-  const orderedSteps = [...steps].sort((left, right) => left.orden - right.orden);
+  const orderedSteps = [...steps].sort((left, right) => right.orden - left.orden);
 
   useEffect(() => {
     if (!viewportRef.current || !selectedRowRef.current) {
@@ -432,16 +374,30 @@ function GitLogWorkflowGraph({
   return (
     <Box ref={viewportRef} sx={{ maxHeight: "72vh", overflow: "auto", pr: 0.5 }}>
       <Stack spacing={1.5}>
-        <Card variant="outlined">
-          <ButtonBase onClick={onOpenTrigger} sx={{ p: 2.25, display: "block", textAlign: "left" }}>
-            <Stack spacing={0.75}>
-              <Chip label="REQUERIMIENTO" size="small" color="info" variant="outlined" sx={{ alignSelf: "flex-start", fontWeight: 700 }} />
-              <Typography variant="h6">{triggerLabel}</Typography>
+        <Card
+          variant="outlined"
+          sx={{
+            borderRadius: 2,
+            borderStyle: "dashed",
+            borderColor: workflowClosed ? alpha(theme.palette.success.main, 0.52) : alpha(theme.palette.warning.main, 0.44),
+            backgroundColor: workflowClosed ? alpha(theme.palette.success.main, 0.1) : alpha(theme.palette.warning.main, 0.08),
+          }}
+        >
+          <Box sx={{ p: 1.75 }}>
+            <Stack spacing={0.5}>
+              <Chip
+                label="CIERRE"
+                size="small"
+                color={workflowClosed ? "success" : "warning"}
+                variant="outlined"
+                sx={{ alignSelf: "flex-start", fontWeight: 700 }}
+              />
+              <Typography variant="h6">{workflowClosed ? "Flow finalizado" : "Cierre pendiente"}</Typography>
               <Typography variant="body2" color="text.secondary">
-                Origen del flow
+                {workflowClosed ? "No quedan tareas pendientes." : "El flow se cerrará cuando no queden tareas pendientes."}
               </Typography>
             </Stack>
-          </ButtonBase>
+          </Box>
         </Card>
 
         {orderedSteps.map((step) => {
@@ -517,29 +473,6 @@ function GitLogWorkflowGraph({
             </Card>
           );
         })}
-
-        <Card
-          variant="outlined"
-          sx={{
-            borderRadius: 2,
-            borderStyle: "dashed",
-            borderColor: workflowClosed ? alpha(theme.palette.success.main, 0.52) : alpha(theme.palette.warning.main, 0.44),
-            backgroundColor: workflowClosed ? alpha(theme.palette.success.main, 0.1) : alpha(theme.palette.warning.main, 0.08),
-          }}
-        >
-          <Box sx={{ p: 2.25 }}>
-            <Stack spacing={0.75}>
-              <Chip
-                label="CIERRE"
-                size="small"
-                color={workflowClosed ? "success" : "warning"}
-                variant="outlined"
-                sx={{ alignSelf: "flex-start", fontWeight: 700 }}
-              />
-              <Typography variant="h6">{workflowClosed ? "Flow finalizado" : "Cierre pendiente"}</Typography>
-            </Stack>
-          </Box>
-        </Card>
       </Stack>
     </Box>
   );
