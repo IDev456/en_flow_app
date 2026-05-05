@@ -12,7 +12,7 @@ const statusPresentationMap: Record<string, { label: string; tone: string }> = {
   espera: { label: "en espera", tone: "espera" },
   esperando_respuesta: { label: "esperando respuesta", tone: "espera_externa" },
   completado: { label: "completado", tone: "completado" },
-  problema: { label: "en espera", tone: "espera" },
+  problema: { label: "problema", tone: "problema" },
   finalizado: { label: "finalizado", tone: "finalizado" }
 };
 
@@ -24,13 +24,13 @@ export const stepStatusOptions: Array<{
 }> = [
   {
     value: "espera",
-    label: "en espera",
+    label: "pausar tarea",
     requiresNote: true,
-    placeholder: "Describe que es lo que estas esperando (ej: respuesta de proveedor, validacion de presupuesto)..."
+    placeholder: "Describe por que la tarea queda pausada y que condicion falta para retomarla..."
   },
   {
     value: "completado",
-    label: "completado",
+    label: "completar tarea",
     requiresNote: true,
     placeholder: "Resume el resultado final y cualquier detalle relevante del cierre del paso..."
   }

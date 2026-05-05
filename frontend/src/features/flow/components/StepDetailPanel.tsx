@@ -13,7 +13,6 @@ import {
   DialogTitle,
   Divider,
   IconButton,
-  Link,
   Menu,
   MenuItem,
   Stack,
@@ -25,6 +24,7 @@ import { Link as RouterLink } from "react-router-dom";
 import type { AttachmentInput, ExternalEventCreateInput, Step, StepComment, StepHistoryEntry, StepJournalEntryInput } from "../types";
 import { DEFAULT_ACTOR } from "../utils";
 import { Journal } from "./Journal";
+import { StatusBadge } from "./StatusBadge";
 
 type StepDetailPanelProps = {
   workflowId: string;
@@ -94,7 +94,7 @@ export function StepDetailPanel({
             <Stack spacing={1}>
               <Typography variant="h5">Sin paso seleccionado</Typography>
               <Typography color="text.secondary">
-                Selecciona un paso del flujo para revisar su bitacora, entender el contexto y registrar avance.
+                Selecciona una tarea del flow para revisar su bitacora, entender el contexto y registrar avance.
               </Typography>
             </Stack>
         </CardContent>
@@ -105,7 +105,9 @@ export function StepDetailPanel({
   const canChangeStatus = ["activo", "espera", "problema"].includes(step.estado);
   const latestMessage =
     step.ultimo_comentario?.trim() ||
-    (step.orden === 1 && step.descripcion?.trim() ? step.descripcion.trim() : "Sin comentarios todavia");
+    (step.orden === 1 && step.descripcion?.trim() ? step.descripcion.trim() : "Sin registros todavia");
+  const waitsExternal = step.waits_for_external_response || step.action_type === "wait_external";
+  const actionLabel = step.action_label?.trim() || humanizeActionType(step.action_type);
 
   async function handleSubmitJournal(input: StepJournalEntryInput) {
     await onSubmitJournal(input);
@@ -154,7 +156,7 @@ export function StepDetailPanel({
   async function handleRegisterExternalEvent() {
     if (!onRegisterExternalEvent) return;
     if (!externalEventType.trim()) {
-      setExternalError("Debes indicar el tipo de evento externo.");
+      setExternalError("Debes indicar el tipo de respuesta externa.");
       return;
     }
     if (!externalActor.trim()) {
@@ -219,7 +221,7 @@ export function StepDetailPanel({
                     onClick={() => setExternalDialogOpen(true)}
                     sx={{ textTransform: "none" }}
                   >
-                    Registrar respuesta externa
+                    Registrar respuesta recibida
                   </Button>
                 )}
                 {canChangeStatus && (
@@ -228,8 +230,8 @@ export function StepDetailPanel({
                       <MoreHorizRoundedIcon />
                     </IconButton>
                     <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
-                      <MenuItem onClick={() => handleStatusIntent("espera")}>Marcar en espera</MenuItem>
-                      <MenuItem onClick={() => handleStatusIntent("completado")}>Completar paso</MenuItem>
+                      <MenuItem onClick={() => handleStatusIntent("espera")}>Pausar tarea</MenuItem>
+                      <MenuItem onClick={() => handleStatusIntent("completado")}>Completar tarea</MenuItem>
                     </Menu>
                   </>
                 )}
@@ -241,40 +243,54 @@ export function StepDetailPanel({
               </Stack>
             </Stack>
 
-            <Stack spacing={0.5}>
-              <Typography variant="body2" color="text.secondary" sx={{ pt: 0.25 }}>
-                Ultimo comentario:
-              </Typography>
-              <Typography variant="body2" color={latestMessage === "Sin comentarios todavia" ? "text.secondary" : "text.primary"}>
-                {latestMessage}
-              </Typography>
-            </Stack>
+            <Card variant="outlined">
+              <CardContent sx={{ p: 1.75 }}>
+                <Stack spacing={1}>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Estado operativo
+                  </Typography>
+                  <StatusBadge value={step.estado} />
+                  <Stack spacing={0.5}>
+                    <Typography variant="body2" color="text.secondary">
+                      Ultimo registro
+                    </Typography>
+                    <Typography variant="body2" color={latestMessage === "Sin registros todavia" ? "text.secondary" : "text.primary"}>
+                      {latestMessage}
+                    </Typography>
+                  </Stack>
+                </Stack>
+              </CardContent>
+            </Card>
 
             <Card variant="outlined">
               <CardContent sx={{ p: 1.75 }}>
-                <Stack spacing={0.6}>
+                <Stack spacing={0.9}>
                   <Typography variant="subtitle2" color="text.secondary">
                     Accion al completar
                   </Typography>
-                  <Typography variant="body2">
-                    {step.action_label?.trim() || step.action_type || "continue"}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Espera respuesta externa: {step.waits_for_external_response ? "si" : "no"}
-                  </Typography>
+                  <Typography variant="body2">{actionLabel}</Typography>
+                  {waitsExternal ? (
+                    <Typography variant="body2" color="text.secondary">
+                      El flow quedara detenido hasta registrar la respuesta externa.
+                    </Typography>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      El flow continuara automaticamente si las dependencias quedan cumplidas.
+                    </Typography>
+                  )}
                   {step.expected_external_event && (
                     <Typography variant="body2" color="text.secondary">
-                      Evento esperado: {step.expected_external_event}
+                      Dato esperado: {step.expected_external_event}
                     </Typography>
                   )}
                   {step.external_wait_reason && (
                     <Typography variant="body2" color="text.secondary">
-                      Motivo de espera: {step.external_wait_reason}
+                      Motivo: {step.external_wait_reason}
                     </Typography>
                   )}
                   {step.external_reference && (
                     <Typography variant="body2" color="text.secondary">
-                      Referencia externa: {step.external_reference}
+                      Referencia: {step.external_reference}
                     </Typography>
                   )}
                 </Stack>
@@ -282,9 +298,28 @@ export function StepDetailPanel({
             </Card>
 
             {step.estado === "esperando_respuesta" && (
-              <Alert severity="info">
-                El paso quedo en espera externa. El flujo continuara cuando se registre un evento externo valido.
-              </Alert>
+              <Card variant="outlined">
+                <CardContent sx={{ p: 1.75 }}>
+                  <Stack spacing={1}>
+                    <Alert severity="info">Esperando respuesta externa</Alert>
+                    {step.expected_external_event && (
+                      <Typography variant="body2" color="text.secondary">
+                        Dato esperado: {step.expected_external_event}
+                      </Typography>
+                    )}
+                    {step.external_wait_reason && (
+                      <Typography variant="body2" color="text.secondary">
+                        Motivo: {step.external_wait_reason}
+                      </Typography>
+                    )}
+                    {step.external_reference && (
+                      <Typography variant="body2" color="text.secondary">
+                        Referencia: {step.external_reference}
+                      </Typography>
+                    )}
+                  </Stack>
+                </CardContent>
+              </Card>
             )}
           </Stack>
         </Box>
@@ -328,17 +363,17 @@ export function StepDetailPanel({
       </CardContent>
 
       <Dialog open={externalDialogOpen} onClose={registeringExternal ? undefined : () => setExternalDialogOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Registrar respuesta externa</DialogTitle>
+        <DialogTitle>Registrar respuesta recibida</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
             <TextField
-              label="Tipo de evento *"
+              label="Tipo de respuesta / evento *"
               value={externalEventType}
               onChange={(event) => setExternalEventType(event.target.value)}
               disabled={registeringExternal}
             />
             <TextField
-              label="Comentario"
+              label="Detalle recibido"
               multiline
               minRows={3}
               value={externalComment}
@@ -346,7 +381,7 @@ export function StepDetailPanel({
               disabled={registeringExternal}
             />
             <TextField
-              label="Registrado por"
+              label="Usuario / actor"
               value={externalActor}
               onChange={(event) => setExternalActor(event.target.value)}
               disabled={registeringExternal}
@@ -401,10 +436,19 @@ export function StepDetailPanel({
             Cancelar
           </Button>
           <Button onClick={() => void handleRegisterExternalEvent()} disabled={registeringExternal} variant="contained">
-            {registeringExternal ? "Registrando..." : "Registrar respuesta"}
+            {registeringExternal ? "Registrando..." : "Registrar y continuar flow"}
           </Button>
         </DialogActions>
       </Dialog>
     </Card>
   );
+}
+
+function humanizeActionType(actionType: string | null) {
+  const normalized = (actionType ?? "continue").trim().toLowerCase();
+  if (normalized === "wait_external") return "Esperar respuesta externa";
+  if (normalized === "manual_review") return "Revision manual";
+  if (normalized === "finish_flow") return "Finalizar flow";
+  if (normalized === "continue") return "Continuar flow";
+  return normalized.replaceAll("_", " ");
 }

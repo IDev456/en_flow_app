@@ -170,17 +170,17 @@ export function Journal({
   async function handleSubmit() {
     const comentario = commentTrimmed || null;
     if (!comentario && attachments.length === 0) {
-      setError("Debes escribir un comentario o adjuntar al menos un archivo.");
+      setError("Debes registrar un avance o adjuntar al menos un archivo.");
       return;
     }
 
     if (!canComment) {
-      setError("Este paso no admite comentarios.");
+      setError("Esta tarea no admite registros en bitacora.");
       return;
     }
 
     if (selectedStatus && (!comentario || comentario.length < 3)) {
-      setError("El comentario debe justificar el cambio de estado.");
+      setError("El registro debe justificar el cambio de estado.");
       return;
     }
 
@@ -243,22 +243,22 @@ export function Journal({
 
   function getSubmitLabel() {
     if (selectedStatus === "completado") {
-      return "Completar paso";
+      return "Completar tarea";
     }
     if (selectedStatus) {
-      return "Guardar comentario y cambiar estado";
+      return "Guardar avance y cambiar estado";
     }
-    return "Comentar";
+    return "Guardar avance";
   }
 
   function getCommentPlaceholder() {
     if (selectedStatus === "espera") {
-      return "Que se esta esperando para poder continuar...";
+      return "Describe por que la tarea queda pausada y que falta para retomarla...";
     }
     if (selectedStatus === "completado") {
-      return "Describe que se completo y que resultado se obtuvo...";
+      return "Describe el resultado de la tarea, evidencias y siguiente estado operativo...";
     }
-    return "Escribe una nota para la bitacora o pega una imagen...";
+    return "Registra avance operativo, resultado parcial o evidencia...";
   }
 
   return (
@@ -287,7 +287,7 @@ export function Journal({
 
           <TextField
             inputRef={textareaRef}
-            label="Agregar comentario"
+            label="Registrar avance"
             multiline
             minRows={4}
             placeholder={getCommentPlaceholder()}
@@ -422,15 +422,15 @@ export function Journal({
             <Card variant="outlined">
               <CardContent sx={{ display: "grid", gap: 2 }}>
                 <Typography variant="subtitle2" color="text.secondary">
-                  Al completar este paso
+                  Al completar esta tarea
                 </Typography>
                 {step.waits_for_external_response || step.action_type === "wait_external" ? (
                   <Alert severity="info">
-                    El paso quedara en espera externa hasta recibir la respuesta esperada. Luego el flujo se reanudara automaticamente.
+                    La tarea quedara en espera externa hasta recibir la respuesta esperada. Luego el flow se reanudara automaticamente.
                   </Alert>
                 ) : (
                   <Alert severity="info">
-                    El paso se completara y el workflow avanzara automaticamente segun la plantilla y dependencias.
+                    La tarea se completara y el flow avanzara automaticamente segun la plantilla y dependencias.
                   </Alert>
                 )}
               </CardContent>
@@ -455,7 +455,7 @@ export function Journal({
 
       <Stack spacing={1.5}>
         {items.length === 0 ? (
-          <Alert severity="info">Sin movimientos todavia. Cuando registres comentarios, adjuntos o cambios de estado apareceran aqui en orden cronologico.</Alert>
+          <Alert severity="info">Sin registros todavia. Cuando registres avances, adjuntos o cambios de estado apareceran aqui en orden cronologico.</Alert>
         ) : (
           items.map((item) => (
             <Card key={item.id} variant="outlined">

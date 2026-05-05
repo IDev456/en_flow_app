@@ -14,6 +14,7 @@ import {
 
 import type { Step } from "../types";
 import { formatDate, formatElapsedTime, getStatusTone, humanizeStatus } from "../utils";
+import { StatusBadge } from "./StatusBadge";
 import type { WorkflowVariant } from "./WorkflowVariantSwitcher";
 
 type WorkflowGraphProps = {
@@ -54,8 +55,8 @@ function renderLatestStepMovement(step: Step) {
 
   const fallbackText =
     step.ultimo_comentario?.trim() ||
-    (step.orden === 1 && step.descripcion?.trim() ? step.descripcion.trim() : "Sin comentarios todavia");
-  const hasComment = fallbackText !== "Sin comentarios todavia";
+    (step.orden === 1 && step.descripcion?.trim() ? step.descripcion.trim() : "Sin registros todavia");
+  const hasComment = fallbackText !== "Sin registros todavia";
 
   return (
     <Typography
@@ -98,7 +99,7 @@ function getStepStateColors(theme: Theme, status: Step["estado"]) {
     };
   }
 
-  if (tone === "cancelado" || tone === "error") {
+  if (tone === "cancelado" || tone === "error" || tone === "problema") {
     return {
       borderColor: alpha(theme.palette.error.main, 0.5),
       backgroundColor: alpha(theme.palette.error.main, 0.16),
@@ -127,7 +128,7 @@ function VerticalWorkflowGraph({
   const theme = useTheme();
   const viewportRef = useRef<HTMLDivElement>(null);
   const selectedCardRef = useRef<HTMLButtonElement | null>(null);
-  const orderedSteps = [...steps].sort((left, right) => right.orden - left.orden);
+  const orderedSteps = [...steps].sort((left, right) => left.orden - right.orden);
 
   useEffect(() => {
     if (!viewportRef.current || !selectedCardRef.current) {
@@ -149,29 +150,30 @@ function VerticalWorkflowGraph({
           variant="outlined"
           sx={{
             borderStyle: "dashed",
-            borderColor: workflowClosed ? alpha(theme.palette.success.main, 0.52) : alpha(theme.palette.warning.main, 0.44),
-            backgroundColor: workflowClosed ? alpha(theme.palette.success.main, 0.1) : alpha(theme.palette.warning.main, 0.08),
+            cursor: "pointer",
+            borderColor: alpha(theme.palette.info.main, 0.42),
+            backgroundColor: alpha(theme.palette.info.main, 0.08),
             borderRadius: 2,
           }}
         >
-          <Box sx={{ p: 2.25 }}>
+          <ButtonBase onClick={onOpenTrigger} sx={{ p: 2.25, display: "block", textAlign: "left" }}>
             <Stack spacing={0.75}>
               <Chip
-                label="CIERRE"
+                label="REQUERIMIENTO"
                 size="small"
-                color={workflowClosed ? "success" : "warning"}
+                color="info"
                 variant="outlined"
                 sx={{ alignSelf: "flex-start", fontWeight: 700, letterSpacing: 0.6 }}
               />
               <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: 0.8, textTransform: "uppercase" }}>
-                Cierre
+                Requerimiento
               </Typography>
-              <Typography variant="h6">{workflowClosed ? "Workflow finalizado" : "Cierre pendiente"}</Typography>
+              <Typography variant="h6">{triggerLabel}</Typography>
               <Typography variant="body2" color="text.secondary">
-                {workflowClosed ? "El requerimiento ya completo su recorrido." : "El flujo se cerrara al completar el ultimo paso."}
+                Origen del flow operativo.
               </Typography>
             </Stack>
-          </Box>
+          </ButtonBase>
         </Card>
 
         <Box
@@ -182,7 +184,7 @@ function VerticalWorkflowGraph({
             alignSelf: { xs: "center", md: "flex-start" },
             ml: { md: "59px" },
             borderRadius: 999,
-            background: `linear-gradient(180deg, ${alpha(theme.palette.success.main, 0.38)}, ${alpha(theme.palette.primary.main, 0.28)})`,
+            background: `linear-gradient(180deg, ${alpha(theme.palette.info.main, 0.35)}, ${alpha(theme.palette.primary.main, 0.3)})`,
           }}
         />
 
@@ -286,11 +288,12 @@ function VerticalWorkflowGraph({
                       <Box sx={{ p: 2.25 }}>
                         <Stack spacing={1.25}>
                           <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
-                            <Box>
+                            <Box sx={{ flex: 1 }}>
                               <Typography variant="h6" sx={{ mt: 1 }}>
                                 {step.nombre}
                               </Typography>
                             </Box>
+                            <StatusBadge value={step.estado} />
                           </Stack>
 
                           <Box>
@@ -299,7 +302,7 @@ function VerticalWorkflowGraph({
                               color="text.secondary"
                               sx={{ mb: 0.75, letterSpacing: 0.75, textTransform: "uppercase" }}
                             >
-                              Ultimo comentario
+                              Ultimo registro
                             </Typography>
                             <Box
                               sx={{
@@ -328,6 +331,11 @@ function VerticalWorkflowGraph({
                                 </Typography>
                               )}
                             </Stack>
+                            {step.estado === "esperando_respuesta" && step.expected_external_event && (
+                              <Typography variant="caption" color="info.light" sx={{ display: "block", mt: 0.75 }}>
+                                Dato esperado: {step.expected_external_event}
+                              </Typography>
+                            )}
                           </Box>
                         </Stack>
                       </Box>
@@ -361,30 +369,29 @@ function VerticalWorkflowGraph({
           variant="outlined"
           sx={{
             borderStyle: "dashed",
-            cursor: "pointer",
-            borderColor: alpha(theme.palette.info.main, 0.42),
-            backgroundColor: alpha(theme.palette.info.main, 0.08),
+            borderColor: workflowClosed ? alpha(theme.palette.success.main, 0.52) : alpha(theme.palette.warning.main, 0.44),
+            backgroundColor: workflowClosed ? alpha(theme.palette.success.main, 0.1) : alpha(theme.palette.warning.main, 0.08),
             borderRadius: 2,
           }}
         >
-          <ButtonBase onClick={onOpenTrigger} sx={{ p: 2.25, display: "block", textAlign: "left" }}>
+          <Box sx={{ p: 2.25 }}>
             <Stack spacing={0.75}>
               <Chip
-                label="DISPARADOR"
+                label="CIERRE"
                 size="small"
-                color="info"
+                color={workflowClosed ? "success" : "warning"}
                 variant="outlined"
                 sx={{ alignSelf: "flex-start", fontWeight: 700, letterSpacing: 0.6 }}
               />
               <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: 0.8, textTransform: "uppercase" }}>
-                Disparador
+                Cierre
               </Typography>
-              <Typography variant="h6">{triggerLabel}</Typography>
+              <Typography variant="h6">{workflowClosed ? "Workflow finalizado" : "Cierre pendiente"}</Typography>
               <Typography variant="body2" color="text.secondary">
-                Origen del flujo operativo.
+                {workflowClosed ? "El requerimiento ya completo su recorrido." : "El flow se cerrara cuando no queden pasos pendientes."}
               </Typography>
             </Stack>
-          </ButtonBase>
+          </Box>
         </Card>
       </Stack>
     </Box>
@@ -403,7 +410,7 @@ function GitLogWorkflowGraph({
   const theme = useTheme();
   const viewportRef = useRef<HTMLDivElement>(null);
   const selectedRowRef = useRef<HTMLButtonElement | null>(null);
-  const orderedSteps = [...steps].sort((left, right) => right.orden - left.orden);
+  const orderedSteps = [...steps].sort((left, right) => left.orden - right.orden);
 
   useEffect(() => {
     if (!viewportRef.current || !selectedRowRef.current) {
@@ -424,10 +431,10 @@ function GitLogWorkflowGraph({
         <Card variant="outlined">
           <ButtonBase onClick={onOpenTrigger} sx={{ p: 2.25, display: "block", textAlign: "left" }}>
             <Stack spacing={0.75}>
-              <Chip label="DISPARADOR" size="small" color="info" variant="outlined" sx={{ alignSelf: "flex-start", fontWeight: 700 }} />
+              <Chip label="REQUERIMIENTO" size="small" color="info" variant="outlined" sx={{ alignSelf: "flex-start", fontWeight: 700 }} />
               <Typography variant="h6">{triggerLabel}</Typography>
               <Typography variant="body2" color="text.secondary">
-                Origen del flujo
+                Origen del flow
               </Typography>
             </Stack>
           </ButtonBase>
@@ -461,11 +468,12 @@ function GitLogWorkflowGraph({
                     <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", gap: 1 }}>
                       <Chip label={`P${step.orden.toString().padStart(2, "0")}`} size="small" variant="outlined" />
                       <Typography variant="h6">{step.nombre}</Typography>
+                      <StatusBadge value={step.estado} />
                     </Stack>
                   </Stack>
                   <Box>
                     <Typography variant="caption" color="text.secondary" sx={{ mb: 0.75, letterSpacing: 0.75, textTransform: "uppercase" }}>
-                      Ultimo comentario
+                      Ultimo registro
                     </Typography>
                     <Box
                       sx={{
@@ -494,6 +502,11 @@ function GitLogWorkflowGraph({
                         </Typography>
                       )}
                     </Stack>
+                    {step.estado === "esperando_respuesta" && step.expected_external_event && (
+                      <Typography variant="caption" color="info.light" sx={{ display: "block", mt: 0.75 }}>
+                        Dato esperado: {step.expected_external_event}
+                      </Typography>
+                    )}
                   </Box>
                 </Stack>
               </ButtonBase>

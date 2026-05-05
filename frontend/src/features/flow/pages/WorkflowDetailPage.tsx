@@ -254,7 +254,7 @@ export function WorkflowDetailPage() {
                 <Box>
                   <Typography variant="h5">Pasos</Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                    Selecciona un paso para ver su detalle, dejar comentarios, adjuntar evidencia o cambiar su estado.
+                    Selecciona una tarea para ver su detalle, registrar avance, adjuntar evidencia o cambiar su estado.
                   </Typography>
                 </Box>
                 <WorkflowVariantSwitcher value={variant} onChange={setVariant} />

@@ -211,6 +211,23 @@ export function TriggerDetailPage() {
     }, null);
   }
 
+  function getWorkflowDisplayStatus(workflow: WorkflowDetail) {
+    if (workflow.estado === "finalizado" || workflow.estado === "cancelado") {
+      return workflow.estado;
+    }
+    if (workflow.steps.some((step) => step.estado === "esperando_respuesta")) {
+      return "esperando_respuesta";
+    }
+    if (workflow.steps.some((step) => step.estado === "espera" || step.estado === "problema")) {
+      return "espera";
+    }
+    return workflow.estado;
+  }
+
+  function countExternalWaitingSteps(workflow: WorkflowDetail) {
+    return workflow.steps.filter((step) => step.estado === "esperando_respuesta").length;
+  }
+
   if (loading) {
     return (
       <Stack direction="row" spacing={1.5} sx={{ py: 8, alignItems: "center", justifyContent: "center" }}>
@@ -363,7 +380,7 @@ export function TriggerDetailPage() {
                   Crear nuevo workflow asociado
                 </Typography>
                 <TextField
-                  label="Descripcion del primer paso *"
+                  label="Tarea inicial del flow *"
                   multiline
                   minRows={3}
                   value={newWorkflowFirstDescription}
@@ -419,15 +436,20 @@ export function TriggerDetailPage() {
                               <Typography sx={{ fontWeight: 700 }}>
                                 Workflow {index + 1}
                               </Typography>
-                              {workflowsById[workflowId] && <StatusBadge value={workflowsById[workflowId].estado} />}
+                              {workflowsById[workflowId] && <StatusBadge value={getWorkflowDisplayStatus(workflowsById[workflowId])} />}
                             </Stack>
-                            <Typography variant="caption" color="text.secondary">
-                              ID {workflowId.slice(0, 8)}
-                            </Typography>
                             {workflowsById[workflowId] ? (
                               <>
                                 <Typography variant="caption" color="text.secondary">
-                                  Ultimo comentario: {commentElapsed ?? "sin comentarios"}
+                                  Pasos: {workflowsById[workflowId].steps.length}
+                                </Typography>
+                                {countExternalWaitingSteps(workflowsById[workflowId]) > 0 && (
+                                  <Typography variant="caption" color="info.light">
+                                    Esperando respuesta externa: {countExternalWaitingSteps(workflowsById[workflowId])}
+                                  </Typography>
+                                )}
+                                <Typography variant="caption" color="text.secondary">
+                                  Ultimo registro: {commentElapsed ?? "sin registros"}
                                 </Typography>
                                 {!commentElapsed && (
                                   <Typography variant="caption" color="text.secondary">

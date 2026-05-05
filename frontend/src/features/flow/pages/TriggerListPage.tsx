@@ -244,7 +244,7 @@ export function TriggerListPage() {
   const totalCreatedSteps = flowRows.reduce((sum, row) => sum + row.workflow.steps.length, 0);
   const kpis = [
     { label: "Requerimientos", value: triggers.length, helper: "Total cargado en la bandeja operativa" },
-    { label: "Flows activos", value: activeFlows, helper: "En proceso o en espera" },
+    { label: "Flows activos", value: activeFlows, helper: "En proceso, espera operativa o espera externa" },
     { label: "Flows completados", value: flowCounts.done, helper: "Finalizados o cancelados" },
     { label: "Pasos creados", value: totalCreatedSteps, helper: "Total de pasos de todos los flows" },
   ];
