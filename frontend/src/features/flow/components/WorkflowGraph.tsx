@@ -3,7 +3,7 @@ import AttachmentRoundedIcon from "@mui/icons-material/AttachmentRounded";
 import ImageRoundedIcon from "@mui/icons-material/ImageRounded";
 import type { Theme } from "@mui/material/styles";
 import { alpha, useTheme } from "@mui/material/styles";
-import { Box, ButtonBase, Card, Chip, Stack, Typography } from "@mui/material";
+import { Box, Button, ButtonBase, Card, Chip, Stack, Typography } from "@mui/material";
 
 import type { Step } from "../types";
 import { formatDate, formatElapsedTime, getStatusTone, humanizeStatus } from "../utils";
@@ -19,6 +19,7 @@ type WorkflowGraphProps = {
   onSelectStep: (stepId: string) => void;
   onOpenStep: (stepId: string) => void;
   onOpenTrigger: () => void;
+  onCompleteStepIntent?: (stepId: string) => void;
 };
 
 export function WorkflowGraph(props: WorkflowGraphProps) {
@@ -115,6 +116,7 @@ function VerticalWorkflowGraph({
   selectedStepId,
   onSelectStep,
   onOpenStep,
+  onCompleteStepIntent,
 }: WorkflowGraphProps) {
   const theme = useTheme();
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -187,6 +189,7 @@ function VerticalWorkflowGraph({
             const isLast = index === orderedSteps.length - 1;
             const stateColors = getStepStateColors(theme, step.estado);
             const shouldExpand = isSelected || step.estado !== "completado";
+            const canComplete = ["activo", "espera", "problema"].includes(step.estado);
 
             return (
               <Box
@@ -260,11 +263,41 @@ function VerticalWorkflowGraph({
                 <Card
                   variant="outlined"
                   sx={{
+                    position: "relative",
                     borderColor: isSelected ? "primary.main" : "divider",
                     boxShadow: isSelected ? `0 0 0 1px ${alpha(theme.palette.primary.main, 0.34)}` : "none",
                     borderRadius: 2,
+                    transition: "box-shadow 180ms ease",
+                    "&:hover .complete-step-button, &:focus-within .complete-step-button": {
+                      opacity: 1,
+                      visibility: "visible",
+                    },
                   }}
                 >
+                  {canComplete && onCompleteStepIntent ? (
+                    <Button
+                      className="complete-step-button"
+                      size="small"
+                      variant="contained"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onCompleteStepIntent(step.id);
+                      }}
+                      aria-label={`Completar tarea ${step.nombre}`}
+                      sx={{
+                        position: "absolute",
+                        top: 12,
+                        right: 12,
+                        opacity: 0,
+                        visibility: "hidden",
+                        transition: "opacity 180ms ease",
+                        textTransform: "none",
+                        zIndex: 1,
+                      }}
+                    >
+                      Completar tarea
+                    </Button>
+                  ) : null}
                   <ButtonBase
                     ref={isSelected ? selectedCardRef : null}
                     onClick={() => {

@@ -55,6 +55,7 @@ export function WorkflowDetailPage() {
   const [trigger, setTrigger] = useState<TriggerDetail | null>(null);
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [pendingCompleteDialogStepId, setPendingCompleteDialogStepId] = useState<string | null>(null);
   const [stepComments, setStepComments] = useState<StepComment[]>([]);
   const [stepHistory, setStepHistory] = useState<StepHistoryEntry[]>([]);
   const [requirementsExpanded, setRequirementsExpanded] = useState(false);
@@ -227,6 +228,16 @@ export function WorkflowDetailPage() {
   function handleOpenStep(stepId: string) {
     setSelectedStepId(stepId);
     setPanelOpen(true);
+  }
+
+  function handleOpenCompleteStep(stepId: string) {
+    setSelectedStepId(stepId);
+    setPanelOpen(true);
+    setPendingCompleteDialogStepId(stepId);
+  }
+
+  function handleCompleteDialogOpened() {
+    setPendingCompleteDialogStepId(null);
   }
 
   if (loading) {
@@ -437,6 +448,7 @@ export function WorkflowDetailPage() {
                 selectedStepId={selectedStepId}
                 onSelectStep={handleSelectStep}
                 onOpenStep={handleOpenStep}
+                onCompleteStepIntent={handleOpenCompleteStep}
                 onOpenTrigger={() => {
                   const requirementId = workflow.trigger_id ?? workflow.requirement_ids[0];
                   if (requirementId) navigate(`/requirements/${requirementId}`);
@@ -457,6 +469,8 @@ export function WorkflowDetailPage() {
             onClose={() => setPanelOpen(false)}
             onSubmitJournal={handleSubmitJournal}
             onCompleteTask={handleCompleteTask}
+            openCompleteDialog={pendingCompleteDialogStepId !== null && pendingCompleteDialogStepId === selectedStepId}
+            onCompleteDialogOpened={handleCompleteDialogOpened}
             onRegisterExternalEvent={(input) => handleRegisterExternalEvent(selectedStep.id, input)}
             onResolveExternalResponse={(stepId, input) => handleResolveExternalResponse(stepId, input)}
           />

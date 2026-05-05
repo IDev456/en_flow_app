@@ -50,6 +50,8 @@ type StepDetailPanelProps = {
   error?: string | null;
   onSubmitJournal: (input: StepJournalEntryInput) => Promise<void>;
   onCompleteTask: (stepId: string, input: StepCompleteInput) => Promise<void>;
+  openCompleteDialog?: boolean;
+  onCompleteDialogOpened?: () => void;
   onRegisterExternalEvent?: (input: ExternalEventCreateInput) => Promise<void>;
   onResolveExternalResponse?: (stepId: string, input: ExternalResponseDecisionInput) => Promise<void>;
 };
@@ -65,6 +67,8 @@ export function StepDetailPanel({
   error,
   onSubmitJournal,
   onCompleteTask,
+  openCompleteDialog,
+  onCompleteDialogOpened,
   onRegisterExternalEvent,
   onResolveExternalResponse,
 }: StepDetailPanelProps) {
@@ -181,6 +185,13 @@ export function StepDetailPanel({
   const canCompleteTask = ["activo", "espera", "problema"].includes(step.estado);
   const isWaitingExternal = step.estado === "esperando_respuesta";
   const latestMessage = step.ultimo_comentario?.trim() || (step.orden === 1 && step.descripcion?.trim() ? step.descripcion.trim() : "Sin registros todavia");
+
+  useEffect(() => {
+    if (openCompleteDialog && canCompleteTask) {
+      setCompleteDialogOpen(true);
+      onCompleteDialogOpened?.();
+    }
+  }, [canCompleteTask, onCompleteDialogOpened, openCompleteDialog]);
 
   async function handleSubmitJournal(input: StepJournalEntryInput) {
     await onSubmitJournal(input);
