@@ -31,6 +31,7 @@ import {
   listTriggers,
   registerExternalEvent,
   resolveExternalResponse,
+  unlinkWorkflowRequirement,
   updateStepStatus,
 } from "../api";
 import { StepDetailPanel } from "../components/StepDetailPanel";
@@ -68,6 +69,7 @@ export function WorkflowDetailPage() {
   const [linkRequirementId, setLinkRequirementId] = useState("");
   const [linkRequirementError, setLinkRequirementError] = useState<string | null>(null);
   const [linkingRequirement, setLinkingRequirement] = useState(false);
+  const [unlinkingRequirementId, setUnlinkingRequirementId] = useState<string | null>(null);
   const [toastOpen, setToastOpen] = useState(Boolean(initialToastMessage));
   const [toastMessage, setToastMessage] = useState<string | null>(initialToastMessage);
 
@@ -249,6 +251,29 @@ export function WorkflowDetailPage() {
     }
   }
 
+  async function handleUnlinkRequirement(requirementId: string, requirementLabel: string) {
+    if (!workflow) return;
+
+    const confirmed = window.confirm(
+      `¿Desvincular este requerimiento del flow?\n\n${requirementLabel}\n\nEl requerimiento y el flow seguirán existiendo. Solo se quitará la asociación.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setUnlinkingRequirementId(requirementId);
+      setLinkRequirementError(null);
+      await unlinkWorkflowRequirement(workflow.id, requirementId);
+      await loadWorkflow(selectedStepId ?? undefined);
+      setToastMessage("Requerimiento desvinculado.");
+      setToastOpen(true);
+      handleCloseLinkRequirement();
+    } catch (err) {
+      setLinkRequirementError(err instanceof Error ? err.message : "No se pudo desvincular el requerimiento");
+    } finally {
+      setUnlinkingRequirementId(null);
+    }
+  }
+
   if (loading) {
     return (
       <Stack direction="row" spacing={1.5} sx={{ py: 8, alignItems: "center", justifyContent: "center" }}>
@@ -274,6 +299,7 @@ export function WorkflowDetailPage() {
   const availableRequirements = requirements.filter((item) => !linkedRequirements.some((linked) => linked.id === item.id));
   const linkedRequirementLabel =
     linkedRequirements.length === 1 ? "1 requerimiento vinculado" : `${linkedRequirements.length} requerimientos vinculados`;
+  const managingRequirementsBusy = linkingRequirement || unlinkingRequirementId !== null;
 
   return (
     <Stack spacing={3}>
@@ -388,7 +414,7 @@ export function WorkflowDetailPage() {
         )}
       </Box>
 
-      <Dialog open={linkRequirementOpen} onClose={linkingRequirement ? undefined : handleCloseLinkRequirement} fullWidth maxWidth="sm">
+      <Dialog open={linkRequirementOpen} onClose={managingRequirementsBusy ? undefined : handleCloseLinkRequirement} fullWidth maxWidth="sm">
         <DialogTitle>{linkedRequirements.length > 0 ? "Gestionar requerimientos" : "Asociar requerimiento"}</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
@@ -397,14 +423,33 @@ export function WorkflowDetailPage() {
                 <Typography variant="subtitle2" color="text.secondary">
                   Vinculados
                 </Typography>
-                <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", gap: 0.75 }}>
+                <Stack spacing={0.9}>
                   {linkedRequirements.map((item) => (
-                    <Chip
+                    <Stack
                       key={`linked-${item.id}`}
-                      size="small"
-                      variant="outlined"
-                      label={item.descripcion?.trim() || `Req ${item.id.slice(0, 8)}`}
-                    />
+                      direction="row"
+                      spacing={1}
+                      sx={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 1 }}
+                    >
+                      <Chip
+                        size="small"
+                        variant="outlined"
+                        label={item.descripcion?.trim() || `Req ${item.id.slice(0, 8)}`}
+                      />
+                      <Button
+                        size="small"
+                        color="error"
+                        onClick={() =>
+                          void handleUnlinkRequirement(
+                            item.id,
+                            item.descripcion?.trim() || `Req ${item.id.slice(0, 8)}`
+                          )
+                        }
+                        disabled={managingRequirementsBusy}
+                      >
+                        {unlinkingRequirementId === item.id ? "Desvinculando..." : "Desvincular"}
+                      </Button>
+                    </Stack>
                   ))}
                 </Stack>
               </Stack>
@@ -432,13 +477,13 @@ export function WorkflowDetailPage() {
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button color="inherit" onClick={handleCloseLinkRequirement} disabled={linkingRequirement}>
+          <Button color="inherit" onClick={handleCloseLinkRequirement} disabled={managingRequirementsBusy}>
             Cerrar
           </Button>
           <Button
             variant="contained"
             onClick={() => void handleLinkRequirement()}
-            disabled={linkingRequirement || availableRequirements.length === 0 || !linkRequirementId}
+            disabled={managingRequirementsBusy || availableRequirements.length === 0 || !linkRequirementId}
           >
             {linkingRequirement ? "Asociando..." : "Asociar"}
           </Button>
