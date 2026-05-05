@@ -118,7 +118,7 @@ function VerticalWorkflowGraph({
 }: WorkflowGraphProps) {
   const theme = useTheme();
   const viewportRef = useRef<HTMLDivElement>(null);
-  const selectedCardRef = useRef<HTMLDivElement | null>(null);
+  const selectedCardRef = useRef<HTMLButtonElement | null>(null);
   const orderedSteps = [...steps].sort((left, right) => right.orden - left.orden);
 
   useEffect(() => {
@@ -166,7 +166,6 @@ function VerticalWorkflowGraph({
             return (
               <Box
                 key={step.id}
-                ref={isSelected ? selectedCardRef : null}
                 sx={{
                   display: "grid",
                   gridTemplateColumns: { xs: "1fr", md: "120px minmax(0, 1fr)" },
@@ -271,18 +270,19 @@ function VerticalWorkflowGraph({
                       Listo
                     </Button>
                   ) : null}
-                  {shouldExpand ? (
-                    <Box sx={{ p: 2.25 }}>
-                      <Stack spacing={1.25}>
-                        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
-                          <Box sx={{ flex: 1 }}>
-                            <Typography variant="h6" sx={{ mt: 1 }}>
-                              {step.nombre}
-                            </Typography>
-                          </Box>
-                        </Stack>
+                  <Box sx={{ p: 2.25 }}>
+                    <Stack spacing={1.25}>
+                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
+                        <Box sx={{ flex: 1 }}>
+                          <Typography variant="h6" sx={{ mt: 1 }}>
+                            {step.nombre}
+                          </Typography>
+                        </Box>
+                      </Stack>
 
+                      {shouldExpand ? (
                         <ButtonBase
+                          ref={isSelected ? selectedCardRef : null}
                           onClick={() => {
                             onSelectStep(step.id);
                             onOpenStep(step.id);
@@ -293,66 +293,69 @@ function VerticalWorkflowGraph({
                             width: "100%",
                             textAlign: "left",
                             borderRadius: 1.5,
-                            px: 0,
-                            py: 0,
-                            '&:hover': { backgroundColor: alpha(theme.palette.action.hover, 0.08) },
-                            '&:focus-visible': {
-                              outline: `2px solid ${alpha(theme.palette.primary.main, 0.45)}`,
-                              outlineOffset: 2,
+                            overflow: "hidden",
+                            transition: "background-color 180ms ease",
+                            "&:hover": {
+                              backgroundColor: alpha(theme.palette.action.hover, 0.08),
+                            },
+                            "&.Mui-focusVisible": {
+                              backgroundColor: alpha(theme.palette.primary.main, 0.08),
                             },
                           }}
                         >
-                          <Box sx={{ mt: 1.25, p: 0 }}>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                              sx={{ mb: 0.75, letterSpacing: 0.75, textTransform: "uppercase" }}
-                            >
-                              Ultimo registro
-                            </Typography>
-                            <Box
-                              sx={{
-                                borderRadius: 1.5,
-                                px: 1.25,
-                                py: 1,
-                                backgroundColor: getMutedSurface(theme),
-                                border: "1px solid",
-                                borderColor: alpha(theme.palette.divider, 0.85),
-                              }}
-                            >
-                              {renderLatestStepMovement(step)}
+                          <Box sx={{ p: 0 }}>
+                            <Box>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ mb: 0.75, letterSpacing: 0.75, textTransform: "uppercase" }}
+                              >
+                                Ultimo registro
+                              </Typography>
+                              <Box
+                                sx={{
+                                  borderRadius: 1.5,
+                                  px: 1.25,
+                                  py: 1,
+                                  backgroundColor: getMutedSurface(theme),
+                                  border: "1px solid",
+                                  borderColor: alpha(theme.palette.divider, 0.85),
+                                }}
+                              >
+                                {renderLatestStepMovement(step)}
+                              </Box>
+                              <Stack direction="row" spacing={1} sx={{ mt: 0.75, flexWrap: "wrap", gap: 1 }}>
+                                <Typography variant="caption" color="text.secondary">
+                                  {lastCommentAt ? `Fecha: ${formatDate(lastCommentAt)}` : "Fecha: sin registro"}
+                                </Typography>
+                                {lastCommentElapsed && (
+                                  <Typography variant="caption" color="text.secondary">
+                                    {lastCommentElapsed}
+                                  </Typography>
+                                )}
+                                {stateElapsed && (
+                                  <Typography variant="caption" color="text.secondary">
+                                    Estado actual: {stateElapsed}
+                                  </Typography>
+                                )}
+                              </Stack>
+                              {step.estado === "esperando_respuesta" && step.expected_external_event && (
+                                <Typography variant="caption" color="info.light" sx={{ display: "block", mt: 0.75 }}>
+                                  Dato esperado: {step.expected_external_event}
+                                </Typography>
+                              )}
                             </Box>
-                            <Stack direction="row" spacing={1} sx={{ mt: 0.75, flexWrap: "wrap", gap: 1 }}>
-                              <Typography variant="caption" color="text.secondary">
-                                {lastCommentAt ? `Fecha: ${formatDate(lastCommentAt)}` : "Fecha: sin registro"}
-                              </Typography>
-                              {lastCommentElapsed && (
-                                <Typography variant="caption" color="text.secondary">
-                                  {lastCommentElapsed}
-                                </Typography>
-                              )}
-                              {stateElapsed && (
-                                <Typography variant="caption" color="text.secondary">
-                                  Estado actual: {stateElapsed}
-                                </Typography>
-                              )}
-                            </Stack>
-                            {step.estado === "esperando_respuesta" && step.expected_external_event && (
-                              <Typography variant="caption" color="info.light" sx={{ display: "block", mt: 0.75 }}>
-                                Dato esperado: {step.expected_external_event}
-                              </Typography>
-                            )}
                           </Box>
                         </ButtonBase>
-                      </Stack>
-                    </Box>
-                  ) : (
-                    <Box sx={{ p: 1.75 }}>
-                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} sx={{ justifyContent: "space-between", alignItems: { sm: "center" } }}>
-                        <Typography variant="h6">{step.nombre}</Typography>
-                      </Stack>
-                    </Box>
-                  )}
+                      ) : (
+                        <Box sx={{ p: 1.75 }}>
+                          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} sx={{ justifyContent: "space-between", alignItems: { sm: "center" } }}>
+                            <Typography variant="h6">{step.nombre}</Typography>
+                          </Stack>
+                        </Box>
+                      )}
+                    </Stack>
+                  </Box>
                 </Card>
               </Box>
             );
@@ -371,7 +374,7 @@ function GitLogWorkflowGraph({
 }: WorkflowGraphProps) {
   const theme = useTheme();
   const viewportRef = useRef<HTMLDivElement>(null);
-  const selectedRowRef = useRef<HTMLDivElement | null>(null);
+  const selectedRowRef = useRef<HTMLButtonElement | null>(null);
   const orderedSteps = [...steps].sort((left, right) => right.orden - left.orden);
 
   useEffect(() => {
@@ -398,7 +401,6 @@ function GitLogWorkflowGraph({
           return (
             <Card
               key={step.id}
-              ref={isSelected ? selectedRowRef : null}
               variant="outlined"
               sx={{
                 borderColor: isSelected ? "primary.main" : "divider",
@@ -406,7 +408,14 @@ function GitLogWorkflowGraph({
                 borderRadius: 2,
               }}
             >
-              <Box sx={{ p: 2.25 }}>
+              <ButtonBase
+                ref={isSelected ? selectedRowRef : null}
+                onClick={() => {
+                  onSelectStep(step.id);
+                  onOpenStep(step.id);
+                }}
+                sx={{ p: 2.25, display: "block", width: "100%", textAlign: "left" }}
+              >
                 <Stack spacing={1.25}>
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
                     <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", gap: 1 }}>
@@ -414,66 +423,45 @@ function GitLogWorkflowGraph({
                       <Typography variant="h6">{step.nombre}</Typography>
                     </Stack>
                   </Stack>
-                  <ButtonBase
-                    onClick={() => {
-                      onSelectStep(step.id);
-                      onOpenStep(step.id);
-                    }}
-                    aria-label={`Ver registro de la tarea ${step.nombre}`}
-                    sx={{
-                      display: "block",
-                      width: "100%",
-                      textAlign: "left",
-                      borderRadius: 1.5,
-                      px: 0,
-                      py: 0,
-                      '&:hover': { backgroundColor: alpha(theme.palette.action.hover, 0.08) },
-                      '&:focus-visible': {
-                        outline: `2px solid ${alpha(theme.palette.primary.main, 0.45)}`,
-                        outlineOffset: 2,
-                      },
-                    }}
-                  >
-                    <Box sx={{ mt: 1.25, p: 0 }}>
-                      <Typography variant="caption" color="text.secondary" sx={{ mb: 0.75, letterSpacing: 0.75, textTransform: "uppercase" }}>
-                        Ultimo registro
+                  <Box>
+                    <Typography variant="caption" color="text.secondary" sx={{ mb: 0.75, letterSpacing: 0.75, textTransform: "uppercase" }}>
+                      Ultimo registro
+                    </Typography>
+                    <Box
+                      sx={{
+                        borderRadius: 1.5,
+                        px: 1.25,
+                        py: 1,
+                        backgroundColor: getMutedSurface(theme),
+                        border: "1px solid",
+                        borderColor: alpha(theme.palette.divider, 0.85),
+                      }}
+                    >
+                      {renderLatestStepMovement(step)}
+                    </Box>
+                    <Stack direction="row" spacing={1} sx={{ mt: 0.75, flexWrap: "wrap", gap: 1 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        {lastCommentAt ? `Fecha: ${formatDate(lastCommentAt)}` : "Fecha: sin registro"}
                       </Typography>
-                      <Box
-                        sx={{
-                          borderRadius: 1.5,
-                          px: 1.25,
-                          py: 1,
-                          backgroundColor: getMutedSurface(theme),
-                          border: "1px solid",
-                          borderColor: alpha(theme.palette.divider, 0.85),
-                        }}
-                      >
-                        {renderLatestStepMovement(step)}
-                      </Box>
-                      <Stack direction="row" spacing={1} sx={{ mt: 0.75, flexWrap: "wrap", gap: 1 }}>
+                      {lastCommentElapsed && (
                         <Typography variant="caption" color="text.secondary">
-                          {lastCommentAt ? `Fecha: ${formatDate(lastCommentAt)}` : "Fecha: sin registro"}
-                        </Typography>
-                        {lastCommentElapsed && (
-                          <Typography variant="caption" color="text.secondary">
-                            {lastCommentElapsed}
-                          </Typography>
-                        )}
-                        {stateElapsed && (
-                          <Typography variant="caption" color="text.secondary">
-                            Estado actual: {stateElapsed}
-                          </Typography>
-                        )}
-                      </Stack>
-                      {step.estado === "esperando_respuesta" && step.expected_external_event && (
-                        <Typography variant="caption" color="info.light" sx={{ display: "block", mt: 0.75 }}>
-                          Dato esperado: {step.expected_external_event}
+                          {lastCommentElapsed}
                         </Typography>
                       )}
-                    </Box>
-                  </ButtonBase>
+                      {stateElapsed && (
+                        <Typography variant="caption" color="text.secondary">
+                          Estado actual: {stateElapsed}
+                        </Typography>
+                      )}
+                    </Stack>
+                    {step.estado === "esperando_respuesta" && step.expected_external_event && (
+                      <Typography variant="caption" color="info.light" sx={{ display: "block", mt: 0.75 }}>
+                        Dato esperado: {step.expected_external_event}
+                      </Typography>
+                    )}
+                  </Box>
                 </Stack>
-              </Box>
+              </ButtonBase>
             </Card>
           );
         })}
