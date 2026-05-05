@@ -44,7 +44,7 @@ export function formatDate(value: string | null) {
   }
 
   return new Intl.DateTimeFormat("es-AR", {
-    dateStyle: "short",
+    dateStyle: "medium",
     timeStyle: "short"
   }).format(new Date(value));
 }

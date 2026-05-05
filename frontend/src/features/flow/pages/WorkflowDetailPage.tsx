@@ -22,6 +22,8 @@ import {
 } from "@mui/material";
 import { Link as RouterLink, useLocation, useNavigate, useParams } from "react-router-dom";
 
+import { useToastContext } from "../../../components/Toast";
+
 import {
   addStepComment,
   completeStep,
@@ -54,6 +56,7 @@ export function WorkflowDetailPage() {
   const { workflowId = "" } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
+  const { showToast } = useToastContext();
   const initialToastMessage = (location.state as { toast?: string } | null)?.toast ?? null;
   const [workflow, setWorkflow] = useState<WorkflowDetail | null>(null);
   const [trigger, setTrigger] = useState<TriggerDetail | null>(null);
@@ -174,6 +177,7 @@ export function WorkflowDetailPage() {
       currentWorkflow.steps.find((workflowStep) => workflowStep.estado === "activo") ??
       currentWorkflow.steps.find((workflowStep) => ["espera", "problema", "esperando_respuesta"].includes(workflowStep.estado));
     await refreshAfterStepChange(nextActiveStep?.id ?? stepId);
+    showToast("Tarea completada.", "success");
   }
 
   async function handleRegisterExternalEvent(stepId: string, input: ExternalEventCreateInput) {

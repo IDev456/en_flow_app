@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Alert, Breadcrumbs, CircularProgress, Link, Stack, Typography } from "@mui/material";
 import { Link as RouterLink, useParams } from "react-router-dom";
 
+import { useToastContext } from "../../../components/Toast";
 import {
   addStepComment,
   completeStep,
@@ -26,6 +27,7 @@ import { DEFAULT_ACTOR } from "../utils";
 
 export function StepDetailPage() {
   const { stepId = "" } = useParams();
+  const { showToast } = useToastContext();
   const [step, setStep] = useState<Step | null>(null);
   const [comments, setComments] = useState<StepComment[]>([]);
   const [history, setHistory] = useState<StepHistoryEntry[]>([]);
@@ -65,6 +67,7 @@ export function StepDetailPage() {
         attachments: input.attachments ?? [],
       });
       await loadStepData();
+      showToast("Registro guardado.", "success");
       return;
     }
 
@@ -75,22 +78,26 @@ export function StepDetailPage() {
       attachments: input.attachments ?? [],
     });
     await loadStepData();
+    showToast("Estado actualizado.", "success");
   }
 
   async function handleCompleteTask(stepId: string, input: StepCompleteInput) {
     await completeStep(stepId, input);
     await loadStepData();
+    showToast("Tarea completada.", "success");
   }
 
   async function handleRegisterExternal(input: ExternalEventCreateInput) {
     if (!step) return;
     await registerExternalEvent(step.id, input);
     await loadStepData();
+    showToast("Respuesta registrada.", "success");
   }
 
   async function handleResolveExternal(stepId: string, input: ExternalResponseDecisionInput) {
     await resolveExternalResponse(stepId, input);
     await loadStepData();
+    showToast("Tarea resuelta.", "success");
   }
 
   if (loading) {

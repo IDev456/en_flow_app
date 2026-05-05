@@ -23,6 +23,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import { HoverEntityActions } from "../../../components/HoverEntityActions";
 import { createTrigger, deleteTrigger, getWorkflow, listTriggers, listWorkflows } from "../api";
+import { EmptyTriggerList } from "../components/EmptyTriggerList";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Step, TriggerDetail, WorkflowDetail } from "../types";
 import { formatElapsedTime, getStatusTone } from "../utils";
@@ -326,7 +327,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   }
 
   const emptyFlowMessage = stateFilter === "all" ? "Todavía no hay flows." : "No hay flows para este filtro.";
-  const emptyRequirementMessage = stateFilter === "all" ? "Todavía no hay requerimientos." : "No hay requerimientos para este filtro.";
   const currentCounts = viewMode === "flows" ? flowCounts : requirementCounts;
 
   return (
@@ -552,7 +552,13 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             {!loading && !error && viewMode === "requirements" && (
               <Stack spacing={1.25}>
                 {filteredRequirements.length === 0 ? (
-                  <Alert severity="info">{emptyRequirementMessage}</Alert>
+                  <EmptyTriggerList
+                    filtered={Boolean(query.trim()) || stateFilter !== "all"}
+                    onCreateNew={() => {
+                      setCreateRequirementOpen(true);
+                      setCreateRequirementError(null);
+                    }}
+                  />
                 ) : (
                   filteredRequirements.map((trigger) => {
                     const linkedWorkflows = trigger.workflow_ids

@@ -16,6 +16,7 @@ import {
 import { alpha } from "@mui/material/styles";
 import { useNavigate } from "react-router-dom";
 
+import { useToastContext } from "../../../components/Toast";
 import { quickCaptureFlow } from "../api";
 import { DEFAULT_ACTOR } from "../utils";
 
@@ -32,7 +33,17 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
   const [error, setError] = useState<string | null>(null);
   const [showOptional, setShowOptional] = useState(false);
   const navigate = useNavigate();
+  const { showToast } = useToastContext();
   const canSubmit = title.trim().length >= 3;
+
+  function handleClose() {
+    if (title.trim() || detail.trim() || assignee.trim() || dueDate) {
+      if (!window.confirm("¿Cerrar sin guardar? Se perderán los datos ingresados.")) {
+        return;
+      }
+    }
+    onClose();
+  }
 
   async function handleSubmit() {
     if (!canSubmit) {
@@ -50,8 +61,9 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
         fecha_vencimiento: dueDate || null,
         creado_por: DEFAULT_ACTOR,
       });
+      showToast("Tarea capturada.", "success");
       onClose();
-      navigate(`/workflows/${workflow.id}`, { state: { toast: "Tarea capturada." } });
+      navigate(`/workflows/${workflow.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo capturar la tarea");
     } finally {
@@ -60,7 +72,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
   }
 
   return (
-    <Dialog open onClose={submitting ? undefined : onClose} fullWidth maxWidth="md">
+    <Dialog open onClose={submitting ? undefined : () => handleClose()} fullWidth maxWidth="md">
       <DialogTitle sx={{ pb: 1 }}>
         <Stack spacing={1}>
           <Typography variant="subtitle2" color="primary.light">
@@ -129,7 +141,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
           Se crea un flow con una tarea activa inicial.
         </Typography>
         <Stack direction="row" spacing={1.25}>
-          <Button variant="text" color="inherit" onClick={onClose} disabled={submitting}>
+          <Button variant="text" color="inherit" onClick={handleClose} disabled={submitting}>
             Cancelar
           </Button>
           <Button

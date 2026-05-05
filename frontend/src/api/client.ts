@@ -1,5 +1,18 @@
 const API_URL = import.meta.env.VITE_API_URL ?? "/api/v1";
 
+const CONNECTION_ERROR = "No se pudo conectar con el servidor. Verificá que el backend esté corriendo.";
+
+async function fetchOrThrow(input: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch (err) {
+    if (err instanceof TypeError) {
+      throw new Error(CONNECTION_ERROR);
+    }
+    throw err;
+  }
+}
+
 function formatValidationDetail(detail: unknown): string | null {
   if (!Array.isArray(detail)) {
     return null;
@@ -76,12 +89,12 @@ async function parseResponse<T>(response: Response): Promise<T> {
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`);
+  const response = await fetchOrThrow(`${API_URL}${path}`);
   return parseResponse<T>(response);
 }
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetchOrThrow(`${API_URL}${path}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -93,7 +106,7 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
 }
 
 export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetchOrThrow(`${API_URL}${path}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json"
@@ -105,7 +118,7 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
 }
 
 export async function apiDelete(path: string): Promise<void> {
-  const response = await fetch(`${API_URL}${path}`, { method: "DELETE" });
+  const response = await fetchOrThrow(`${API_URL}${path}`, { method: "DELETE" });
 
   if (response.status === 204) {
     return;
@@ -115,6 +128,6 @@ export async function apiDelete(path: string): Promise<void> {
 }
 
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, init);
+  const response = await fetchOrThrow(`${API_URL}${path}`, init);
   return parseResponse<T>(response);
 }

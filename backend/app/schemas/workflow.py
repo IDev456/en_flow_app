@@ -40,7 +40,7 @@ class StepTransitionType(StrEnum):
 
 
 class TriggerBase(BaseModel):
-    solicitante: str | None = Field(default=None, max_length=150)
+    solicitante: str | None = Field(default=None, min_length=2, max_length=150)
     descripcion: str | None = Field(default=None, max_length=1000)
     tipo: str = Field(default="requerimiento", min_length=1, max_length=80)
     metadata: dict[str, Any] | None = None
