@@ -35,10 +35,10 @@ function renderLatestStepMovement(step: Step) {
       <Stack direction="row" spacing={1.25} sx={{ alignItems: "center" }}>
         {step.ultimo_comentario_tipo === "imagen" ? <ImageRoundedIcon color="info" /> : <AttachmentRoundedIcon color="info" />}
         <Box>
-          <Typography variant="body1" sx={{ fontWeight: 700 }}>
+          <Typography variant="body2" sx={{ fontWeight: 700 }}>
             {step.ultimo_comentario_tipo === "imagen" ? "Imagen adjunta" : "Archivo adjunto"}
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="caption" color="text.secondary">
             {step.ultimo_comentario_adjunto_nombre ?? "Adjunto reciente"}
           </Typography>
         </Box>
@@ -52,14 +52,30 @@ function renderLatestStepMovement(step: Step) {
   const hasComment = fallbackText !== "Sin registros todavia";
 
   return (
-    <Typography variant="body1" sx={{ fontWeight: hasComment ? 600 : 400 }} color={hasComment ? "text.primary" : "text.secondary"}>
+    <Typography variant="body2" sx={{ fontWeight: hasComment ? 600 : 400, lineHeight: 1.45 }} color={hasComment ? "text.primary" : "text.secondary"}>
       {fallbackText}
     </Typography>
   );
 }
 
 function getMutedSurface(theme: Theme) {
-  return alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.28 : 0.72);
+  return alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.16 : 0.52);
+}
+
+function getRecordMetaParts(lastCommentAt: string | null, lastCommentElapsed: string | null, stateElapsed: string | null) {
+  const parts: string[] = [];
+
+  if (lastCommentAt) {
+    parts.push(formatDate(lastCommentAt));
+  }
+
+  if (lastCommentElapsed) {
+    parts.push(lastCommentElapsed);
+  } else if (!lastCommentAt && stateElapsed) {
+    parts.push(`Estado actual: ${stateElapsed}`);
+  }
+
+  return parts;
 }
 
 function getStepStateColors(theme: Theme, status: Step["estado"]) {
@@ -157,6 +173,7 @@ function VerticalWorkflowGraph({
             const lastCommentAt = step.ultimo_comentario_fecha;
             const lastCommentElapsed = formatElapsedTime(lastCommentAt);
             const stateElapsed = formatElapsedTime(step.fecha_estado_actual);
+            const recordMetaParts = getRecordMetaParts(lastCommentAt, lastCommentElapsed, stateElapsed);
             const isFirst = index === 0;
             const isLast = index === orderedSteps.length - 1;
             const stateColors = getStepStateColors(theme, step.estado);
@@ -298,9 +315,10 @@ function VerticalWorkflowGraph({
                             borderRadius: 1.5,
                             px: 0,
                             py: 0,
+                            cursor: "pointer",
                             transition: "background-color 180ms ease",
                             "&:hover": {
-                              backgroundColor: alpha(theme.palette.action.hover, 0.06),
+                              backgroundColor: alpha(theme.palette.action.hover, 0.05),
                             },
                             "&:focus-visible": {
                               outline: `2px solid ${alpha(theme.palette.primary.main, 0.4)}`,
@@ -308,43 +326,42 @@ function VerticalWorkflowGraph({
                             },
                           }}
                         >
-                          <Box sx={{ p: 2.25 }}>
+                          <Box sx={{ px: 0.25, py: 0.25 }}>
                             <Typography
-                              variant="caption"
+                              variant="body2"
                               color="text.secondary"
-                              sx={{ mb: 0.75, letterSpacing: 0.75, textTransform: "uppercase" }}
+                              sx={{ mb: 0.45, opacity: 0.82 }}
                             >
                               Ultimo registro
                             </Typography>
                             <Box
                               sx={{
-                                borderRadius: 1.5,
-                                px: 1.25,
-                                py: 1,
+                                borderRadius: 1.25,
+                                px: 1,
+                                py: 0.8,
                                 backgroundColor: getMutedSurface(theme),
-                                border: "1px solid",
-                                borderColor: alpha(theme.palette.divider, 0.85),
+                                borderLeft: "2px solid",
+                                borderLeftColor: alpha(theme.palette.divider, theme.palette.mode === "dark" ? 0.42 : 0.72),
+                                transition: "background-color 180ms ease, border-color 180ms ease",
+                                ".MuiButtonBase-root:hover &, .MuiButtonBase-root:focus-visible &": {
+                                  backgroundColor: alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.22 : 0.62),
+                                  borderLeftColor: alpha(theme.palette.primary.main, 0.38),
+                                },
                               }}
                             >
                               {renderLatestStepMovement(step)}
                             </Box>
-                            <Stack direction="row" spacing={1} sx={{ mt: 0.75, flexWrap: "wrap", gap: 1 }}>
-                              <Typography variant="caption" color="text.secondary">
-                                {lastCommentAt ? `Fecha: ${formatDate(lastCommentAt)}` : "Fecha: sin registro"}
-                              </Typography>
-                              {lastCommentElapsed && (
-                                <Typography variant="caption" color="text.secondary">
-                                  {lastCommentElapsed}
-                                </Typography>
-                              )}
-                              {stateElapsed && (
-                                <Typography variant="caption" color="text.secondary">
-                                  Estado actual: {stateElapsed}
-                                </Typography>
-                              )}
-                            </Stack>
+                            {recordMetaParts.length > 0 && (
+                              <Stack direction="row" spacing={0.75} sx={{ mt: 0.45, flexWrap: "wrap", gap: 0.75 }}>
+                                {recordMetaParts.map((part) => (
+                                  <Typography key={`${step.id}-${part}`} variant="caption" color="text.secondary" sx={{ opacity: 0.76 }}>
+                                    {part}
+                                  </Typography>
+                                ))}
+                              </Stack>
+                            )}
                             {step.estado === "esperando_respuesta" && step.expected_external_event && (
-                              <Typography variant="caption" color="info.light" sx={{ display: "block", mt: 0.75 }}>
+                              <Typography variant="caption" color="info.light" sx={{ display: "block", mt: 0.45, opacity: 0.9 }}>
                                 Dato esperado: {step.expected_external_event}
                               </Typography>
                             )}
@@ -401,6 +418,7 @@ function GitLogWorkflowGraph({
           const lastCommentAt = step.ultimo_comentario_fecha;
           const lastCommentElapsed = formatElapsedTime(lastCommentAt);
           const stateElapsed = formatElapsedTime(step.fecha_estado_actual);
+          const recordMetaParts = getRecordMetaParts(lastCommentAt, lastCommentElapsed, stateElapsed);
           return (
             <Card
               key={step.id}
@@ -433,9 +451,10 @@ function GitLogWorkflowGraph({
                       borderRadius: 1.5,
                       px: 0,
                       py: 0,
+                      cursor: "pointer",
                       transition: "background-color 180ms ease",
                       "&:hover": {
-                        backgroundColor: alpha(theme.palette.action.hover, 0.06),
+                        backgroundColor: alpha(theme.palette.action.hover, 0.05),
                       },
                       "&:focus-visible": {
                         outline: `2px solid ${alpha(theme.palette.primary.main, 0.4)}`,
@@ -443,39 +462,38 @@ function GitLogWorkflowGraph({
                       },
                     }}
                   >
-                    <Box sx={{ p: 2.25 }}>
-                      <Typography variant="caption" color="text.secondary" sx={{ mb: 0.75, letterSpacing: 0.75, textTransform: "uppercase" }}>
+                    <Box sx={{ px: 0.25, py: 0.25 }}>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 0.45, opacity: 0.82 }}>
                         Ultimo registro
                       </Typography>
                       <Box
                         sx={{
-                          borderRadius: 1.5,
-                          px: 1.25,
-                          py: 1,
+                          borderRadius: 1.25,
+                          px: 1,
+                          py: 0.8,
                           backgroundColor: getMutedSurface(theme),
-                          border: "1px solid",
-                          borderColor: alpha(theme.palette.divider, 0.85),
+                          borderLeft: "2px solid",
+                          borderLeftColor: alpha(theme.palette.divider, theme.palette.mode === "dark" ? 0.42 : 0.72),
+                          transition: "background-color 180ms ease, border-color 180ms ease",
+                          ".MuiButtonBase-root:hover &, .MuiButtonBase-root:focus-visible &": {
+                            backgroundColor: alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.22 : 0.62),
+                            borderLeftColor: alpha(theme.palette.primary.main, 0.38),
+                          },
                         }}
                       >
                         {renderLatestStepMovement(step)}
                       </Box>
-                      <Stack direction="row" spacing={1} sx={{ mt: 0.75, flexWrap: "wrap", gap: 1 }}>
-                        <Typography variant="caption" color="text.secondary">
-                          {lastCommentAt ? `Fecha: ${formatDate(lastCommentAt)}` : "Fecha: sin registro"}
-                        </Typography>
-                        {lastCommentElapsed && (
-                          <Typography variant="caption" color="text.secondary">
-                            {lastCommentElapsed}
-                          </Typography>
-                        )}
-                        {stateElapsed && (
-                          <Typography variant="caption" color="text.secondary">
-                            Estado actual: {stateElapsed}
-                          </Typography>
-                        )}
-                      </Stack>
+                      {recordMetaParts.length > 0 && (
+                        <Stack direction="row" spacing={0.75} sx={{ mt: 0.45, flexWrap: "wrap", gap: 0.75 }}>
+                          {recordMetaParts.map((part) => (
+                            <Typography key={`${step.id}-${part}`} variant="caption" color="text.secondary" sx={{ opacity: 0.76 }}>
+                              {part}
+                            </Typography>
+                          ))}
+                        </Stack>
+                      )}
                       {step.estado === "esperando_respuesta" && step.expected_external_event && (
-                        <Typography variant="caption" color="info.light" sx={{ display: "block", mt: 0.75 }}>
+                        <Typography variant="caption" color="info.light" sx={{ display: "block", mt: 0.45, opacity: 0.9 }}>
                           Dato esperado: {step.expected_external_event}
                         </Typography>
                       )}
