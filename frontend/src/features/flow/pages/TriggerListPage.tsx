@@ -18,10 +18,10 @@ import {
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { HoverEntityActions } from "../../../components/HoverEntityActions";
-import { deleteTrigger, getWorkflow, listTriggers } from "../api";
+import { createTrigger, deleteTrigger, getWorkflow, listTriggers, listWorkflows } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Step, TriggerDetail, WorkflowDetail } from "../types";
 import { formatElapsedTime, getStatusTone } from "../utils";
@@ -145,6 +145,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [loading, setLoading] = useState(true);
   const [deletingTriggerId, setDeletingTriggerId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [createRequirementOpen, setCreateRequirementOpen] = useState(false);
+  const [newRequirementDescription, setNewRequirementDescription] = useState("");
+  const [newRequirementContext, setNewRequirementContext] = useState("");
+  const [creatingRequirement, setCreatingRequirement] = useState(false);
+  const [createRequirementError, setCreateRequirementError] = useState<string | null>(null);
+  const location = useLocation();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -156,14 +162,23 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     setStateFilter("all");
   }, [defaultView]);
 
+  useEffect(() => {
+    const state = location.state as { openCreateRequirement?: boolean } | null;
+    if (!state?.openCreateRequirement || defaultView !== "requirements") return;
+
+    setViewMode("requirements");
+    setCreateRequirementOpen(true);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [defaultView, location.pathname, location.state, navigate]);
+
   async function loadData() {
     try {
       setLoading(true);
       setError(null);
-      const triggerData = await listTriggers();
+      const [triggerData, workflowSummaries] = await Promise.all([listTriggers(), listWorkflows()]);
       setTriggers(triggerData);
 
-      const workflowIds = [...new Set(triggerData.flatMap((trigger) => trigger.workflow_ids))];
+      const workflowIds = [...new Set(workflowSummaries.map((workflow) => workflow.id))];
       const workflowDetails = await Promise.all(workflowIds.map((workflowId) => getWorkflow(workflowId)));
       setWorkflowsById(Object.fromEntries(workflowDetails.map((workflow) => [workflow.id, workflow])));
     } catch (err) {
@@ -262,6 +277,32 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     }
   }
 
+  async function handleCreateRequirement() {
+    if (newRequirementDescription.trim().length < 3) {
+      setCreateRequirementError("Debes indicar el requerimiento.");
+      return;
+    }
+
+    try {
+      setCreatingRequirement(true);
+      setCreateRequirementError(null);
+      await createTrigger({
+        descripcion: newRequirementDescription.trim(),
+        solicitante: newRequirementContext.trim() || null,
+        tipo: "requerimiento",
+        metadata: null,
+      });
+      setCreateRequirementOpen(false);
+      setNewRequirementDescription("");
+      setNewRequirementContext("");
+      await loadData();
+    } catch (err) {
+      setCreateRequirementError(err instanceof Error ? err.message : "No se pudo guardar el requerimiento");
+    } finally {
+      setCreatingRequirement(false);
+    }
+  }
+
   const emptyFlowMessage = stateFilter === "all" ? "Todavía no hay flows." : "No hay flows para este filtro.";
   const emptyRequirementMessage = stateFilter === "all" ? "Todavía no hay requerimientos." : "No hay requerimientos para este filtro.";
   const currentCounts = viewMode === "flows" ? flowCounts : requirementCounts;
@@ -278,22 +319,84 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   {viewMode === "flows" ? "Trabajo abierto y seguimiento operativo" : "Agrupación y seguimiento general"}
                 </Typography>
               </Box>
-              {!lockView && (
-                <ToggleButtonGroup
-                  exclusive
-                  size="small"
-                  value={viewMode}
-                  onChange={(_, value: ViewMode | null) => {
-                    if (!value) return;
-                    setViewMode(value);
-                    setStateFilter("all");
-                  }}
-                >
-                  <ToggleButton value="flows">Flows</ToggleButton>
-                  <ToggleButton value="requirements">Requerimientos</ToggleButton>
-                </ToggleButtonGroup>
-              )}
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
+                {viewMode === "requirements" && (
+                  <Button
+                    variant="outlined"
+                    color="inherit"
+                    size="small"
+                    onClick={() => {
+                      setCreateRequirementOpen((value) => !value);
+                      setCreateRequirementError(null);
+                    }}
+                  >
+                    {createRequirementOpen ? "Cancelar" : "Nuevo requerimiento"}
+                  </Button>
+                )}
+                {!lockView && (
+                  <ToggleButtonGroup
+                    exclusive
+                    size="small"
+                    value={viewMode}
+                    onChange={(_, value: ViewMode | null) => {
+                      if (!value) return;
+                      setViewMode(value);
+                      setStateFilter("all");
+                      setCreateRequirementOpen(false);
+                      setCreateRequirementError(null);
+                    }}
+                  >
+                    <ToggleButton value="flows">Flows</ToggleButton>
+                    <ToggleButton value="requirements">Requerimientos</ToggleButton>
+                  </ToggleButtonGroup>
+                )}
+              </Stack>
             </Stack>
+
+            {viewMode === "requirements" && createRequirementOpen && (
+              <Card variant="outlined">
+                <CardContent sx={{ p: { xs: 1.75, md: 2 } }}>
+                  <Stack spacing={1.25}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Crear requerimiento
+                    </Typography>
+                    <TextField
+                      label="Requerimiento"
+                      multiline
+                      minRows={2}
+                      value={newRequirementDescription}
+                      onChange={(event) => setNewRequirementDescription(event.target.value)}
+                      disabled={creatingRequirement}
+                    />
+                    <TextField
+                      label="Contexto"
+                      value={newRequirementContext}
+                      onChange={(event) => setNewRequirementContext(event.target.value)}
+                      disabled={creatingRequirement}
+                    />
+                    {createRequirementError && <Alert severity="error">{createRequirementError}</Alert>}
+                    <Stack direction="row" spacing={1}>
+                      <Button variant="contained" onClick={() => void handleCreateRequirement()} disabled={creatingRequirement}>
+                        {creatingRequirement ? "Guardando..." : "Guardar requerimiento"}
+                      </Button>
+                      <Button
+                        variant="text"
+                        color="inherit"
+                        onClick={() => {
+                          setCreateRequirementOpen(false);
+                          setCreateRequirementError(null);
+                          setNewRequirementDescription("");
+                          setNewRequirementContext("");
+                        }}
+                        disabled={creatingRequirement}
+                      >
+                        Cancelar
+                      </Button>
+                    </Stack>
+                  </Stack>
+                </CardContent>
+              </Card>
+            )}
 
             <Stack direction={{ xs: "column", lg: "row" }} spacing={1.5} sx={{ justifyContent: "space-between", alignItems: { lg: "center" } }}>
               <TextField

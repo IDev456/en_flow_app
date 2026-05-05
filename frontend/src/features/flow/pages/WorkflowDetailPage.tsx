@@ -6,10 +6,17 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Link,
+  MenuItem,
   Snackbar,
   Stack,
+  TextField,
   Typography,
 } from "@mui/material";
 import { Link as RouterLink, useLocation, useNavigate, useParams } from "react-router-dom";
@@ -18,9 +25,10 @@ import {
   addStepComment,
   completeStep,
   getStepComments,
-  getTrigger,
   getWorkflow,
   getStepHistory,
+  linkWorkflowRequirement,
+  listTriggers,
   registerExternalEvent,
   resolveExternalResponse,
   updateStepStatus,
@@ -46,6 +54,7 @@ export function WorkflowDetailPage() {
   const navigate = useNavigate();
   const [workflow, setWorkflow] = useState<WorkflowDetail | null>(null);
   const [trigger, setTrigger] = useState<TriggerDetail | null>(null);
+  const [requirements, setRequirements] = useState<TriggerDetail[]>([]);
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [pendingCompleteDialogStepId, setPendingCompleteDialogStepId] = useState<string | null>(null);
@@ -54,6 +63,10 @@ export function WorkflowDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
+  const [linkRequirementOpen, setLinkRequirementOpen] = useState(false);
+  const [linkRequirementId, setLinkRequirementId] = useState("");
+  const [linkRequirementError, setLinkRequirementError] = useState<string | null>(null);
+  const [linkingRequirement, setLinkingRequirement] = useState(false);
   const [captureToastOpen, setCaptureToastOpen] = useState(Boolean((location.state as { toast?: string } | null)?.toast));
   const captureToastMessage = (location.state as { toast?: string } | null)?.toast;
 
@@ -89,8 +102,9 @@ export function WorkflowDetailPage() {
     try {
       setLoading(true);
       setError(null);
-      const workflowData = await getWorkflow(workflowId);
+      const [workflowData, requirementData] = await Promise.all([getWorkflow(workflowId), listTriggers()]);
       setWorkflow(workflowData);
+      setRequirements(requirementData);
       const stepExistsInWorkflow = workflowData.steps.some((step) => step.id === selectedStepId);
       const openStatuses = new Set(["activo", "espera", "problema", "esperando_respuesta"]);
       const nextSelectedStepId =
@@ -101,11 +115,7 @@ export function WorkflowDetailPage() {
         null;
       setSelectedStepId(nextSelectedStepId);
       const primaryRequirementId = workflowData.trigger_id ?? workflowData.requirement_ids[0] ?? null;
-      if (primaryRequirementId) {
-        setTrigger(await getTrigger(primaryRequirementId));
-      } else {
-        setTrigger(null);
-      }
+      setTrigger(primaryRequirementId ? requirementData.find((item) => item.id === primaryRequirementId) ?? null : null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cargar el flow");
     } finally {
@@ -194,6 +204,43 @@ export function WorkflowDetailPage() {
     setPendingCompleteDialogStepId(null);
   }
 
+  function handleOpenLinkRequirement() {
+    if (!workflow) return;
+    const linkedRequirementIds = new Set([
+      ...(workflow.requirement_ids ?? []),
+      ...(workflow.trigger_id ? [workflow.trigger_id] : []),
+    ]);
+    const nextRequirementId = requirements.find((item) => !linkedRequirementIds.has(item.id))?.id ?? "";
+    setLinkRequirementError(null);
+    setLinkRequirementId(nextRequirementId);
+    setLinkRequirementOpen(true);
+  }
+
+  function handleCloseLinkRequirement() {
+    setLinkRequirementOpen(false);
+    setLinkRequirementError(null);
+    setLinkRequirementId("");
+  }
+
+  async function handleLinkRequirement() {
+    if (!workflow || !linkRequirementId) {
+      setLinkRequirementError("Selecciona un requerimiento para vincular.");
+      return;
+    }
+
+    try {
+      setLinkingRequirement(true);
+      setLinkRequirementError(null);
+      await linkWorkflowRequirement(workflow.id, { requirement_id: linkRequirementId });
+      await loadWorkflow(selectedStepId ?? undefined);
+      handleCloseLinkRequirement();
+    } catch (err) {
+      setLinkRequirementError(err instanceof Error ? err.message : "No se pudo asociar el requerimiento");
+    } finally {
+      setLinkingRequirement(false);
+    }
+  }
+
   if (loading) {
     return (
       <Stack direction="row" spacing={1.5} sx={{ py: 8, alignItems: "center", justifyContent: "center" }}>
@@ -212,6 +259,13 @@ export function WorkflowDetailPage() {
   }
 
   const selectedStep: Step | null = workflow.steps.find((step) => step.id === selectedStepId) ?? pickRelevantStep(workflow);
+  const linkedRequirementIds = new Set([...(workflow.requirement_ids ?? []), ...(workflow.trigger_id ? [workflow.trigger_id] : [])]);
+  const linkedRequirements = requirements.filter(
+    (item) => linkedRequirementIds.has(item.id) || item.workflow_ids.includes(workflow.id)
+  );
+  const availableRequirements = requirements.filter((item) => !linkedRequirements.some((linked) => linked.id === item.id));
+  const linkedRequirementLabel =
+    linkedRequirements.length === 1 ? "1 requerimiento vinculado" : `${linkedRequirements.length} requerimientos vinculados`;
 
   return (
     <Stack spacing={3}>
@@ -244,12 +298,47 @@ export function WorkflowDetailPage() {
         <Card sx={{ minWidth: 0 }}>
           <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
             <Stack spacing={3}>
-              <Box>
-                <Typography variant="h5">Secuencia de tareas</Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                  Continuidad del flow de principio a fin.
-                </Typography>
-              </Box>
+              <Stack
+                direction={{ xs: "column", md: "row" }}
+                spacing={1.5}
+                sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", md: "flex-start" } }}
+              >
+                <Box>
+                  <Typography variant="h5">Secuencia de tareas</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                    Continuidad del flow de principio a fin.
+                  </Typography>
+                </Box>
+
+                <Stack spacing={0.9} sx={{ alignItems: { xs: "flex-start", md: "flex-end" } }}>
+                  {linkedRequirements.length > 0 && (
+                    <Stack
+                      direction="row"
+                      spacing={0.75}
+                      sx={{ flexWrap: "wrap", gap: 0.75, justifyContent: { md: "flex-end" }, alignItems: "center" }}
+                    >
+                      <Typography variant="caption" color="text.secondary">
+                        {linkedRequirementLabel}
+                      </Typography>
+                      {linkedRequirements.slice(0, 2).map((item) => (
+                        <Chip
+                          key={item.id}
+                          size="small"
+                          variant="outlined"
+                          label={item.descripcion?.trim() || `Req ${item.id.slice(0, 8)}`}
+                        />
+                      ))}
+                      {linkedRequirements.length > 2 && (
+                        <Chip size="small" variant="outlined" label={`+${linkedRequirements.length - 2}`} />
+                      )}
+                    </Stack>
+                  )}
+
+                  <Button variant="text" size="small" color="inherit" onClick={handleOpenLinkRequirement}>
+                    {linkedRequirements.length > 0 ? "Gestionar" : "Asociar requerimiento"}
+                  </Button>
+                </Stack>
+              </Stack>
 
               <WorkflowGraph
                 variant="vertical"
@@ -289,6 +378,63 @@ export function WorkflowDetailPage() {
           </Box>
         )}
       </Box>
+
+      <Dialog open={linkRequirementOpen} onClose={linkingRequirement ? undefined : handleCloseLinkRequirement} fullWidth maxWidth="sm">
+        <DialogTitle>{linkedRequirements.length > 0 ? "Gestionar requerimientos" : "Asociar requerimiento"}</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            {linkedRequirements.length > 0 && (
+              <Stack spacing={0.9}>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Vinculados
+                </Typography>
+                <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", gap: 0.75 }}>
+                  {linkedRequirements.map((item) => (
+                    <Chip
+                      key={`linked-${item.id}`}
+                      size="small"
+                      variant="outlined"
+                      label={item.descripcion?.trim() || `Req ${item.id.slice(0, 8)}`}
+                    />
+                  ))}
+                </Stack>
+              </Stack>
+            )}
+
+            {availableRequirements.length === 0 ? (
+              <Alert severity="info">No hay requerimientos disponibles para asociar.</Alert>
+            ) : (
+              <TextField
+                select
+                fullWidth
+                label="Requerimiento"
+                value={linkRequirementId}
+                onChange={(event) => setLinkRequirementId(event.target.value)}
+              >
+                {availableRequirements.map((item) => (
+                  <MenuItem key={item.id} value={item.id}>
+                    {item.descripcion?.trim() || `Req ${item.id.slice(0, 8)}`}
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
+
+            {linkRequirementError && <Alert severity="error">{linkRequirementError}</Alert>}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button color="inherit" onClick={handleCloseLinkRequirement} disabled={linkingRequirement}>
+            Cerrar
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => void handleLinkRequirement()}
+            disabled={linkingRequirement || availableRequirements.length === 0 || !linkRequirementId}
+          >
+            {linkingRequirement ? "Guardando..." : "Asociar"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Stack>
   );
 }
