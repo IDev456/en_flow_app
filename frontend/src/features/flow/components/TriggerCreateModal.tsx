@@ -51,7 +51,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
         creado_por: DEFAULT_ACTOR,
       });
       onClose();
-      navigate(`/workflows/${workflow.id}`, { state: { toast: "Tarea capturada y flow iniciado." } });
+      navigate(`/workflows/${workflow.id}`, { state: { toast: "Tarea capturada." } });
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo capturar la tarea");
     } finally {

@@ -52,6 +52,7 @@ export function WorkflowDetailPage() {
   const { workflowId = "" } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
+  const initialToastMessage = (location.state as { toast?: string } | null)?.toast ?? null;
   const [workflow, setWorkflow] = useState<WorkflowDetail | null>(null);
   const [trigger, setTrigger] = useState<TriggerDetail | null>(null);
   const [requirements, setRequirements] = useState<TriggerDetail[]>([]);
@@ -67,8 +68,8 @@ export function WorkflowDetailPage() {
   const [linkRequirementId, setLinkRequirementId] = useState("");
   const [linkRequirementError, setLinkRequirementError] = useState<string | null>(null);
   const [linkingRequirement, setLinkingRequirement] = useState(false);
-  const [captureToastOpen, setCaptureToastOpen] = useState(Boolean((location.state as { toast?: string } | null)?.toast));
-  const captureToastMessage = (location.state as { toast?: string } | null)?.toast;
+  const [toastOpen, setToastOpen] = useState(Boolean(initialToastMessage));
+  const [toastMessage, setToastMessage] = useState<string | null>(initialToastMessage);
 
   function getPrimaryRequirementLabel() {
     return trigger?.descripcion?.trim() || workflow?.objetivo_final?.trim() || "Flow sin requerimiento";
@@ -234,6 +235,8 @@ export function WorkflowDetailPage() {
       setLinkRequirementError(null);
       await linkWorkflowRequirement(workflow.id, { requirement_id: linkRequirementId });
       await loadWorkflow(selectedStepId ?? undefined);
+      setToastMessage("Requerimiento asociado.");
+      setToastOpen(true);
       handleCloseLinkRequirement();
     } catch (err) {
       setLinkRequirementError(err instanceof Error ? err.message : "No se pudo asociar el requerimiento");
@@ -271,10 +274,10 @@ export function WorkflowDetailPage() {
   return (
     <Stack spacing={3}>
       <Snackbar
-        open={captureToastOpen}
+        open={toastOpen}
         autoHideDuration={2600}
-        onClose={() => setCaptureToastOpen(false)}
-        message={captureToastMessage}
+        onClose={() => setToastOpen(false)}
+        message={toastMessage}
       />
       <Breadcrumbs>
         <Link component={RouterLink} underline="hover" color="inherit" to="/flows">
@@ -432,7 +435,7 @@ export function WorkflowDetailPage() {
             onClick={() => void handleLinkRequirement()}
             disabled={linkingRequirement || availableRequirements.length === 0 || !linkRequirementId}
           >
-            {linkingRequirement ? "Guardando..." : "Asociar"}
+            {linkingRequirement ? "Asociando..." : "Asociar"}
           </Button>
         </DialogActions>
       </Dialog>

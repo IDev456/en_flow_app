@@ -12,6 +12,7 @@ import {
   Chip,
   CircularProgress,
   InputAdornment,
+  Snackbar,
   Stack,
   TextField,
   ToggleButton,
@@ -150,6 +151,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [newRequirementContext, setNewRequirementContext] = useState("");
   const [creatingRequirement, setCreatingRequirement] = useState(false);
   const [createRequirementError, setCreateRequirementError] = useState<string | null>(null);
+  const [requirementToastOpen, setRequirementToastOpen] = useState(false);
+  const [requirementToastMessage, setRequirementToastMessage] = useState<string | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -296,6 +299,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       setNewRequirementDescription("");
       setNewRequirementContext("");
       await loadData();
+      setRequirementToastMessage("Requerimiento creado.");
+      setRequirementToastOpen(true);
     } catch (err) {
       setCreateRequirementError(err instanceof Error ? err.message : "No se pudo guardar el requerimiento");
     } finally {
@@ -309,6 +314,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
   return (
     <Stack spacing={2.25}>
+      <Snackbar
+        open={requirementToastOpen}
+        autoHideDuration={2600}
+        onClose={() => setRequirementToastOpen(false)}
+        message={requirementToastMessage}
+      />
       <Card>
         <CardContent sx={{ p: { xs: 2.25, md: 2.5 } }}>
           <Stack spacing={2}>
@@ -377,7 +388,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                     {createRequirementError && <Alert severity="error">{createRequirementError}</Alert>}
                     <Stack direction="row" spacing={1}>
                       <Button variant="contained" onClick={() => void handleCreateRequirement()} disabled={creatingRequirement}>
-                        {creatingRequirement ? "Guardando..." : "Guardar requerimiento"}
+                        {creatingRequirement ? "Creando..." : "Guardar requerimiento"}
                       </Button>
                       <Button
                         variant="text"
