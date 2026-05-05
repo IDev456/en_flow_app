@@ -187,7 +187,6 @@ export function WorkflowDetailPage() {
 
   function handleOpenCompleteStep(stepId: string) {
     setSelectedStepId(stepId);
-    setPanelOpen(true);
     setPendingCompleteDialogStepId(stepId);
   }
 
@@ -270,22 +269,24 @@ export function WorkflowDetailPage() {
           </CardContent>
         </Card>
 
-        {panelOpen && selectedStep && (
-          <StepDetailPanel
-            workflowId={workflow.id}
-            step={selectedStep}
-            comments={stepComments}
-            history={stepHistory}
-            drawer
-            error={panelError}
-            onClose={() => setPanelOpen(false)}
-            onSubmitJournal={handleSubmitJournal}
-            onCompleteTask={handleCompleteTask}
-            openCompleteDialog={pendingCompleteDialogStepId !== null && pendingCompleteDialogStepId === selectedStepId}
-            onCompleteDialogOpened={handleCompleteDialogOpened}
-            onRegisterExternalEvent={(input) => handleRegisterExternalEvent(selectedStep.id, input)}
-            onResolveExternalResponse={(stepId, input) => handleResolveExternalResponse(stepId, input)}
-          />
+        {selectedStep && (
+          <Box sx={{ display: panelOpen ? "block" : "none" }}>
+            <StepDetailPanel
+              workflowId={workflow.id}
+              step={selectedStep}
+              comments={stepComments}
+              history={stepHistory}
+              drawer
+              error={panelError}
+              onClose={() => setPanelOpen(false)}
+              onSubmitJournal={handleSubmitJournal}
+              onCompleteTask={handleCompleteTask}
+              openCompleteDialog={pendingCompleteDialogStepId !== null && pendingCompleteDialogStepId === selectedStepId}
+              onCompleteDialogOpened={handleCompleteDialogOpened}
+              onRegisterExternalEvent={(input) => handleRegisterExternalEvent(selectedStep.id, input)}
+              onResolveExternalResponse={(stepId, input) => handleResolveExternalResponse(stepId, input)}
+            />
+          </Box>
         )}
       </Box>
     </Stack>
