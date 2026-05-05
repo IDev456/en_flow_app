@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
 import PlayCircleOutlineRoundedIcon from "@mui/icons-material/PlayCircleOutlineRounded";
 import SchemaRoundedIcon from "@mui/icons-material/SchemaRounded";
 import { alpha } from "@mui/material/styles";
@@ -10,7 +11,10 @@ import {
   Card,
   CardContent,
   CircularProgress,
+  IconButton,
   Link,
+  Menu,
+  MenuItem,
   Snackbar,
   Stack,
   TextField,
@@ -45,6 +49,7 @@ export function TriggerDetailPage() {
   const [editDescripcion, setEditDescripcion] = useState("");
   const [requirementError, setRequirementError] = useState<string | null>(null);
   const [requirementToastOpen, setRequirementToastOpen] = useState(false);
+  const [actionsAnchor, setActionsAnchor] = useState<HTMLElement | null>(null);
   const navigate = useNavigate();
 
   function getPrimaryDetail(currentTrigger: TriggerDetail) {
@@ -192,6 +197,7 @@ export function TriggerDetailPage() {
     try {
       setDeletingRequirement(true);
       setRequirementError(null);
+      setActionsAnchor(null);
       await deleteTrigger(trigger.id);
       navigate("/requirements", { state: { toast: "Requerimiento eliminado." } });
     } catch (err) {
@@ -374,14 +380,18 @@ export function TriggerDetailPage() {
                       <Button variant="outlined" color="inherit" onClick={handleStartEditRequirement} disabled={deletingRequirement}>
                         Editar requerimiento
                       </Button>
-                      <Button
-                        variant="text"
-                        color="error"
-                        onClick={() => void handleDeleteRequirement()}
-                        disabled={deletingRequirement || !canDeleteRequirement}
+                      <IconButton
+                        onClick={(event) => setActionsAnchor(event.currentTarget)}
+                        disabled={deletingRequirement}
+                        aria-label="Más acciones"
                       >
-                        {deletingRequirement ? "Eliminando..." : "Eliminar requerimiento"}
-                      </Button>
+                        <MoreHorizRoundedIcon />
+                      </IconButton>
+                      <Menu anchorEl={actionsAnchor} open={Boolean(actionsAnchor)} onClose={() => setActionsAnchor(null)}>
+                        <MenuItem onClick={() => void handleDeleteRequirement()} disabled={deletingRequirement || !canDeleteRequirement}>
+                          {deletingRequirement ? "Eliminando..." : "Eliminar requerimiento"}
+                        </MenuItem>
+                      </Menu>
                     </>
                   )}
                 </Stack>
