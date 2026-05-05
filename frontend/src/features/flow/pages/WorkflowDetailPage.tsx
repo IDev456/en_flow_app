@@ -6,12 +6,10 @@ import {
   Button,
   Card,
   CardContent,
-  Collapse,
   CircularProgress,
   Link,
   Snackbar,
   Stack,
-  TextField,
   Typography,
 } from "@mui/material";
 import { Link as RouterLink, useLocation, useNavigate, useParams } from "react-router-dom";
@@ -19,19 +17,14 @@ import { Link as RouterLink, useLocation, useNavigate, useParams } from "react-r
 import {
   addStepComment,
   completeStep,
-  createRequirementFromFlow,
   getStepComments,
   getTrigger,
   getWorkflow,
   getStepHistory,
-  linkWorkflowRequirement,
-  listTriggers,
   registerExternalEvent,
   resolveExternalResponse,
-  unlinkWorkflowRequirement,
   updateStepStatus,
 } from "../api";
-import { StatusBadge } from "../components/StatusBadge";
 import { StepDetailPanel } from "../components/StepDetailPanel";
 import { WorkflowGraph } from "../components/WorkflowGraph";
 import type {
@@ -58,22 +51,14 @@ export function WorkflowDetailPage() {
   const [pendingCompleteDialogStepId, setPendingCompleteDialogStepId] = useState<string | null>(null);
   const [stepComments, setStepComments] = useState<StepComment[]>([]);
   const [stepHistory, setStepHistory] = useState<StepHistoryEntry[]>([]);
-  const [requirementsExpanded, setRequirementsExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
-  const [allRequirements, setAllRequirements] = useState<TriggerDetail[]>([]);
-  const [linkRequirementId, setLinkRequirementId] = useState("");
-  const [newRequirementDescription, setNewRequirementDescription] = useState("");
   const [captureToastOpen, setCaptureToastOpen] = useState(Boolean((location.state as { toast?: string } | null)?.toast));
   const captureToastMessage = (location.state as { toast?: string } | null)?.toast;
 
   function getPrimaryRequirementLabel() {
     return trigger?.descripcion?.trim() || workflow?.objetivo_final?.trim() || "Flow sin requerimiento";
-  }
-
-  function getSecondaryRequesterLabel() {
-    return trigger?.solicitante?.trim() || "Sin contexto";
   }
 
   function pickRelevantStep(workflowData: WorkflowDetail) {
@@ -85,15 +70,6 @@ export function WorkflowDetailPage() {
       byOrder[0] ??
       null
     );
-  }
-
-  function getPrimaryActionLabel(step: Step | null) {
-    if (!step) return "Ver registro";
-    if (step.estado === "esperando_respuesta") return "Registrar respuesta recibida";
-    if (step.estado === "activo") return "Completar tarea";
-    if (step.estado === "espera") return "Retomar tarea";
-    if (step.estado === "problema") return "Registrar avance";
-    return "Ver registro";
   }
 
   useEffect(() => {
@@ -113,9 +89,8 @@ export function WorkflowDetailPage() {
     try {
       setLoading(true);
       setError(null);
-      const [workflowData, requirements] = await Promise.all([getWorkflow(workflowId), listTriggers()]);
+      const workflowData = await getWorkflow(workflowId);
       setWorkflow(workflowData);
-      setAllRequirements(requirements);
       const stepExistsInWorkflow = workflowData.steps.some((step) => step.id === selectedStepId);
       const openStatuses = new Set(["activo", "espera", "problema", "esperando_respuesta"]);
       const nextSelectedStepId =
@@ -136,26 +111,6 @@ export function WorkflowDetailPage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  async function handleLinkRequirement() {
-    if (!workflow || !linkRequirementId) return;
-    await linkWorkflowRequirement(workflow.id, { requirement_id: linkRequirementId });
-    setLinkRequirementId("");
-    await loadWorkflow();
-  }
-
-  async function handleCreateRequirement() {
-    if (!workflow || newRequirementDescription.trim().length < 3) return;
-    await createRequirementFromFlow(workflow.id, { descripcion: newRequirementDescription.trim() });
-    setNewRequirementDescription("");
-    await loadWorkflow();
-  }
-
-  async function handleUnlinkRequirement(requirementId: string) {
-    if (!workflow) return;
-    await unlinkWorkflowRequirement(workflow.id, requirementId);
-    await loadWorkflow();
   }
 
   async function loadStepSideData(stepId: string) {
@@ -258,17 +213,6 @@ export function WorkflowDetailPage() {
   }
 
   const selectedStep: Step | null = workflow.steps.find((step) => step.id === selectedStepId) ?? pickRelevantStep(workflow);
-  const openSteps = workflow.steps.filter((step) => ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado));
-  const workflowHeaderStatus =
-    workflow.estado === "en_proceso"
-      ? (openSteps.some((step) => step.estado === "esperando_respuesta")
-          ? "esperando_respuesta"
-          : openSteps.some((step) => step.estado === "problema")
-          ? "con_problema"
-          : openSteps.some((step) => step.estado === "espera")
-          ? "espera"
-          : openSteps[0]?.estado ?? workflow.estado)
-      : workflow.estado;
 
   return (
     <Stack spacing={3}>
@@ -289,138 +233,6 @@ export function WorkflowDetailPage() {
         )}
         <Typography color="text.primary">Flow</Typography>
       </Breadcrumbs>
-
-      <Card>
-        <CardContent sx={{ p: { xs: 2.25, md: 2.5 } }}>
-          <Stack spacing={1.25}>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between", alignItems: { sm: "center" } }}>
-              <Typography variant="subtitle2" color="text.secondary">
-                {selectedStep && ["activo", "espera", "problema", "esperando_respuesta"].includes(selectedStep.estado) ? "Tarea actual" : "Última tarea"}
-              </Typography>
-              {selectedStep && <StatusBadge value={selectedStep.estado} />}
-            </Stack>
-            <Typography variant="h4">
-              {selectedStep?.nombre ?? "Sin tareas registradas"}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Último registro: {selectedStep?.ultimo_comentario?.trim() || selectedStep?.descripcion?.trim() || "Sin registros todavía"}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {formatElapsedTime(selectedStep?.ultimo_comentario_fecha ?? selectedStep?.fecha_estado_actual ?? null) ?? "Sin movimiento reciente"}
-            </Typography>
-            <Box>
-              <Button variant="contained" onClick={() => selectedStep && handleOpenStep(selectedStep.id)} disabled={!selectedStep}>
-                {getPrimaryActionLabel(selectedStep)}
-              </Button>
-            </Box>
-          </Stack>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent sx={{ p: { xs: 2.25, md: 2.5 } }}>
-          <Stack spacing={1.25}>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between", alignItems: { sm: "center" } }}>
-              <Box>
-                <Typography variant="h5">{getPrimaryRequirementLabel()}</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Contexto: {getSecondaryRequesterLabel()}
-                </Typography>
-              </Box>
-              <StatusBadge value={workflowHeaderStatus} />
-            </Stack>
-
-            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
-              {workflow.requirement_ids.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  Sin requerimientos vinculados.
-                </Typography>
-              ) : (
-                workflow.requirement_ids.map((requirementId) => {
-                  const requirement = allRequirements.find((item) => item.id === requirementId);
-                  return (
-                    <Button
-                      key={requirementId}
-                      size="small"
-                      variant="outlined"
-                      color="inherit"
-                      onClick={() => navigate(`/requirements/${requirementId}`)}
-                    >
-                      {requirement?.descripcion?.trim() || `Req ${requirementId.slice(0, 8)}`}
-                    </Button>
-                  );
-                })
-              )}
-            </Stack>
-
-            <Box>
-              <Button variant="text" color="inherit" onClick={() => setRequirementsExpanded((value) => !value)}>
-                {requirementsExpanded ? "Ocultar gestión de requerimientos" : "Gestionar requerimientos vinculados"}
-              </Button>
-            </Box>
-
-            <Collapse in={requirementsExpanded}>
-              <Stack spacing={1.25}>
-                <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-                  <TextField
-                    select
-                    label="Vincular a requerimiento"
-                    value={linkRequirementId}
-                    onChange={(event) => setLinkRequirementId(event.target.value)}
-                    slotProps={{ select: { native: true } }}
-                    sx={{ minWidth: 260 }}
-                  >
-                    <option value="">Seleccionar...</option>
-                    {allRequirements
-                      .filter((item) => !workflow.requirement_ids.includes(item.id))
-                      .map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.descripcion?.trim() || item.id.slice(0, 8)}
-                        </option>
-                      ))}
-                  </TextField>
-                  <Button variant="outlined" color="inherit" onClick={() => void handleLinkRequirement()} disabled={!linkRequirementId}>
-                    Vincular
-                  </Button>
-                </Stack>
-
-                <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-                  <TextField
-                    label="Crear requerimiento relacionado"
-                    value={newRequirementDescription}
-                    onChange={(event) => setNewRequirementDescription(event.target.value)}
-                    placeholder="Ej. Instalación grupo electrógeno"
-                    fullWidth
-                  />
-                  <Button
-                    variant="outlined"
-                    color="inherit"
-                    onClick={() => void handleCreateRequirement()}
-                    disabled={newRequirementDescription.trim().length < 3}
-                  >
-                    Crear y vincular
-                  </Button>
-                </Stack>
-                {workflow.requirement_ids.length > 0 && (
-                  <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
-                    {workflow.requirement_ids.map((requirementId) => (
-                      <Button
-                        key={`unlink-${requirementId}`}
-                        size="small"
-                        variant="text"
-                        color="inherit"
-                        onClick={() => void handleUnlinkRequirement(requirementId)}
-                      >
-                        Desvincular {requirementId.slice(0, 8)}
-                      </Button>
-                    ))}
-                  </Stack>
-                )}
-              </Stack>
-            </Collapse>
-          </Stack>
-        </CardContent>
-      </Card>
 
       <Box
         sx={{
