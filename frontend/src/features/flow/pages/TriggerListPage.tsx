@@ -29,7 +29,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { HoverEntityActions } from "../../../components/HoverEntityActions";
-import { cancelWorkflow, createTrigger, deleteTrigger, getWorkflow, listTriggers, listWorkflows, updateWorkflow } from "../api";
+import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, getWorkflow, listTriggers, listWorkflows, updateWorkflow } from "../api";
 import { EmptyTriggerList } from "../components/EmptyTriggerList";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Step, TriggerDetail, WorkflowDetail } from "../types";
@@ -127,6 +127,10 @@ function canCancelWorkflow(workflow: WorkflowDetail) {
   return ["en_proceso", "esperando_respuesta", "en_espera", "con_problema"].includes(workflow.estado);
 }
 
+function canDeleteWorkflow(workflow: WorkflowDetail) {
+  return ["cancelado", "finalizado"].includes(workflow.estado);
+}
+
 function matchesFlowQuery(data: FlowCardData, query: string) {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return true;
@@ -174,6 +178,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [editFlowError, setEditFlowError] = useState<string | null>(null);
   const [savingFlowEdit, setSavingFlowEdit] = useState(false);
   const [cancellingFlowId, setCancellingFlowId] = useState<string | null>(null);
+  const [deletingFlowId, setDeletingFlowId] = useState<string | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -295,7 +300,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   async function handleDeleteTrigger(trigger: TriggerDetail) {
     const detail = trigger.descripcion?.trim() || "Requerimiento sin detalle";
     if (trigger.workflow_ids.length > 0) {
-      setError("No se puede eliminar este requerimiento porque tiene flows vinculados. Primero desvinculá los flows o dejalo como agrupador.");
+      setError("No se puede eliminar este requerimiento porque tiene flows vinculados. Primero desvinculá los flows que quieras conservar, o cancelá/finalizá y eliminá los flows que ya no correspondan.");
       return;
     }
 
@@ -427,6 +432,33 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       setError(err instanceof Error ? err.message : "No se pudo cancelar el flow.");
     } finally {
       setCancellingFlowId(null);
+    }
+  }
+
+  async function handleDeleteFlowAction(event: MouseEvent<HTMLElement>, workflowId: string) {
+    event.preventDefault();
+    event.stopPropagation();
+    handleCloseFlowActions();
+
+    const workflow = workflowsById[workflowId];
+    if (!workflow || !canDeleteWorkflow(workflow)) return;
+
+    const confirmed = window.confirm(
+      "¿Eliminar este flow?\n\nEsta acción eliminará el flow, sus tareas, comentarios, historial, eventos externos y vínculos con requerimientos.\n\nEsta acción no se puede deshacer."
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeletingFlowId(workflowId);
+      setError(null);
+      await deleteWorkflow(workflowId);
+      await loadData();
+      setFlowToastMessage("Flow eliminado.");
+      setFlowToastOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo eliminar el flow.");
+    } finally {
+      setDeletingFlowId(null);
     }
   }
 
@@ -709,6 +741,14 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                               disabled={cancellingFlowId === item.workflow.id}
                             >
                               {cancellingFlowId === item.workflow.id ? "Cancelando..." : "Cancelar flow"}
+                            </MenuItem>
+                          )}
+                          {canDeleteWorkflow(item.workflow) && (
+                            <MenuItem
+                              onClick={(event) => void handleDeleteFlowAction(event, item.workflow.id)}
+                              disabled={deletingFlowId === item.workflow.id}
+                            >
+                              {deletingFlowId === item.workflow.id ? "Eliminando..." : "Eliminar flow"}
                             </MenuItem>
                           )}
                         </Menu>

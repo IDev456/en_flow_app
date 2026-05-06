@@ -74,6 +74,10 @@ export function cancelWorkflow(workflowId: string) {
   return apiPatch<WorkflowDetail>(`/workflows/${workflowId}/cancel`, {});
 }
 
+export function deleteWorkflow(workflowId: string) {
+  return apiDelete(`/workflows/${workflowId}`);
+}
+
 export function quickCaptureFlow(input: QuickCaptureInput) {
   return apiPost<WorkflowDetail>("/workflows/quick-capture", input);
 }
