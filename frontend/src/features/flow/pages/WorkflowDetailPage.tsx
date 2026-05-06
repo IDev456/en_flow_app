@@ -233,11 +233,11 @@ export function WorkflowDetailPage() {
 
   function handleOpenCompleteStep(stepId: string) {
     setSelectedStepId(stepId);
-    setPendingCompleteDialogStepId(stepId); // Solo activamos el modal, no el panel lateral
+    setPendingCompleteDialogStepId(stepId);
   }
 
   function handleCompleteDialogOpened() {
-    setPendingCompleteDialogStepId(null);
+    if (selectedStepId) setPendingCompleteDialogStepId(selectedStepId);
   }
 
   async function handleStepUpdated(step: Step) {
@@ -424,8 +424,8 @@ export function WorkflowDetailPage() {
           </CardContent>
         </Card>
 
-        {selectedStep && (
-          <Box sx={{ display: panelOpen ? "block" : "none" }}>
+        {selectedStep && panelOpen && (
+          <Box>
             <StepDetailPanel
               workflowId={workflow.id}
               step={selectedStep}
@@ -439,16 +439,18 @@ export function WorkflowDetailPage() {
               onCompleteTask={handleCompleteTask}
               onRegisterExternalEvent={(input) => handleRegisterExternalEvent(selectedStep.id, input)}
               onResolveExternalResponse={(stepId, input) => handleResolveExternalResponse(stepId, input)}
-            />
-            <CompleteStepDialog
-              open={pendingCompleteDialogStepId !== null}
-              step={workflow.steps.find(s => s.id === pendingCompleteDialogStepId) ?? null}
-              onClose={() => setPendingCompleteDialogStepId(null)}
-              onSubmit={handleCompleteTask}
+              onCompleteDialogOpened={handleCompleteDialogOpened}
             />
           </Box>
         )}
       </Box>
+
+      <CompleteStepDialog
+        open={pendingCompleteDialogStepId !== null}
+        step={workflow.steps.find((step) => step.id === pendingCompleteDialogStepId) ?? null}
+        onClose={() => setPendingCompleteDialogStepId(null)}
+        onSubmit={handleCompleteTask}
+      />
 
       <Dialog open={linkRequirementOpen} onClose={managingRequirementsBusy ? undefined : handleCloseLinkRequirement} fullWidth maxWidth="sm">
         <DialogTitle>{linkedRequirements.length > 0 ? "Gestionar requerimientos" : "Asociar requerimiento"}</DialogTitle>
