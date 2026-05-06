@@ -381,13 +381,7 @@ function VerticalWorkflowGraph({
                             )}
                           </Box>
                         </ButtonBase>
-                      ) : (
-                        <Box sx={{ p: 1.75 }}>
-                          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} sx={{ justifyContent: "space-between", alignItems: { sm: "center" } }}>
-                            <Typography variant="h6">{step.nombre}</Typography>
-                          </Stack>
-                        </Box>
-                      )}
+                      ) : null}
                     </Stack>
                   </Box>
                 </Card>
@@ -450,7 +444,6 @@ function GitLogWorkflowGraph({
                     <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", gap: 1 }}>
                       <Chip label={`T${step.orden.toString().padStart(2, "0")}`} size="small" variant="outlined" />
                       <Typography variant="h6">{step.nombre}</Typography>
-                      <Typography variant="body2" color="error">DEBUG-WORKFLOW-GRAPH</Typography>
                     </Stack>
                   </Stack>
                   <ButtonBase
