@@ -51,6 +51,16 @@ function renderLatestStepMovement(step: Step) {
   const description = step.descripcion?.trim();
   const normalizedTitle = title?.toLowerCase();
 
+  if (step.estado === "completado") {
+    console.log("WorkflowGraph completed step", {
+      id: step.id,
+      title,
+      description,
+      lastComment,
+      estado: step.estado,
+    });
+  }
+
   const fallbackText =
     (lastComment && lastComment.toLowerCase() !== normalizedTitle && lastComment) ||
     (description && description.toLowerCase() !== normalizedTitle && description) ||
