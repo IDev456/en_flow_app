@@ -1,13 +1,18 @@
 import unittest
 from uuid import uuid4
 
+from app.core.errors import BusinessRuleError
 from app.repositories.workflow_repository import InMemoryWorkflowRepository
 from app.schemas.workflow import (
     ExternalEventCreate,
+    ExternalWaitInput,
+    FinishFlowInput,
     InitialStepOverride,
     StepCompletePayload,
     StepStatus,
+    StepStatusUpdate,
     StepTemplatePublic,
+    StepTransitionType,
     TriggerCreate,
     TriggerStatus,
     WorkflowStartRequest,
@@ -299,6 +304,126 @@ class WorkflowDagTestCase(unittest.TestCase):
         trigger_closed = self.service.get_trigger(trigger.id)
         self.assertEqual(trigger_closed.estado_general, TriggerStatus.RESUELTO)
         self.assertIsNone(trigger_closed.workflow_activo_id)
+
+    def test_cannot_delete_open_workflow(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        with self.assertRaises(BusinessRuleError):
+            self.service.delete_workflow(workflow_id)
+
+    def test_cannot_delete_waiting_or_paused_or_problem_workflows(self) -> None:
+        template = build_linear_template()
+        self.repository._workflow_templates = {template.id: template}  # type: ignore[attr-defined]
+
+        trigger_waiting = self.service.create_trigger(
+            TriggerCreate(
+                solicitante="QA",
+                descripcion="Flujo esperando respuesta",
+                tipo="requerimiento",
+                creado_por="tester",
+                metadata=None,
+            )
+        )
+        workflow_waiting = self.service.start_workflow(
+            trigger_waiting.id,
+            WorkflowStartRequest(
+                workflow_template_id=template.id,
+                primer_paso=InitialStepOverride(nombre="Paso inicial"),
+            ),
+        )
+        step_waiting = self.service.get_workflow(workflow_waiting.id).steps[0]
+        self.service.complete_step(
+            step_waiting.id,
+            StepCompletePayload(
+                usuario="tester",
+                comentario="Esperando respuesta externa",
+                resultado_cierre="En espera",
+                observaciones=None,
+                transition_type=StepTransitionType.WAIT_EXTERNAL,
+                external_wait=ExternalWaitInput(que_se_espera="respuesta", origen="sistema"),
+            ),
+        )
+        workflow_waiting = self.service.get_workflow(workflow_waiting.id)
+        self.assertEqual(workflow_waiting.estado, WorkflowStatus.ESPERANDO_RESPUESTA)
+        with self.assertRaises(BusinessRuleError):
+            self.service.delete_workflow(workflow_waiting.id)
+
+        workflow_paused_id = self._start_workflow(template)
+        step_paused = self.service.get_workflow(workflow_paused_id).steps[0]
+        self.service.update_step_status(
+            step_paused.id,
+            StepStatusUpdate(
+                estado=StepStatus.ESPERA,
+                usuario="tester",
+                nota="Pausado temporal",
+            ),
+        )
+        workflow_paused = self.service.get_workflow(workflow_paused_id)
+        self.assertEqual(workflow_paused.estado, WorkflowStatus.EN_ESPERA)
+        with self.assertRaises(BusinessRuleError):
+            self.service.delete_workflow(workflow_paused_id)
+
+        workflow_problem_id = self._start_workflow(template)
+        step_problem = self.service.get_workflow(workflow_problem_id).steps[0]
+        self.service.update_step_status(
+            step_problem.id,
+            StepStatusUpdate(
+                estado=StepStatus.PROBLEMA,
+                usuario="tester",
+                nota="Problema detectado",
+            ),
+        )
+        workflow_problem = self.service.get_workflow(workflow_problem_id)
+        self.assertEqual(workflow_problem.estado, WorkflowStatus.CON_PROBLEMA)
+        with self.assertRaises(BusinessRuleError):
+            self.service.delete_workflow(workflow_problem_id)
+
+    def test_can_delete_cancelled_workflow(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        cancel_result = self.service.cancel_workflow(workflow_id)
+        self.assertEqual(cancel_result.estado, WorkflowStatus.CANCELADO)
+
+        trigger_id = cancel_result.trigger_id
+        self.service.delete_workflow(workflow_id)
+        self.assertIsNone(self.repository.get_workflow(workflow_id))
+
+        if trigger_id is not None:
+            trigger = self.service.get_trigger(trigger_id)
+            self.assertEqual(trigger.workflow_ids, [])
+            self.assertEqual(trigger.estado_general, TriggerStatus.SIN_FLOWS)
+
+    def test_can_delete_finalized_workflow_and_reconcile_requirement(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        first_step = self.service.get_workflow(workflow_id).steps[0]
+        self.service.complete_step(
+            first_step.id,
+            StepCompletePayload(
+                usuario="tester",
+                comentario="Finalizar flow",
+                resultado_cierre="Completo",
+                observaciones=None,
+                transition_type=StepTransitionType.FINISH_FLOW,
+                finish_data=FinishFlowInput(resultado_final="Ok", motivo_cierre="Cierra"),
+            ),
+        )
+
+        workflow = self.service.get_workflow(workflow_id)
+        self.assertEqual(workflow.estado, WorkflowStatus.FINALIZADO)
+        trigger_id = workflow.trigger_id
+
+        self.service.delete_workflow(workflow_id)
+        self.assertIsNone(self.repository.get_workflow(workflow_id))
+
+        if trigger_id is not None:
+            trigger = self.service.get_trigger(trigger_id)
+            self.assertEqual(trigger.workflow_ids, [])
+            self.assertEqual(trigger.estado_general, TriggerStatus.SIN_FLOWS)
+
+    def test_cannot_delete_requirement_with_linked_workflow(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        workflow = self.service.get_workflow(workflow_id)
+        self.assertIsNotNone(workflow.trigger_id)
+        with self.assertRaises(BusinessRuleError):
+            self.service.delete_trigger(workflow.trigger_id)
 
     def test_wait_external_blocks_activation_until_matching_event(self) -> None:
         template = WorkflowTemplatePublic(

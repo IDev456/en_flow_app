@@ -105,6 +105,10 @@ class WorkflowRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def delete_workflow(self, workflow_id: str) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
     def save_trigger(self, trigger: TriggerPublic) -> TriggerPublic:
         raise NotImplementedError
 
@@ -346,6 +350,26 @@ class InMemoryWorkflowRepository(WorkflowRepository):
                         "requirement_ids": list(self._requirement_ids_by_workflow[workflow_id]),
                     }
                 )
+
+        return True
+
+    def delete_workflow(self, workflow_id: str) -> bool:
+        workflow = self._workflows.pop(workflow_id, None)
+        if workflow is None:
+            return False
+
+        for step_id in self._step_ids_by_workflow.pop(workflow_id, []):
+            self._steps.pop(step_id, None)
+            self._comments_by_step.pop(step_id, None)
+            self._history_by_step.pop(step_id, None)
+            self._external_events_by_step.pop(step_id, None)
+
+        self._external_events_by_workflow.pop(workflow_id, None)
+
+        requirement_ids = self._requirement_ids_by_workflow.pop(workflow_id, [])
+        for requirement_id in requirement_ids:
+            workflow_ids = self._workflow_ids_by_trigger.get(requirement_id, [])
+            self._workflow_ids_by_trigger[requirement_id] = [item for item in workflow_ids if item != workflow_id]
 
         return True
 
@@ -784,6 +808,15 @@ class PostgresWorkflowRepository(WorkflowRepository):
             if trigger is None:
                 return False
             session.delete(trigger)
+            session.flush()
+            return True
+
+    def delete_workflow(self, workflow_id: str) -> bool:
+        with session_scope() as session:
+            workflow = session.get(WorkflowModel, workflow_id)
+            if workflow is None:
+                return False
+            session.delete(workflow)
             session.flush()
             return True
 

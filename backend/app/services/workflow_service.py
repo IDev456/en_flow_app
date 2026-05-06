@@ -108,6 +108,22 @@ class WorkflowService:
         if not deleted:
             raise EntityNotFoundError("Trigger not found")
 
+    def delete_workflow(self, workflow_id: str) -> None:
+        workflow = self.get_workflow(workflow_id)
+        if workflow.estado not in {WorkflowStatus.CANCELADO, WorkflowStatus.FINALIZADO}:
+            raise BusinessRuleError(
+                "No se puede eliminar el flow porque no está cancelado ni finalizado. Primero debe cancelarse o finalizarse."
+            )
+
+        requirement_ids = self._collect_requirement_ids(workflow)
+        deleted = self.repository.delete_workflow(workflow_id)
+        if not deleted:
+            raise EntityNotFoundError("Workflow not found")
+
+        now = utc_now()
+        for requirement_id in requirement_ids:
+            self._reconcile_trigger_status(requirement_id, now)
+
     def delete_requirement(self, requirement_id: str) -> None:
         self.delete_trigger(requirement_id)
 

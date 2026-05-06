@@ -71,6 +71,19 @@ def cancel_workflow(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
+@router.delete("/{workflow_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_workflow(
+    workflow_id: str,
+    service: WorkflowService = Depends(get_workflow_service),
+) -> None:
+    try:
+        service.delete_workflow(workflow_id)
+    except EntityNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except BusinessRuleError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
 @router.get("/{workflow_id}/steps", response_model=list[StepInstancePublic])
 def get_workflow_steps(
     workflow_id: str,
