@@ -204,8 +204,8 @@ export function WorkflowDetailPage() {
   }
 
   function handleOpenCompleteStep(stepId: string) {
-    setPanelOpen(false);
     setSelectedStepId(stepId);
+    setPanelOpen(true);
     setPendingCompleteDialogStepId(stepId);
   }
 

@@ -30,6 +30,12 @@ export function WorkflowGraph(props: WorkflowGraphProps) {
   return <VerticalWorkflowGraph {...props} />;
 }
 
+function formatExpectedExternalEventLabel(expected?: string | null): string | null {
+  const trimmed = expected?.trim();
+  if (!trimmed) return null;
+  return trimmed.toLowerCase().startsWith("esperando") ? trimmed : `Esperando ${trimmed}`;
+}
+
 function renderLatestStepMovement(step: Step) {
   if (step.ultimo_comentario_tipo === "imagen" || step.ultimo_comentario_tipo === "adjunto") {
     return (
@@ -44,6 +50,15 @@ function renderLatestStepMovement(step: Step) {
           </Typography>
         </Box>
       </Stack>
+    );
+  }
+
+  if (step.estado === "esperando_respuesta") {
+    const expectedLabel = formatExpectedExternalEventLabel(step.expected_external_event);
+    return (
+      <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.45 }} color="text.primary">
+        {expectedLabel ?? "Esperando respuesta externa"}
+      </Typography>
     );
   }
 
@@ -155,10 +170,10 @@ function getStepStateColors(theme: Theme, status: Step["estado"]) {
 
   if (tone === "espera_externa") {
     return {
-      borderColor: alpha(theme.palette.info.main, 0.52),
-      backgroundColor: alpha(theme.palette.info.main, 0.18),
-      textColor: theme.palette.info.light,
-      lineColor: alpha(theme.palette.info.main, 0.4),
+      borderColor: alpha(theme.palette.info.main, 0.85),
+      backgroundColor: alpha(theme.palette.info.main, 0.24),
+      textColor: theme.palette.info.main,
+      lineColor: alpha(theme.palette.info.main, 0.65),
     };
   }
 
@@ -416,11 +431,6 @@ function VerticalWorkflowGraph({
                                 ))}
                               </Stack>
                             )}
-                            {step.estado === "esperando_respuesta" && step.expected_external_event && (
-                              <Typography variant="caption" color="info.light" sx={{ display: "block", mt: 0.45, opacity: 0.9 }}>
-                                Esperando {step.expected_external_event}
-                              </Typography>
-                            )}
                           </Box>
                         </ButtonBase>
                       ) : null}
@@ -541,11 +551,6 @@ function GitLogWorkflowGraph({
                             </Typography>
                           ))}
                         </Stack>
-                      )}
-                      {step.estado === "esperando_respuesta" && step.expected_external_event && (
-                        <Typography variant="caption" color="info.light" sx={{ display: "block", mt: 0.45, opacity: 0.9 }}>
-                          Dato esperado: {step.expected_external_event}
-                        </Typography>
                       )}
                     </Box>
                   </ButtonBase>
