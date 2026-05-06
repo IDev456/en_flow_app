@@ -1,4 +1,5 @@
 import { useEffect, useRef, type MouseEvent, type PointerEvent } from "react";
+import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
 import AttachmentRoundedIcon from "@mui/icons-material/AttachmentRounded";
 import ImageRoundedIcon from "@mui/icons-material/ImageRounded";
 import type { Theme } from "@mui/material/styles";
@@ -69,6 +70,45 @@ function renderLatestStepMovement(step: Step) {
     <Typography variant="body2" sx={{ fontWeight: hasComment ? 600 : 400, lineHeight: 1.45 }} color={hasComment ? "text.primary" : "text.secondary"}>
       {fallbackText}
     </Typography>
+  );
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 60000) return "menos de 1 min";
+  const minutes = Math.floor(ms / 60000);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} h`;
+  const days = Math.floor(hours / 24);
+  return `${days} d`;
+}
+
+function formatDurationBetween(start: string | null, end: string | null): string | null {
+  if (!start || !end) return null;
+  const ms = Math.abs(new Date(end).getTime() - new Date(start).getTime());
+  return formatDuration(ms);
+}
+
+function renderStepTiming(step: Step): React.ReactElement | null {
+  const createdElapsed = step.fecha_creacion ? formatElapsedTime(step.fecha_creacion) : null;
+  const stateElapsed = step.fecha_estado_actual ? formatElapsedTime(step.fecha_estado_actual) : null;
+  const durationEnd = step.fecha_cierre ?? step.fecha_estado_actual;
+  const duration = formatDurationBetween(step.fecha_creacion, durationEnd);
+
+  const parts: string[] = [];
+  if (createdElapsed) parts.push(`Creada hace ${createdElapsed}`);
+  if (stateElapsed) parts.push(`Estado hace ${stateElapsed}`);
+  if (duration) parts.push(`Duración ${duration}`);
+
+  if (parts.length === 0) return null;
+
+  return (
+    <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", mt: 0.5 }}>
+      <AccessTimeRoundedIcon sx={{ fontSize: 14, color: "text.secondary" }} />
+      <Typography variant="caption" color="text.secondary">
+        {parts.join(" · ")}
+      </Typography>
+    </Stack>
   );
 }
 
@@ -314,6 +354,8 @@ function VerticalWorkflowGraph({
                           </Typography>
                         </Box>
                       </Stack>
+
+                      {renderStepTiming(step)}
 
                       {shouldExpand ? (
                         <ButtonBase
