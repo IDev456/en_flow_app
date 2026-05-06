@@ -96,8 +96,8 @@ function renderStepTiming(step: Step): React.ReactElement | null {
   const duration = formatDurationBetween(step.fecha_creacion, durationEnd);
 
   const parts: string[] = [];
-  if (createdElapsed) parts.push(`Creada hace ${createdElapsed}`);
-  if (stateElapsed) parts.push(`Estado hace ${stateElapsed}`);
+  if (createdElapsed) parts.push(`Creada ${createdElapsed}`);
+  if (stateElapsed) parts.push(`Estado ${stateElapsed}`);
   if (duration) parts.push(`Duración ${duration}`);
 
   if (parts.length === 0) return null;
@@ -232,7 +232,7 @@ function VerticalWorkflowGraph({
             const isLast = index === orderedSteps.length - 1;
             const stateColors = getStepStateColors(theme, step.estado);
             const shouldExpand = isSelected || step.estado !== "completado";
-            const canComplete = ["activo", "espera", "problema"].includes(step.estado);
+            const canComplete = ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado);
 
             return (
               <Box
@@ -418,7 +418,7 @@ function VerticalWorkflowGraph({
                             )}
                             {step.estado === "esperando_respuesta" && step.expected_external_event && (
                               <Typography variant="caption" color="info.light" sx={{ display: "block", mt: 0.45, opacity: 0.9 }}>
-                                Dato esperado: {step.expected_external_event}
+                                Esperando {step.expected_external_event}
                               </Typography>
                             )}
                           </Box>
