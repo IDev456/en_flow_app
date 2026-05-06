@@ -1,14 +1,34 @@
 import unittest
+from contextlib import contextmanager
+from datetime import datetime, timezone
 from uuid import uuid4
 
+from sqlalchemy import create_engine, event, select
+from sqlalchemy.orm import Session, sessionmaker
+
+import app.repositories.workflow_repository as repo_mod
 from app.core.errors import BusinessRuleError
+from app.db.base import Base
+from app.db.models import (
+    CommentModel,
+    ExternalEventModel,
+    RequirementFlowLinkModel,
+    StepHistoryModel,
+    StepModel,
+    TriggerModel,
+    WorkflowModel,
+    WorkflowTemplateModel,
+    WorkflowTemplateStepModel,
+)
 from app.repositories.workflow_repository import InMemoryWorkflowRepository
 from app.schemas.workflow import (
+    CommentCreate,
     ExternalEventCreate,
     ExternalWaitInput,
     FinishFlowInput,
     InitialStepOverride,
     StepCompletePayload,
+    StepHistoryPublic,
     StepStatus,
     StepStatusUpdate,
     StepTemplatePublic,
@@ -417,6 +437,161 @@ class WorkflowDagTestCase(unittest.TestCase):
             trigger = self.service.get_trigger(trigger_id)
             self.assertEqual(trigger.workflow_ids, [])
             self.assertEqual(trigger.estado_general, TriggerStatus.SIN_FLOWS)
+
+    def test_postgres_delete_workflow_cascades(self) -> None:
+        engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+
+        @event.listens_for(engine, "connect")
+        def _enable_sqlite_foreign_keys(dbapi_connection, connection_record):
+            dbapi_connection.execute("PRAGMA foreign_keys=ON")
+
+        Base.metadata.create_all(bind=engine)
+        SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, expire_on_commit=False, class_=Session)
+
+        @contextmanager
+        def sqlite_session_scope():
+            session = SessionLocal()
+            try:
+                yield session
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
+            finally:
+                session.close()
+
+        original_session_scope = repo_mod.session_scope
+        repo_mod.session_scope = sqlite_session_scope
+        try:
+            repo = repo_mod.PostgresWorkflowRepository()
+            service = WorkflowService(repo)
+
+            trigger = repo.create_trigger(
+                TriggerCreate(
+                    solicitante="QA",
+                    descripcion="Trigger SQL delete test",
+                    tipo="requerimiento",
+                    creado_por="tester",
+                    metadata=None,
+                )
+            )
+            template = build_linear_template()
+            with sqlite_session_scope() as session:
+                session.add(
+                    WorkflowTemplateModel(
+                        id=template.id,
+                        nombre=template.nombre,
+                        descripcion=template.descripcion,
+                        steps=[
+                            WorkflowTemplateStepModel(
+                                id=step.id,
+                                workflow_template_id=template.id,
+                                codigo=step.codigo,
+                                depends_on=step.depends_on,
+                                nombre=step.nombre,
+                                descripcion=step.descripcion,
+                                orden=step.orden,
+                                tipo=step.tipo,
+                                requiere_aprobacion=step.requiere_aprobacion,
+                                puede_tener_comentarios=step.puede_tener_comentarios,
+                                condicion_para_activarse=step.condicion_para_activarse,
+                                condicion_para_cerrarse=step.condicion_para_cerrarse,
+                                action_type=step.action_type,
+                                action_config=step.action_config,
+                                action_label=step.action_label,
+                                waits_for_external_response=step.waits_for_external_response,
+                                expected_external_event=step.expected_external_event,
+                                external_wait_reason=step.external_wait_reason,
+                                external_reference=step.external_reference,
+                            )
+                            for step in template.steps
+                        ],
+                    )
+                )
+
+            workflow = repo.create_workflow(
+                trigger.id,
+                template,
+                WorkflowStartRequest(
+                    workflow_template_id=template.id,
+                    primer_paso=InitialStepOverride(nombre="Paso inicial"),
+                ),
+            )
+            with sqlite_session_scope() as session:
+                workflow_model = session.get(WorkflowModel, workflow.id)
+                workflow_model.estado = WorkflowStatus.FINALIZADO
+                workflow_model.fecha_fin = datetime.now(timezone.utc)
+            step = repo.list_workflow_steps(workflow.id)[0]
+            repo.add_comment(
+                step.id,
+                CommentCreate(
+                    autor="tester",
+                    comentario="Comentario prueba",
+                    attachments=[],
+                ),
+            )
+            repo.add_history(
+                StepHistoryPublic(
+                    id=str(uuid4()),
+                    step_instance_id=step.id,
+                    campo="test",
+                    valor_anterior=None,
+                    valor_nuevo="ok",
+                    usuario="tester",
+                    fecha=datetime.now(timezone.utc),
+                    nota="nota",
+                    attachments=[],
+                )
+            )
+            repo.add_external_event(
+                step.id,
+                ExternalEventCreate(
+                    event_type="test_event",
+                    source="tester",
+                    payload=None,
+                    comentario="evento prueba",
+                    attachments=[],
+                    registrado_por="tester",
+                ),
+            )
+
+            self.assertIsNotNone(repo.get_trigger(trigger.id))
+            self.assertIsNotNone(repo.get_workflow(workflow.id))
+
+            service.delete_workflow(workflow.id)
+            self.assertIsNone(repo.get_workflow(workflow.id))
+
+            trigger_after = repo.get_trigger(trigger.id)
+            self.assertIsNotNone(trigger_after)
+            self.assertEqual(trigger_after.workflow_ids, [])
+            self.assertEqual(trigger_after.estado_general, TriggerStatus.SIN_FLOWS)
+            self.assertIsNone(trigger_after.workflow_activo_id)
+
+            with sqlite_session_scope() as session:
+                self.assertEqual(
+                    session.scalars(
+                        select(RequirementFlowLinkModel).where(RequirementFlowLinkModel.workflow_id == workflow.id)
+                    ).all(),
+                    [],
+                )
+                self.assertEqual(
+                    session.scalars(select(StepModel).where(StepModel.workflow_id == workflow.id)).all(),
+                    [],
+                )
+                self.assertEqual(
+                    session.scalars(select(CommentModel).where(CommentModel.step_instance_id == step.id)).all(),
+                    [],
+                )
+                self.assertEqual(
+                    session.scalars(select(StepHistoryModel).where(StepHistoryModel.step_instance_id == step.id)).all(),
+                    [],
+                )
+                self.assertEqual(
+                    session.scalars(select(ExternalEventModel).where(ExternalEventModel.step_id == step.id)).all(),
+                    [],
+                )
+        finally:
+            repo_mod.session_scope = original_session_scope
 
     def test_cannot_delete_requirement_with_linked_workflow(self) -> None:
         workflow_id = self._start_workflow(build_linear_template())
