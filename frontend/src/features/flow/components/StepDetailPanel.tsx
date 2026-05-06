@@ -83,21 +83,9 @@ export function StepDetailPanel({
 
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
   const [completeTransition, setCompleteTransition] = useState<StepTransitionType>("next_task");
-  const [completeResult, setCompleteResult] = useState("");
-  const [completeObservations, setCompleteObservations] = useState("");
   const [nextTaskName, setNextTaskName] = useState("");
-  const [nextTaskDescription, setNextTaskDescription] = useState("");
-  const [nextTaskAssignee, setNextTaskAssignee] = useState("");
-  const [nextTaskDueDate, setNextTaskDueDate] = useState("");
-  const [waitExpected, setWaitExpected] = useState("");
-  const [waitSource, setWaitSource] = useState("");
-  const [waitDetail, setWaitDetail] = useState("");
-  const [waitReference, setWaitReference] = useState("");
-  const [finishReason, setFinishReason] = useState("");
-  const [completeAttachments, setCompleteAttachments] = useState<AttachmentInput[]>([]);
   const [completeError, setCompleteError] = useState<string | null>(null);
   const [completing, setCompleting] = useState(false);
-  const [completeAdvancedOpen, setCompleteAdvancedOpen] = useState(false);
 
   const [externalDialogOpen, setExternalDialogOpen] = useState(false);
   const [externalComment, setExternalComment] = useState("");
@@ -136,20 +124,8 @@ export function StepDetailPanel({
 
     setCompleteDialogOpen(false);
     setCompleteTransition("next_task");
-    setCompleteResult("");
-    setCompleteObservations("");
     setNextTaskName("");
-    setNextTaskDescription("");
-    setNextTaskAssignee("");
-    setNextTaskDueDate("");
-    setWaitExpected(step.expected_external_event ?? "");
-    setWaitSource("");
-    setWaitDetail(step.external_wait_reason ?? "");
-    setWaitReference(step.external_reference ?? "");
-    setFinishReason("");
-    setCompleteAttachments([]);
     setCompleteError(null);
-    setCompleteAdvancedOpen(false);
 
     setExternalDialogOpen(false);
     setExternalComment("");
@@ -247,7 +223,6 @@ export function StepDetailPanel({
     if (!files || files.length === 0) return;
     try {
       const parsed = await Promise.all(Array.from(files).map((file) => readFileAsAttachment(file)));
-      if (target === "complete") setCompleteAttachments((current) => [...current, ...parsed]);
       if (target === "external") setExternalAttachments((current) => [...current, ...parsed]);
       if (target === "resolve") setResolveAttachments((current) => [...current, ...parsed]);
       setCompleteError(null);
@@ -255,7 +230,6 @@ export function StepDetailPanel({
       setResolveError(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : "No se pudieron adjuntar archivos";
-      if (target === "complete") setCompleteError(message);
       if (target === "external") setExternalError(message);
       if (target === "resolve") setResolveError(message);
     }
@@ -264,17 +238,8 @@ export function StepDetailPanel({
   async function handleCompleteTask() {
     const currentStep = step;
     if (!currentStep) return;
-    const resultTrimmed = completeResult.trim();
-    if (resultTrimmed.length < 3) {
-      setCompleteError("Debes indicar el resultado de la tarea.");
-      return;
-    }
     if (completeTransition === "next_task" && !nextTaskName.trim()) {
       setCompleteError("Debes indicar el nombre de la próxima tarea.");
-      return;
-    }
-    if (completeTransition === "wait_external" && !waitExpected.trim()) {
-      setCompleteError("Debes indicar que respuesta externa se espera.");
       return;
     }
 
@@ -283,38 +248,30 @@ export function StepDetailPanel({
       setCompleteError(null);
       await onCompleteTask(currentStep.id, {
         usuario: DEFAULT_ACTOR,
-        resultado_cierre: resultTrimmed,
-        comentario: resultTrimmed,
-        observaciones: completeObservations.trim() || null,
+        resultado_cierre: "Tarea completada",
+        comentario: null,
+        observaciones: null,
         transition_type: completeTransition,
         next_task:
           completeTransition === "next_task"
             ? {
                 nombre: nextTaskName.trim(),
-                descripcion: nextTaskDescription.trim() || null,
-                asignado_a: nextTaskAssignee.trim() || null,
-                fecha_vencimiento: nextTaskDueDate || null,
               }
             : null,
         external_wait:
           completeTransition === "wait_external"
             ? {
-                que_se_espera: waitExpected.trim(),
-                origen: waitSource.trim() || "externo",
-                detalle: waitDetail.trim() || null,
-                referencia_externa: waitReference.trim() || null,
-                attachments: completeAttachments,
+                que_se_espera: "Esperando respuesta externa",
               }
             : null,
         finish_data:
           completeTransition === "finish_flow"
             ? {
-                resultado_final: resultTrimmed,
-                motivo_cierre: finishReason.trim() || null,
-                attachments: completeAttachments,
+                resultado_final: null,
+                motivo_cierre: null,
               }
             : null,
-        attachments: completeAttachments,
+        attachments: [],
       });
       setCompleteDialogOpen(false);
     } catch (err) {
@@ -654,15 +611,6 @@ export function StepDetailPanel({
         <DialogTitle>Completar tarea</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
-            <TextField
-              label="¿Qué pasó? *"
-              multiline
-              minRows={3}
-              value={completeResult}
-              onChange={(event) => setCompleteResult(event.target.value)}
-              disabled={completing}
-            />
-
             <Typography variant="subtitle2" color="text.secondary">
               ¿Qué sigue?
             </Typography>
@@ -672,7 +620,6 @@ export function StepDetailPanel({
               onChange={(_, value: StepTransitionType | null) => {
                 if (!value) return;
                 setCompleteTransition(value);
-                setCompleteAdvancedOpen(false);
               }}
               fullWidth
             >
@@ -691,69 +638,6 @@ export function StepDetailPanel({
                 <TextField label="Nombre de la próxima tarea *" value={nextTaskName} onChange={(event) => setNextTaskName(event.target.value)} />
               </Stack>
             )}
-
-            {completeTransition === "wait_external" && (
-              <Stack spacing={1.5}>
-                <TextField label="Qué se está esperando *" value={waitExpected} onChange={(event) => setWaitExpected(event.target.value)} />
-              </Stack>
-            )}
-
-            <Button variant="text" color="inherit" onClick={() => setCompleteAdvancedOpen((value) => !value)}>
-              {completeAdvancedOpen ? "Ocultar opciones avanzadas" : "Más detalle (opcional)"}
-            </Button>
-
-            <Collapse in={completeAdvancedOpen}>
-              <Stack spacing={1.5}>
-                <TextField
-                  label="Observaciones"
-                  multiline
-                  minRows={2}
-                  value={completeObservations}
-                  onChange={(event) => setCompleteObservations(event.target.value)}
-                  disabled={completing}
-                />
-
-                {completeTransition === "next_task" && (
-                  <>
-                    <TextField label="Detalle / contexto" multiline minRows={2} value={nextTaskDescription} onChange={(event) => setNextTaskDescription(event.target.value)} />
-                    <TextField label="Asignado a" value={nextTaskAssignee} onChange={(event) => setNextTaskAssignee(event.target.value)} />
-                    <TextField
-                      label="Fecha de vencimiento"
-                      type="datetime-local"
-                      value={nextTaskDueDate}
-                      onChange={(event) => setNextTaskDueDate(event.target.value)}
-                      slotProps={{ inputLabel: { shrink: true } }}
-                    />
-                  </>
-                )}
-
-                {completeTransition === "wait_external" && (
-                  <>
-                    <TextField label="Origen / proveedor / persona" value={waitSource} onChange={(event) => setWaitSource(event.target.value)} />
-                    <TextField label="Detalle de la espera" multiline minRows={2} value={waitDetail} onChange={(event) => setWaitDetail(event.target.value)} />
-                    <TextField label="Referencia externa" value={waitReference} onChange={(event) => setWaitReference(event.target.value)} />
-                  </>
-                )}
-
-                {completeTransition === "finish_flow" && (
-                  <TextField label="Motivo de cierre" multiline minRows={2} value={finishReason} onChange={(event) => setFinishReason(event.target.value)} />
-                )}
-
-                <Button component="label" variant="outlined" color="inherit" disabled={completing}>
-                  Adjuntar archivos (opcional)
-                  <input hidden multiple type="file" onChange={(event) => void handleAttachmentSelection(event.target.files, "complete")} />
-                </Button>
-                {completeAttachments.length > 0 && (
-                  <Stack spacing={0.5}>
-                    {completeAttachments.map((item, index) => (
-                      <Typography key={`${item.nombre}-${index}`} variant="body2" color="text.secondary">
-                        {item.nombre} ({Math.round(item.size_bytes / 1024)} KB)
-                      </Typography>
-                    ))}
-                  </Stack>
-                )}
-              </Stack>
-            </Collapse>
 
             {completeError && <Alert severity="error">{completeError}</Alert>}
           </Stack>
