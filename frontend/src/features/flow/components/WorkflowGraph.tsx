@@ -46,9 +46,15 @@ function renderLatestStepMovement(step: Step) {
     );
   }
 
+  const title = step.nombre?.trim();
+  const lastComment = step.ultimo_comentario?.trim();
+  const description = step.descripcion?.trim();
+  const normalizedTitle = title?.toLowerCase();
+
   const fallbackText =
-    step.ultimo_comentario?.trim() ||
-    (step.orden === 1 && step.descripcion?.trim() ? step.descripcion.trim() : "Sin registros todavía");
+    (lastComment && lastComment.toLowerCase() !== normalizedTitle && lastComment) ||
+    (description && description.toLowerCase() !== normalizedTitle && description) ||
+    "Sin registros todavía";
   const hasComment = fallbackText !== "Sin registros todavía";
 
   return (
