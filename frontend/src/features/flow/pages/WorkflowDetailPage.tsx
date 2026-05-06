@@ -38,6 +38,7 @@ import {
   updateStepStatus,
 } from "../api";
 import { StepDetailPanel } from "../components/StepDetailPanel";
+import { CompleteStepDialog } from "../components/CompleteStepDialog";
 import { WorkflowGraph } from "../components/WorkflowGraph";
 import type {
   ExternalEventCreateInput,
@@ -171,13 +172,40 @@ export function WorkflowDetailPage() {
   }
 
   async function handleCompleteTask(stepId: string, input: StepCompleteInput) {
-    await completeStep(stepId, input);
-    const currentWorkflow = await getWorkflow(workflowId);
-    const nextActiveStep =
-      currentWorkflow.steps.find((workflowStep) => workflowStep.estado === "activo") ??
-      currentWorkflow.steps.find((workflowStep) => ["espera", "problema", "esperando_respuesta"].includes(workflowStep.estado));
-    await refreshAfterStepChange(nextActiveStep?.id ?? stepId);
-    showToast("Tarea completada.", "success");
+    try {
+      const step = workflow?.steps.find(s => s.id === stepId);
+      if (!step) return;
+
+      if (step.estado === "esperando_respuesta") {
+        // Si ya estaba en espera externa, usamos resolveExternalResponse
+        // Mapeamos al payload que espera el backend para esta accion
+        await resolveExternalResponse(stepId, {
+          usuario: input.usuario,
+          resultado_cierre: input.resultado_cierre ?? "Completado tras espera externa",
+          comentario: input.comentario ?? input.resultado_cierre ?? "Resuelto",
+          transition_type: input.transition_type,
+          next_task: input.next_task,
+          finish_data: input.finish_data,
+          attachments: input.attachments,
+        });
+      } else {
+        // Flujo estandar para tareas activas, en pausa o con problema
+        await completeStep(stepId, input);
+      }
+
+      const currentWorkflow = await getWorkflow(workflowId);
+      const nextActiveStep =
+        currentWorkflow.steps.find((workflowStep) => workflowStep.estado === "activo") ??
+        currentWorkflow.steps.find((workflowStep) => ["espera", "problema", "esperando_respuesta"].includes(workflowStep.estado));
+      
+      await refreshAfterStepChange(nextActiveStep?.id ?? stepId);
+      showToast("Tarea completada.", "success");
+      setPendingCompleteDialogStepId(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error al completar";
+      showToast(msg, "error");
+      throw err; // Re-throw para que el dialogo maneje el estado de error
+    }
   }
 
   async function handleRegisterExternalEvent(stepId: string, input: ExternalEventCreateInput) {
@@ -205,8 +233,7 @@ export function WorkflowDetailPage() {
 
   function handleOpenCompleteStep(stepId: string) {
     setSelectedStepId(stepId);
-    setPanelOpen(true);
-    setPendingCompleteDialogStepId(stepId);
+    setPendingCompleteDialogStepId(stepId); // Solo activamos el modal, no el panel lateral
   }
 
   function handleCompleteDialogOpened() {
@@ -410,10 +437,14 @@ export function WorkflowDetailPage() {
               onStepUpdated={handleStepUpdated}
               onSubmitJournal={handleSubmitJournal}
               onCompleteTask={handleCompleteTask}
-              openCompleteDialog={pendingCompleteDialogStepId !== null && pendingCompleteDialogStepId === selectedStepId}
-              onCompleteDialogOpened={handleCompleteDialogOpened}
               onRegisterExternalEvent={(input) => handleRegisterExternalEvent(selectedStep.id, input)}
               onResolveExternalResponse={(stepId, input) => handleResolveExternalResponse(stepId, input)}
+            />
+            <CompleteStepDialog
+              open={pendingCompleteDialogStepId !== null}
+              step={workflow.steps.find(s => s.id === pendingCompleteDialogStepId) ?? null}
+              onClose={() => setPendingCompleteDialogStepId(null)}
+              onSubmit={handleCompleteTask}
             />
           </Box>
         )}

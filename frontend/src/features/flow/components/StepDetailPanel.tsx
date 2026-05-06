@@ -52,8 +52,6 @@ type StepDetailPanelProps = {
   error?: string | null;
   onSubmitJournal: (input: StepJournalEntryInput) => Promise<void>;
   onCompleteTask: (stepId: string, input: StepCompleteInput) => Promise<void>;
-  openCompleteDialog?: boolean;
-  onCompleteDialogOpened?: () => void;
   onStepUpdated?: (step: Step) => Promise<void> | void;
   onRegisterExternalEvent?: (input: ExternalEventCreateInput) => Promise<void>;
   onResolveExternalResponse?: (stepId: string, input: ExternalResponseDecisionInput) => Promise<void>;
@@ -69,8 +67,6 @@ export function StepDetailPanel({
   onClose,
   error,
   onSubmitJournal,
-  onCompleteTask,
-  openCompleteDialog,
   onCompleteDialogOpened,
   onStepUpdated,
   onRegisterExternalEvent,
@@ -80,12 +76,6 @@ export function StepDetailPanel({
   const [composerExpanded, setComposerExpanded] = useState(false);
   const [focusRequestToken, setFocusRequestToken] = useState(0);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
-
-  const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
-  const [completeTransition, setCompleteTransition] = useState<StepTransitionType>("next_task");
-  const [nextTaskName, setNextTaskName] = useState("");
-  const [completeError, setCompleteError] = useState<string | null>(null);
-  const [completing, setCompleting] = useState(false);
 
   const [externalDialogOpen, setExternalDialogOpen] = useState(false);
   const [externalComment, setExternalComment] = useState("");
@@ -121,11 +111,6 @@ export function StepDetailPanel({
     setSelectedStatus("");
     setComposerExpanded(false);
     setMenuAnchor(null);
-
-    setCompleteDialogOpen(false);
-    setCompleteTransition("next_task");
-    setNextTaskName("");
-    setCompleteError(null);
 
     setExternalDialogOpen(false);
     setExternalComment("");
@@ -179,13 +164,6 @@ export function StepDetailPanel({
   const displayStepName = stepDraftName.trim() || step.nombre;
   const displayStepDescription = stepDraftDescription.trim();
 
-  useEffect(() => {
-    if (openCompleteDialog && canCompleteTask) {
-      setCompleteDialogOpen(true);
-      onCompleteDialogOpened?.();
-    }
-  }, [canCompleteTask, onCompleteDialogOpened, openCompleteDialog]);
-
   async function handleSubmitJournal(input: StepJournalEntryInput) {
     await onSubmitJournal(input);
     setSelectedStatus("");
@@ -232,52 +210,6 @@ export function StepDetailPanel({
       const message = err instanceof Error ? err.message : "No se pudieron adjuntar archivos";
       if (target === "external") setExternalError(message);
       if (target === "resolve") setResolveError(message);
-    }
-  }
-
-  async function handleCompleteTask() {
-    const currentStep = step;
-    if (!currentStep) return;
-    if (completeTransition === "next_task" && !nextTaskName.trim()) {
-      setCompleteError("Debes indicar el nombre de la próxima tarea.");
-      return;
-    }
-
-    try {
-      setCompleting(true);
-      setCompleteError(null);
-      await onCompleteTask(currentStep.id, {
-        usuario: DEFAULT_ACTOR,
-        resultado_cierre: "Tarea completada",
-        comentario: null,
-        observaciones: null,
-        transition_type: completeTransition,
-        next_task:
-          completeTransition === "next_task"
-            ? {
-                nombre: nextTaskName.trim(),
-              }
-            : null,
-        external_wait:
-          completeTransition === "wait_external"
-            ? {
-                que_se_espera: "Esperando respuesta externa",
-              }
-            : null,
-        finish_data:
-          completeTransition === "finish_flow"
-            ? {
-                resultado_final: null,
-                motivo_cierre: null,
-              }
-            : null,
-        attachments: [],
-      });
-      setCompleteDialogOpen(false);
-    } catch (err) {
-      setCompleteError(err instanceof Error ? err.message : "No se pudo completar la tarea");
-    } finally {
-      setCompleting(false);
     }
   }
 
@@ -480,7 +412,7 @@ export function StepDetailPanel({
                   </Button>
                 )}
                 {canCompleteTask && (
-                  <Button variant="contained" onClick={() => setCompleteDialogOpen(true)} sx={{ textTransform: "none" }}>
+                  <Button variant="contained" onClick={() => onCompleteDialogOpened?.()} sx={{ textTransform: "none" }}>
                     Completar tarea
                   </Button>
                 )}
@@ -606,51 +538,6 @@ export function StepDetailPanel({
           </>
         )}
       </CardContent>
-
-      <Dialog open={completeDialogOpen} onClose={completing ? undefined : () => setCompleteDialogOpen(false)} fullWidth maxWidth="md">
-        <DialogTitle>Completar tarea</DialogTitle>
-        <DialogContent dividers>
-          <Stack spacing={2}>
-            <Typography variant="subtitle2" color="text.secondary">
-              ¿Qué sigue?
-            </Typography>
-            <ToggleButtonGroup
-              exclusive
-              value={completeTransition}
-              onChange={(_, value: StepTransitionType | null) => {
-                if (!value) return;
-                setCompleteTransition(value);
-              }}
-              fullWidth
-            >
-              <ToggleButton value="next_task">Crear próxima tarea</ToggleButton>
-              <ToggleButton value="wait_external">Esperar respuesta externa</ToggleButton>
-              <ToggleButton value="finish_flow">Finalizar flow</ToggleButton>
-            </ToggleButtonGroup>
-            <Typography variant="body2" color="text.secondary">
-              {completeTransition === "next_task" && "Hay algo más para hacer."}
-              {completeTransition === "wait_external" && "Queda pendiente una respuesta o dato externo."}
-              {completeTransition === "finish_flow" && "El tema ya quedó resuelto."}
-            </Typography>
-
-            {completeTransition === "next_task" && (
-              <Stack spacing={1.5}>
-                <TextField label="Nombre de la próxima tarea *" value={nextTaskName} onChange={(event) => setNextTaskName(event.target.value)} />
-              </Stack>
-            )}
-
-            {completeError && <Alert severity="error">{completeError}</Alert>}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCompleteDialogOpen(false)} disabled={completing} color="inherit">
-            Cancelar
-          </Button>
-          <Button onClick={() => void handleCompleteTask()} disabled={completing} variant="contained">
-            {completing ? "Guardando..." : "Guardar decisión"}
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       <Dialog open={externalDialogOpen} onClose={registeringExternal ? undefined : () => setExternalDialogOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>Registrar respuesta recibida</DialogTitle>
