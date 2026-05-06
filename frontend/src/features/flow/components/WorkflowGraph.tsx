@@ -51,19 +51,17 @@ function renderLatestStepMovement(step: Step) {
   const description = step.descripcion?.trim();
   const normalizedTitle = title?.toLowerCase();
 
-  if (step.estado === "completado") {
-    console.log("WorkflowGraph completed step", {
-      id: step.id,
-      title,
-      description,
-      lastComment,
-      estado: step.estado,
-    });
-  }
+  const getValidSecondaryText = (text: string | undefined | null): string | null => {
+    if (!text) return null;
+    const normalizedText = text.toLowerCase();
+    if (normalizedText === normalizedTitle) return null;
+    if (normalizedTitle && normalizedText.includes(normalizedTitle)) return null;
+    return text;
+  };
 
   const fallbackText =
-    (lastComment && lastComment.toLowerCase() !== normalizedTitle && lastComment) ||
-    (description && description.toLowerCase() !== normalizedTitle && description) ||
+    getValidSecondaryText(lastComment) ||
+    getValidSecondaryText(description) ||
     "Sin registros todavía";
   const hasComment = fallbackText !== "Sin registros todavía";
 
