@@ -26,6 +26,7 @@ type CompleteStepDialogProps = {
 export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteStepDialogProps) {
   const [transition, setTransition] = useState<StepTransitionType>("next_task");
   const [nextTaskName, setNextTaskName] = useState("");
+  const [comment, setComment] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -35,6 +36,7 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
     if (open) {
       setTransition("next_task");
       setNextTaskName("");
+      setComment("");
       setError(null);
       setSubmitting(false);
     }
@@ -54,7 +56,7 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
       await onSubmit(step!.id, {
         usuario: DEFAULT_ACTOR,
         resultado_cierre: "Tarea completada",
-        comentario: null,
+        comentario: comment.trim() || null,
         observaciones: null,
         transition_type: transition,
         attachments: [],
@@ -103,6 +105,17 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
               autoFocus
             />
           )}
+
+          <TextField
+            label={isWaitingExternal ? "Respuesta / comentario (opcional)" : "Comentario (opcional)"}
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            multiline
+            minRows={2}
+            disabled={submitting}
+            fullWidth
+          />
+
           {error && <Alert severity="error">{error}</Alert>}
         </Stack>
       </DialogContent>

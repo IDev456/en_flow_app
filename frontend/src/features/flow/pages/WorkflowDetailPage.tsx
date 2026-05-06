@@ -177,13 +177,26 @@ export function WorkflowDetailPage() {
       if (!step) return;
 
       if (step.estado === "esperando_respuesta") {
-        // Si ya estaba en espera externa, usamos resolveExternalResponse
-        // Mapeamos al payload que espera el backend para esta accion
+        if (input.transition_type === "wait_external") {
+          throw new Error("Una tarea en espera externa solo puede crear próxima tarea o finalizar el flow.");
+        }
+
+        // Registrar automáticamente un evento externo con el comentario del modal
+        const externalComment = input.comentario?.trim() || "Respuesta externa registrada desde completar tarea";
+        await registerExternalEvent(stepId, {
+          event_type: "respuesta_externa_recibida",
+          comentario: externalComment,
+          source: "manual",
+          registrado_por: input.usuario,
+          attachments: input.attachments,
+        });
+
+        // Luego resolver con transition permitida
         const transitionType: "next_task" | "finish_flow" = input.transition_type as "next_task" | "finish_flow";
         await resolveExternalResponse(stepId, {
           usuario: input.usuario,
           resultado_cierre: input.resultado_cierre ?? "Completado tras espera externa",
-          comentario: input.comentario ?? input.resultado_cierre ?? "Resuelto",
+          comentario: input.comentario ?? externalComment,
           transition_type: transitionType,
           next_task: input.next_task,
           finish_data: input.finish_data,
