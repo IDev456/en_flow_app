@@ -8,11 +8,16 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   Link,
   MenuItem,
   Snackbar,
   Stack,
+  TextField,
   Typography,
 } from "@mui/material";
 import { Link as RouterLink, useLocation, useNavigate, useParams } from "react-router-dom";
@@ -174,11 +179,12 @@ export function WorkflowDetailPage() {
       if (step.estado === "esperando_respuesta") {
         // Si ya estaba en espera externa, usamos resolveExternalResponse
         // Mapeamos al payload que espera el backend para esta accion
+        const transitionType: "next_task" | "finish_flow" = input.transition_type as "next_task" | "finish_flow";
         await resolveExternalResponse(stepId, {
           usuario: input.usuario,
           resultado_cierre: input.resultado_cierre ?? "Completado tras espera externa",
           comentario: input.comentario ?? input.resultado_cierre ?? "Resuelto",
-          transition_type: input.transition_type,
+          transition_type: transitionType,
           next_task: input.next_task,
           finish_data: input.finish_data,
           attachments: input.attachments,
@@ -229,10 +235,6 @@ export function WorkflowDetailPage() {
   function handleOpenCompleteStep(stepId: string) {
     setSelectedStepId(stepId);
     setPendingCompleteDialogStepId(stepId);
-  }
-
-  function handleCompleteDialogOpened() {
-    if (selectedStepId) setPendingCompleteDialogStepId(selectedStepId);
   }
 
   async function handleStepUpdated(step: Step) {
@@ -434,7 +436,6 @@ export function WorkflowDetailPage() {
               onCompleteTask={handleCompleteTask}
               onRegisterExternalEvent={(input) => handleRegisterExternalEvent(selectedStep.id, input)}
               onResolveExternalResponse={(stepId, input) => handleResolveExternalResponse(stepId, input)}
-              onCompleteDialogOpened={handleCompleteDialogOpened}
             />
           </Box>
         )}

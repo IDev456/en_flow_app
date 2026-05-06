@@ -51,7 +51,7 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
     try {
       setSubmitting(true);
       setError(null);
-      await onSubmit(step.id, {
+      await onSubmit(step!.id, {
         usuario: DEFAULT_ACTOR,
         resultado_cierre: "Tarea completada",
         comentario: null,

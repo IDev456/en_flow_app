@@ -67,7 +67,6 @@ export function StepDetailPanel({
   onClose,
   error,
   onSubmitJournal,
-  onCompleteDialogOpened,
   onStepUpdated,
   onRegisterExternalEvent,
   onResolveExternalResponse,
@@ -203,7 +202,6 @@ export function StepDetailPanel({
       const parsed = await Promise.all(Array.from(files).map((file) => readFileAsAttachment(file)));
       if (target === "external") setExternalAttachments((current) => [...current, ...parsed]);
       if (target === "resolve") setResolveAttachments((current) => [...current, ...parsed]);
-      setCompleteError(null);
       setExternalError(null);
       setResolveError(null);
     } catch (err) {
@@ -409,11 +407,6 @@ export function StepDetailPanel({
                 ) : (
                   <Button variant="text" color="inherit" onClick={handleStartStepEdit}>
                     Editar
-                  </Button>
-                )}
-                {canCompleteTask && (
-                  <Button variant="contained" onClick={() => onCompleteDialogOpened?.()} sx={{ textTransform: "none" }}>
-                    Completar tarea
                   </Button>
                 )}
                 {isWaitingExternal && onRegisterExternalEvent && (
