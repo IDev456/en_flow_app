@@ -18,6 +18,8 @@ import {
   Snackbar,
   Stack,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from "@mui/material";
 import { Link as RouterLink, useLocation, useNavigate, useParams } from "react-router-dom";
@@ -27,6 +29,7 @@ import { useToastContext } from "../../../components/Toast";
 import {
   addStepComment,
   completeStep,
+  createRequirementFromFlow,
   getStepComments,
   getWorkflow,
   getStepHistory,
@@ -72,9 +75,13 @@ export function WorkflowDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
   const [linkRequirementOpen, setLinkRequirementOpen] = useState(false);
+  const [linkRequirementMode, setLinkRequirementMode] = useState<"existing" | "new">("existing");
   const [linkRequirementId, setLinkRequirementId] = useState("");
+  const [newRequirementDescription, setNewRequirementDescription] = useState("");
+  const [newRequirementRequester, setNewRequirementRequester] = useState("");
   const [linkRequirementError, setLinkRequirementError] = useState<string | null>(null);
   const [linkingRequirement, setLinkingRequirement] = useState(false);
+  const [creatingRequirement, setCreatingRequirement] = useState(false);
   const [unlinkingRequirementId, setUnlinkingRequirementId] = useState<string | null>(null);
   const [toastOpen, setToastOpen] = useState(Boolean(initialToastMessage));
   const [toastMessage, setToastMessage] = useState<string | null>(initialToastMessage);
@@ -324,15 +331,22 @@ export function WorkflowDetailPage() {
       ...(workflow.trigger_id ? [workflow.trigger_id] : []),
     ]);
     const nextRequirementId = requirements.find((item) => !linkedRequirementIds.has(item.id))?.id ?? "";
+    const hasAvailableRequirements = Boolean(nextRequirementId);
     setLinkRequirementError(null);
+    setLinkRequirementMode(hasAvailableRequirements ? "existing" : "new");
     setLinkRequirementId(nextRequirementId);
+    setNewRequirementDescription("");
+    setNewRequirementRequester("");
     setLinkRequirementOpen(true);
   }
 
   function handleCloseLinkRequirement() {
     setLinkRequirementOpen(false);
     setLinkRequirementError(null);
+    setLinkRequirementMode("existing");
     setLinkRequirementId("");
+    setNewRequirementDescription("");
+    setNewRequirementRequester("");
   }
 
   async function handleLinkRequirement() {
@@ -353,6 +367,34 @@ export function WorkflowDetailPage() {
       setLinkRequirementError(err instanceof Error ? err.message : "No se pudo asociar el requerimiento");
     } finally {
       setLinkingRequirement(false);
+    }
+  }
+
+  async function handleCreateAndLinkRequirement() {
+    if (!workflow) return;
+
+    const description = newRequirementDescription.trim();
+    if (!description) {
+      setLinkRequirementError("Ingresá una descripción para el requerimiento.");
+      return;
+    }
+
+    try {
+      setCreatingRequirement(true);
+      setLinkRequirementError(null);
+      await createRequirementFromFlow(workflow.id, {
+        descripcion: description,
+        solicitante: newRequirementRequester.trim() || null,
+        creado_por: DEFAULT_ACTOR,
+      });
+      await loadWorkflow(selectedStepId ?? undefined);
+      setToastMessage("Requerimiento creado y asociado.");
+      setToastOpen(true);
+      handleCloseLinkRequirement();
+    } catch (err) {
+      setLinkRequirementError(err instanceof Error ? err.message : "No se pudo crear y asociar el requerimiento");
+    } finally {
+      setCreatingRequirement(false);
     }
   }
 
@@ -408,7 +450,7 @@ export function WorkflowDetailPage() {
   );
   const availableRequirements = requirements.filter((item) => !linkedRequirements.some((linked) => linked.id === item.id));
   const linkedRequirementLabel = linkedRequirements.length === 1 ? "Requerimiento asociado" : "Requerimientos asociados";
-  const managingRequirementsBusy = linkingRequirement || unlinkingRequirementId !== null;
+  const managingRequirementsBusy = linkingRequirement || creatingRequirement || unlinkingRequirementId !== null;
 
   return (
     <Stack spacing={3}>
@@ -547,7 +589,7 @@ export function WorkflowDetailPage() {
       />
 
       <Dialog open={linkRequirementOpen} onClose={managingRequirementsBusy ? undefined : handleCloseLinkRequirement} fullWidth maxWidth="sm">
-        <DialogTitle>{linkedRequirements.length > 0 ? "Gestionar requerimientos" : "Asociar requerimiento"}</DialogTitle>
+        <DialogTitle>Asociar requerimiento</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
             {linkedRequirements.length > 0 && (
@@ -591,28 +633,69 @@ export function WorkflowDetailPage() {
               <Divider flexItem />
             )}
 
-            <Stack spacing={0.9}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Asociar otro requerimiento
-              </Typography>
-
-            {availableRequirements.length === 0 ? (
-              <Alert severity="info">No hay requerimientos disponibles para asociar.</Alert>
-            ) : (
-              <TextField
-                select
-                fullWidth
-                label="Requerimiento"
-                value={linkRequirementId}
-                onChange={(event) => setLinkRequirementId(event.target.value)}
+            <Stack spacing={1.25}>
+              <ToggleButtonGroup
+                exclusive
+                size="small"
+                value={linkRequirementMode}
+                onChange={(_, value: "existing" | "new" | null) => {
+                  if (!value) return;
+                  setLinkRequirementMode(value);
+                  setLinkRequirementError(null);
+                }}
+                sx={{ alignSelf: "flex-start" }}
               >
-                {availableRequirements.map((item) => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {item.descripcion?.trim() || `Req ${item.id.slice(0, 8)}`}
-                  </MenuItem>
-                ))}
-              </TextField>
-            )}
+                <ToggleButton value="existing" disabled={availableRequirements.length === 0}>
+                  Asociar existente
+                </ToggleButton>
+                <ToggleButton value="new">Crear nuevo</ToggleButton>
+              </ToggleButtonGroup>
+
+              {linkRequirementMode === "existing" ? (
+                <>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Asociar requerimiento existente
+                  </Typography>
+                  {availableRequirements.length === 0 ? (
+                    <Alert severity="info">
+                      No hay requerimientos disponibles para asociar. Podés crear uno nuevo.
+                    </Alert>
+                  ) : (
+                    <TextField
+                      select
+                      fullWidth
+                      label="Requerimiento"
+                      value={linkRequirementId}
+                      onChange={(event) => setLinkRequirementId(event.target.value)}
+                    >
+                      {availableRequirements.map((item) => (
+                        <MenuItem key={item.id} value={item.id}>
+                          {item.descripcion?.trim() || `Req ${item.id.slice(0, 8)}`}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Crear requerimiento nuevo
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    required
+                    label="Descripción del requerimiento *"
+                    value={newRequirementDescription}
+                    onChange={(event) => setNewRequirementDescription(event.target.value)}
+                  />
+                  <TextField
+                    fullWidth
+                    label="Solicitante (opcional)"
+                    value={newRequirementRequester}
+                    onChange={(event) => setNewRequirementRequester(event.target.value)}
+                  />
+                </>
+              )}
             </Stack>
 
             {linkRequirementError && <Alert severity="error">{linkRequirementError}</Alert>}
@@ -624,10 +707,23 @@ export function WorkflowDetailPage() {
           </Button>
           <Button
             variant="contained"
-            onClick={() => void handleLinkRequirement()}
-            disabled={managingRequirementsBusy || availableRequirements.length === 0 || !linkRequirementId}
+            onClick={() =>
+              void (linkRequirementMode === "existing" ? handleLinkRequirement() : handleCreateAndLinkRequirement())
+            }
+            disabled={
+              managingRequirementsBusy ||
+              (linkRequirementMode === "existing"
+                ? availableRequirements.length === 0 || !linkRequirementId
+                : !newRequirementDescription.trim())
+            }
           >
-            {linkingRequirement ? "Asociando..." : "Asociar"}
+            {linkRequirementMode === "existing"
+              ? linkingRequirement
+                ? "Asociando..."
+                : "Asociar"
+              : creatingRequirement
+                ? "Creando..."
+                : "Crear y asociar"}
           </Button>
         </DialogActions>
       </Dialog>
