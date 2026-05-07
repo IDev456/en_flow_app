@@ -100,6 +100,8 @@ export function WorkflowDetailPage() {
 
   useEffect(() => {
     if (selectedStepId) {
+      setStepComments([]);
+      setStepHistory([]);
       void loadStepSideData(selectedStepId);
     } else {
       setStepComments([]);
@@ -159,7 +161,7 @@ export function WorkflowDetailPage() {
         comentario: input.comentario,
         attachments: input.attachments ?? [],
       });
-      await loadStepSideData(selectedStepId);
+      await refreshAfterStepChange(selectedStepId);
       return;
     }
 
@@ -271,8 +273,11 @@ export function WorkflowDetailPage() {
     const refreshedHistory = await getStepHistory(step.id);
     const historyTracksNameChange = refreshedHistory.some((entry) => {
       const field = entry.campo.trim().toLowerCase();
+      const previousValue = (entry.valor_anterior ?? "").trim();
       const newValue = (entry.valor_nuevo ?? "").trim();
-      return field.includes("nombre") && newValue === sanitizedName;
+      const fieldSuggestsName = field.includes("nombre") || field.includes("name") || field.includes("title");
+      const valuesMatch = previousValue === previousName && newValue === sanitizedName;
+      return (fieldSuggestsName && newValue === sanitizedName) || valuesMatch;
     });
 
     if (!historyTracksNameChange) {
@@ -367,6 +372,8 @@ export function WorkflowDetailPage() {
   }
 
   const selectedStep: Step | null = workflow.steps.find((step) => step.id === selectedStepId) ?? pickRelevantStep(workflow);
+  const selectedStepHasRecords = stepComments.length > 0 || stepHistory.length > 0;
+  const stepHasRecords = selectedStepId ? { [selectedStepId]: selectedStepHasRecords } : undefined;
   const linkedRequirementIds = new Set([...(workflow.requirement_ids ?? []), ...(workflow.trigger_id ? [workflow.trigger_id] : [])]);
   const linkedRequirements = requirements.filter(
     (item) => linkedRequirementIds.has(item.id) || item.workflow_ids.includes(workflow.id)
@@ -470,6 +477,7 @@ export function WorkflowDetailPage() {
                 steps={workflow.steps}
                 workflowClosed={workflow.estado === "finalizado"}
                 selectedStepId={selectedStepId}
+                stepHasRecords={stepHasRecords}
                 onSelectStep={handleSelectStep}
                 onOpenStep={handleOpenStep}
                 onCompleteStepIntent={handleOpenCompleteStep}

@@ -18,6 +18,7 @@ type WorkflowGraphProps = {
   steps: Step[];
   workflowClosed: boolean;
   selectedStepId: string | null;
+  stepHasRecords?: Record<string, boolean>;
   onSelectStep: (stepId: string) => void;
   onOpenStep: (stepId: string) => void;
   onOpenTrigger: () => void;
@@ -78,9 +79,7 @@ function renderStepTiming(step: Step): React.ReactElement | null {
   );
 }
 
-function renderStepRecordsIndicator(step: Step, onClick: () => void): React.ReactElement {
-  const hasRecords = Boolean(step.ultimo_comentario_fecha || step.ultimo_comentario || step.resultado || step.observaciones);
-
+function renderStepRecordsIndicator(hasRecords: boolean, onClick: () => void): React.ReactElement {
   return (
     <ButtonBase
       onClick={(event) => {
@@ -345,6 +344,7 @@ function StepNameEditor({ step, onRenameStep, onEditingChange, dense = false }: 
 function VerticalWorkflowGraph({
   steps,
   selectedStepId,
+  stepHasRecords,
   onOpenStep,
   onCompleteStepIntent,
   onRenameStep,
@@ -399,6 +399,9 @@ function VerticalWorkflowGraph({
             const isFirst = index === 0;
             const isLast = index === orderedSteps.length - 1;
             const canComplete = ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado);
+            const hasRecords =
+              stepHasRecords?.[step.id] ??
+              Boolean(step.ultimo_comentario_fecha || step.ultimo_comentario || step.resultado || step.observaciones);
             const isEditingName = editingNameStepId === step.id;
             const isInProgress = step.estado === "activo";
             return (
@@ -546,7 +549,7 @@ function VerticalWorkflowGraph({
                       />
 
                       {renderStepTiming(step)}
-                      {renderStepRecordsIndicator(step, () => onOpenStep(step.id))}
+                      {renderStepRecordsIndicator(hasRecords, () => onOpenStep(step.id))}
                     </Stack>
                   </Box>
                 </Card>
@@ -562,6 +565,7 @@ function VerticalWorkflowGraph({
 function GitLogWorkflowGraph({
   steps,
   selectedStepId,
+  stepHasRecords,
   onOpenStep,
   onRenameStep,
 }: WorkflowGraphProps) {
@@ -588,6 +592,9 @@ function GitLogWorkflowGraph({
       <Stack spacing={1.5}>
         {orderedSteps.map((step) => {
           const isSelected = selectedStepId === step.id;
+          const hasRecords =
+            stepHasRecords?.[step.id] ??
+            Boolean(step.ultimo_comentario_fecha || step.ultimo_comentario || step.resultado || step.observaciones);
           return (
             <Card
               key={step.id}
@@ -608,7 +615,7 @@ function GitLogWorkflowGraph({
                     </Stack>
                   </Stack>
                   {renderStepTiming(step)}
-                  {renderStepRecordsIndicator(step, () => onOpenStep(step.id))}
+                  {renderStepRecordsIndicator(hasRecords, () => onOpenStep(step.id))}
                 </Stack>
               </Box>
             </Card>

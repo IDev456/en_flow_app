@@ -12,6 +12,8 @@ import {
   CardContent,
   Chip,
   Divider,
+  Dialog,
+  DialogContent,
   IconButton,
   Snackbar,
   Stack,
@@ -44,6 +46,11 @@ type JournalProps = {
 type DraftAttachment = AttachmentInput & {
   local_id: string;
   preview_url: string;
+};
+
+type ImagePreview = {
+  name: string;
+  src: string;
 };
 
 const MAX_CHARS = 1000;
@@ -102,6 +109,7 @@ export function Journal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedToastOpen, setSavedToastOpen] = useState(false);
+  const [previewImage, setPreviewImage] = useState<ImagePreview | null>(null);
   const items = useMemo(() => buildJournalItems(history, comments), [history, comments]);
   const visibleItems = useMemo(() => {
     const hasAlternativeItem = items.some((item) => {
@@ -490,6 +498,32 @@ export function Journal({
         onClose={() => setSavedToastOpen(false)}
         message="Avance guardado"
       />
+      <Dialog open={Boolean(previewImage)} onClose={() => setPreviewImage(null)} fullWidth maxWidth="lg">
+        <DialogContent
+          sx={{
+            p: { xs: 1.5, md: 2 },
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            minHeight: { xs: 240, md: 380 },
+          }}
+        >
+          {previewImage && (
+            <Box
+              component="img"
+              src={previewImage.src}
+              alt={previewImage.name}
+              sx={{
+                width: "100%",
+                maxWidth: "min(1200px, 92vw)",
+                maxHeight: "82vh",
+                objectFit: "contain",
+                borderRadius: 1,
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Stack spacing={1.1}>
         {visibleItems.length === 0 ? (
@@ -499,7 +533,7 @@ export function Journal({
                 Sin registros todavía.
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                Los comentarios, adjuntos y cambios de estado aparecerán acá.
+                Los comentarios, adjuntos y cambios aparecerán acá.
               </Typography>
             </CardContent>
           </Card>
@@ -525,10 +559,20 @@ export function Journal({
                   </Typography>
                 ) : (
                   <Typography variant="body2" color="text.secondary">
-                    Adjuntos
+                    Adjunto agregado
                   </Typography>
                 )}
-                {item.attachments.length > 0 && <AttachmentList attachments={item.attachments} />}
+                {item.attachments.length > 0 && (
+                  <AttachmentList
+                    attachments={item.attachments}
+                    onOpenImage={(attachment) =>
+                      setPreviewImage({
+                        name: attachment.nombre,
+                        src: `data:${attachment.content_type};base64,${attachment.content_base64}`,
+                      })
+                    }
+                  />
+                )}
               </CardContent>
             </Card>
             );
@@ -541,9 +585,10 @@ export function Journal({
 
 type AttachmentListProps = {
   attachments: Attachment[];
+  onOpenImage?: (attachment: Attachment) => void;
 };
 
-function AttachmentList({ attachments }: AttachmentListProps) {
+function AttachmentList({ attachments, onOpenImage }: AttachmentListProps) {
   return (
     <Box
       sx={{
@@ -555,16 +600,31 @@ function AttachmentList({ attachments }: AttachmentListProps) {
       {attachments.map((attachment) => {
         const dataUrl = `data:${attachment.content_type};base64,${attachment.content_base64}`;
         const isImage = attachment.content_type.startsWith("image/");
+        const canPreviewImage = isImage && Boolean(onOpenImage);
         return (
           <Card
             key={attachment.id}
             variant="outlined"
-            component="a"
-            href={dataUrl}
-            download={attachment.nombre}
-            target="_blank"
-            rel="noreferrer"
             sx={{ textDecoration: "none", borderColor: (theme) => alpha(theme.palette.divider, 0.85) }}
+            {...(canPreviewImage
+              ? {
+                  role: "button",
+                  tabIndex: 0,
+                  onClick: () => onOpenImage?.(attachment),
+                  onKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onOpenImage?.(attachment);
+                    }
+                  },
+                }
+              : {
+                  component: "a",
+                  href: dataUrl,
+                  download: attachment.nombre,
+                  target: "_blank",
+                  rel: "noreferrer",
+                })}
           >
             <CardContent sx={{ display: "grid", gap: 1, p: 1.25 }}>
               {isImage ? (
