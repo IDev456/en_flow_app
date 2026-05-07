@@ -157,7 +157,7 @@ export function StepDetailPanel({
   }
 
   const canChangeStatus = ["activo", "espera", "problema"].includes(step.estado);
-  const canCompleteTask = ["activo", "espera", "problema"].includes(step.estado);
+  const canAddManualRecords = !["completado", "cancelada"].includes(step.estado);
   const isWaitingExternal = step.estado === "esperando_respuesta";
   const latestMessage = step.ultimo_comentario?.trim() || (step.orden === 1 && step.descripcion?.trim() ? step.descripcion.trim() : "Sin registros todavía");
   const displayStepName = stepDraftName.trim() || step.nombre;
@@ -512,14 +512,14 @@ export function StepDetailPanel({
 
         <Box sx={{ p: { xs: 2.5, md: 3 } }}>
           <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2 }}>
-            Historial y comentarios
+            Registros del paso
           </Typography>
           <Journal
             step={step}
             comments={comments}
             history={history}
             canChangeStatus={!drawer && canChangeStatus}
-            showComposer={!drawer}
+            showComposer={canAddManualRecords}
             selectedStatus={selectedStatus}
             onSelectedStatusChange={setSelectedStatus}
             composerExpanded={composerExpanded}

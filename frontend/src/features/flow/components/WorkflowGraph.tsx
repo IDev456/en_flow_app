@@ -74,16 +74,35 @@ function renderStepTiming(step: Step): React.ReactElement | null {
   );
 }
 
-function renderStepRecordsIndicator(step: Step): React.ReactElement {
+function renderStepRecordsIndicator(step: Step, onClick: () => void): React.ReactElement {
   const hasRecords = Boolean(step.ultimo_comentario_fecha || step.ultimo_comentario || step.resultado || step.observaciones);
 
   return (
-    <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", mt: 0.5 }}>
-      <NotesRoundedIcon sx={{ fontSize: 14, color: "text.secondary" }} />
-      <Typography variant="caption" color="text.secondary">
+    <ButtonBase
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      sx={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 0.5,
+        borderRadius: 1,
+        mt: 0.5,
+        width: "fit-content",
+        color: "text.secondary",
+        textAlign: "left",
+        "&:hover": {
+          color: "primary.main",
+          textDecoration: "underline",
+        },
+      }}
+    >
+      <NotesRoundedIcon sx={{ fontSize: 14 }} />
+      <Typography variant="caption">
         {hasRecords ? "Con registros" : "Sin registros"}
       </Typography>
-    </Stack>
+    </ButtonBase>
   );
 }
 
@@ -150,7 +169,6 @@ function getStepStateColors(theme: Theme, status: Step["estado"]) {
 function VerticalWorkflowGraph({
   steps,
   selectedStepId,
-  onSelectStep,
   onOpenStep,
   onCompleteStepIntent,
 }: WorkflowGraphProps) {
@@ -196,8 +214,6 @@ function VerticalWorkflowGraph({
             const isFirst = index === 0;
             const isLast = index === orderedSteps.length - 1;
             const canComplete = ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado);
-            const hasRecords = Boolean(step.ultimo_comentario_fecha || step.ultimo_comentario || step.resultado || step.observaciones);
-
             return (
               <Box
                 key={step.id}
@@ -320,38 +336,7 @@ function VerticalWorkflowGraph({
                       </Stack>
 
                       {renderStepTiming(step)}
-                      {renderStepRecordsIndicator(step)}
-
-                      <ButtonBase
-                        onClick={() => {
-                          onSelectStep(step.id);
-                          onOpenStep(step.id);
-                        }}
-                        aria-label={`Ver registro de la tarea ${step.nombre}`}
-                        sx={{
-                          display: "block",
-                          width: "100%",
-                          textAlign: "left",
-                          borderRadius: 1.5,
-                          px: 0,
-                          py: 0,
-                          cursor: "pointer",
-                          transition: "background-color 180ms ease",
-                          "&:hover": {
-                            backgroundColor: alpha(theme.palette.action.hover, 0.05),
-                          },
-                          "&:focus-visible": {
-                            outline: `2px solid ${alpha(theme.palette.primary.main, 0.4)}`,
-                            outlineOffset: "2px",
-                          },
-                        }}
-                      >
-                        <Box sx={{ px: 0.25, py: 0.25 }}>
-                          <Typography variant="caption" color="text.secondary">
-                            Ver registros
-                          </Typography>
-                        </Box>
-                      </ButtonBase>
+                      {renderStepRecordsIndicator(step, () => onOpenStep(step.id))}
                     </Stack>
                   </Box>
                 </Card>
@@ -367,7 +352,6 @@ function VerticalWorkflowGraph({
 function GitLogWorkflowGraph({
   steps,
   selectedStepId,
-  onSelectStep,
   onOpenStep,
 }: WorkflowGraphProps) {
   const theme = useTheme();
@@ -393,7 +377,6 @@ function GitLogWorkflowGraph({
       <Stack spacing={1.5}>
         {orderedSteps.map((step) => {
           const isSelected = selectedStepId === step.id;
-          const hasRecords = Boolean(step.ultimo_comentario_fecha || step.ultimo_comentario || step.resultado || step.observaciones);
           return (
             <Card
               key={step.id}
@@ -414,37 +397,7 @@ function GitLogWorkflowGraph({
                     </Stack>
                   </Stack>
                   {renderStepTiming(step)}
-                  {renderStepRecordsIndicator(step)}
-                  <ButtonBase
-                    onClick={() => {
-                      onSelectStep(step.id);
-                      onOpenStep(step.id);
-                    }}
-                    aria-label={`Ver registro de la tarea ${step.nombre}`}
-                    sx={{
-                      display: "block",
-                      width: "100%",
-                      textAlign: "left",
-                      borderRadius: 1.5,
-                      px: 0,
-                      py: 0,
-                      cursor: "pointer",
-                      transition: "background-color 180ms ease",
-                      "&:hover": {
-                        backgroundColor: alpha(theme.palette.action.hover, 0.05),
-                      },
-                      "&:focus-visible": {
-                        outline: `2px solid ${alpha(theme.palette.primary.main, 0.4)}`,
-                        outlineOffset: "2px",
-                      },
-                    }}
-                  >
-                    <Box sx={{ px: 0.25, py: 0.25 }}>
-                      <Typography variant="caption" color="text.secondary">
-                        Ver registros
-                      </Typography>
-                    </Box>
-                  </ButtonBase>
+                  {renderStepRecordsIndicator(step, () => onOpenStep(step.id))}
                 </Stack>
               </Box>
             </Card>
