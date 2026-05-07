@@ -157,7 +157,7 @@ Documenta hallazgos y recomendaciones.
 Ejecuta validaciones completas después de modificar [ARCHIVOS/COMPONENTES].
 
 Pasos obligatorios:
-1. Build frontend: `docker run --rm -v "$((Get-Location).Path)/frontend:/app" -w /app node:20-alpine sh -c "npm install && npm run build"`
+1. Build frontend: Ejecutar build desde la raíz del repositorio (adaptar comando al shell activo)
 2. Verificar TypeScript: Sin errores de compilación
 3. Verificar imports: Todos resueltos
 4. Probar funcionalidad: [funciones específicas a probar]
@@ -180,5 +180,42 @@ Estructura del resumen:
 6. **Compatibilidad**: Confirmación frontend/backend
 
 Incluye código relevante si es necesario para explicación.
-```</content>
+```
+
+## Reglas para Prompts Operativos
+
+Los prompts generados para IAs ejecutoras no deben incluir rutas absolutas salvo que el usuario lo pida explícitamente para un entorno concreto.
+
+En su lugar, deben decir:
+- "Desde la raíz del repositorio"
+- "Usar rutas relativas"
+- "Adaptar comandos al shell activo"
+
+## Entorno y Rutas
+
+Este proyecto puede trabajarse desde distintos entornos: Windows, Linux, WSL, contenedores o herramientas de IA integradas al IDE.
+
+No asumir rutas absolutas del proyecto.
+
+La IA ejecutora debe:
+1. Trabajar desde la raíz del repositorio actualmente abierto.
+2. Confirmar la ubicación antes de ejecutar comandos.
+3. Usar rutas relativas al repositorio.
+4. Adaptar los comandos al shell disponible.
+5. No mezclar sintaxis de shells distintos.
+
+Para comandos:
+- Si el entorno es PowerShell, usar `;` como separador.
+- Si el entorno es Bash/Linux/WSL, puede usarse `&&`.
+- No usar comandos Linux si el entorno activo es PowerShell.
+- No usar comandos PowerShell si el entorno activo es Bash/Linux.
+- Si un comando falla por sintaxis del shell, no insistir con variantes al azar: identificar el shell activo y adaptar el comando correctamente.
+
+La raíz del repo puede identificarse por la presencia de archivos/carpetas como:
+- .git
+- docker-compose.yml
+- frontend/
+- backend/
+- package.json, si aplica
+- README.md, si aplica</content>
 <parameter name="filePath">c:\Users\Ivan Mendez\Documents\en_flow_app\PROMPT_TEMPLATES.md
