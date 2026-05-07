@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
 import CheckRoundedIcon from "@mui/icons-material/CheckRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
@@ -177,10 +177,11 @@ function canEditStepName(step: Step) {
 type StepNameEditorProps = {
   step: Step;
   onRenameStep?: (step: Step, nextName: string) => Promise<void>;
+  onEditingChange?: (stepId: string, editing: boolean) => void;
   dense?: boolean;
 };
 
-function StepNameEditor({ step, onRenameStep, dense = false }: StepNameEditorProps) {
+function StepNameEditor({ step, onRenameStep, onEditingChange, dense = false }: StepNameEditorProps) {
   const [editing, setEditing] = useState(false);
   const [draftName, setDraftName] = useState(step.nombre);
   const [error, setError] = useState<string | null>(null);
@@ -193,6 +194,10 @@ function StepNameEditor({ step, onRenameStep, dense = false }: StepNameEditorPro
     setError(null);
     setSaving(false);
   }, [step.id, step.nombre]);
+
+  useEffect(() => {
+    onEditingChange?.(step.id, editing);
+  }, [editing, onEditingChange, step.id]);
 
   function handleStartEditing(event: MouseEvent<HTMLButtonElement>) {
     event.preventDefault();
@@ -347,7 +352,15 @@ function VerticalWorkflowGraph({
   const theme = useTheme();
   const viewportRef = useRef<HTMLDivElement>(null);
   const selectedCardRef = useRef<HTMLDivElement | null>(null);
+  const [editingNameStepId, setEditingNameStepId] = useState<string | null>(null);
   const orderedSteps = [...steps].sort((left, right) => right.orden - left.orden);
+  const handleStepNameEditingChange = useCallback((stepId: string, editing: boolean) => {
+    setEditingNameStepId((current) => {
+      if (editing) return stepId;
+      if (current === stepId) return null;
+      return current;
+    });
+  }, []);
 
   useEffect(() => {
     if (!viewportRef.current || !selectedCardRef.current) {
@@ -386,6 +399,8 @@ function VerticalWorkflowGraph({
             const isFirst = index === 0;
             const isLast = index === orderedSteps.length - 1;
             const canComplete = ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado);
+            const isEditingName = editingNameStepId === step.id;
+            const isInProgress = step.estado === "activo";
             return (
               <Box
                 key={step.id}
@@ -431,6 +446,7 @@ function VerticalWorkflowGraph({
                   )}
                   <Box
                     sx={{
+                      position: "relative",
                       width: 84,
                       height: 84,
                       borderRadius: "50%",
@@ -444,6 +460,30 @@ function VerticalWorkflowGraph({
                       borderColor: stateColors.borderColor,
                       backgroundColor: stateColors.backgroundColor,
                       boxShadow: isSelected ? `0 0 0 3px ${alpha(stateColors.textColor, 0.12)}` : "none",
+                      ...(isInProgress
+                        ? {
+                            "&::after": {
+                              content: '""',
+                              position: "absolute",
+                              inset: -2,
+                              borderRadius: "50%",
+                              pointerEvents: "none",
+                              boxShadow: `0 0 0 0 ${alpha(stateColors.textColor, 0.14)}`,
+                              animation: "softPulse 2.8s ease-in-out infinite",
+                            },
+                            "@keyframes softPulse": {
+                              "0%": {
+                                boxShadow: `0 0 0 0 ${alpha(stateColors.textColor, 0.14)}`,
+                              },
+                              "50%": {
+                                boxShadow: `0 0 0 6px ${alpha(stateColors.textColor, 0.06)}`,
+                              },
+                              "100%": {
+                                boxShadow: `0 0 0 0 ${alpha(stateColors.textColor, 0)}`,
+                              },
+                            },
+                          }
+                        : {}),
                     }}
                   >
                     <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.1, color: stateColors.textColor }}>
@@ -470,7 +510,7 @@ function VerticalWorkflowGraph({
                     },
                   }}
                 >
-                  {canComplete && onCompleteStepIntent ? (
+                  {canComplete && onCompleteStepIntent && !isEditingName ? (
                     <Button
                       className="complete-step-button"
                       size="small"
@@ -499,7 +539,11 @@ function VerticalWorkflowGraph({
                   ) : null}
                   <Box sx={{ p: 1.5 }}>
                     <Stack spacing={0.95}>
-                      <StepNameEditor step={step} onRenameStep={onRenameStep} />
+                      <StepNameEditor
+                        step={step}
+                        onRenameStep={onRenameStep}
+                        onEditingChange={handleStepNameEditingChange}
+                      />
 
                       {renderStepTiming(step)}
                       {renderStepRecordsIndicator(step, () => onOpenStep(step.id))}

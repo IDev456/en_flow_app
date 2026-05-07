@@ -358,7 +358,7 @@ export function StepDetailPanel({
         <Box sx={{ p: { xs: 2.5, md: 3 } }}>
           {drawer ? (
             <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", justifyContent: "space-between" }}>
-              <Typography variant="h6">Registros del paso</Typography>
+              <Typography variant="h6">Registro de la tarea</Typography>
               {onClose ? (
                 <IconButton onClick={onClose} aria-label="Cerrar panel de registros">
                   <CloseRoundedIcon />
@@ -505,7 +505,7 @@ export function StepDetailPanel({
         <Box sx={{ p: { xs: 2.5, md: 3 } }}>
           {!drawer && (
             <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2 }}>
-              Registros del paso
+              Registro de la tarea
             </Typography>
           )}
           <Journal
