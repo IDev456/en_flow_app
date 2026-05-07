@@ -103,6 +103,23 @@ export function Journal({
   const [error, setError] = useState<string | null>(null);
   const [savedToastOpen, setSavedToastOpen] = useState(false);
   const items = useMemo(() => buildJournalItems(history, comments), [history, comments]);
+  const visibleItems = useMemo(() => {
+    const hasAlternativeItem = items.some((item) => {
+      const normalized = item.body.trim().toLowerCase();
+      return normalized.length > 0 && !normalized.includes("tarea creada desde cierre");
+    });
+
+    return items.filter((item) => {
+      const body = item.body.trim();
+      if (!body && item.attachments.length === 0) {
+        return false;
+      }
+      if (hasAlternativeItem && body.toLowerCase().includes("tarea creada desde cierre")) {
+        return false;
+      }
+      return true;
+    });
+  }, [items]);
   const commentTrimmed = text.trim();
   const canComment = step.puede_tener_comentarios;
   const hasAttachments = attachments.length > 0;
@@ -305,7 +322,7 @@ export function Journal({
       {showComposer ? (
         <Box ref={composerRef}>
           <Stack spacing={2}>
-            <Typography variant="h6">Registro operativo</Typography>
+            <Typography variant="h6">Agregar registro</Typography>
 
             {composerExpanded ? (
               <Stack spacing={2}>
@@ -343,23 +360,9 @@ export function Journal({
                 </Stack>
               </Stack>
             ) : (
-              <Stack
-                direction={{ xs: "column", sm: "row" }}
-                spacing={1}
-                sx={{ alignItems: { xs: "stretch", sm: "center" }, justifyContent: "space-between" }}
-              >
-                <Button
-                  type="button"
-                  variant="contained"
-                  onClick={handleOpenComposer}
-                  disabled={!canComment}
-                >
-                  Registrar avance
-                </Button>
-                <Typography variant="body2" color="text.secondary">
-                  {canComment ? "Abrí un registro rápido cuando haya novedades." : "Esta tarea no admite registros."}
-                </Typography>
-              </Stack>
+              <Button type="button" variant="contained" onClick={handleOpenComposer} disabled={!canComment}>
+                Agregar registro
+              </Button>
             )}
 
             {attachments.length > 0 && (
@@ -491,23 +494,38 @@ export function Journal({
       />
 
       <Stack spacing={1.5}>
-        {items.length === 0 ? (
+        {visibleItems.length === 0 ? (
           <Alert severity="info">Sin registros todavia. Cuando registres avances, adjuntos o cambios de estado apareceran aqui en orden cronologico.</Alert>
         ) : (
-          items.map((item) => (
+          visibleItems.map((item) => {
+            const body = item.body.trim();
+            return (
             <Card key={item.id} variant="outlined">
-              <CardContent sx={{ display: "grid", gap: 1.25 }}>
+              <CardContent sx={{ display: "grid", gap: 1, p: 1.5 }}>
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between" }}>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="caption" color="text.secondary">
                     {formatDate(item.date)}
                   </Typography>
-                  {item.kind === "status" && <StatusBadge value={item.status} />}
+                  {item.kind === "status" && (
+                    <Box sx={{ "& .MuiChip-root": { height: 22, fontSize: "0.72rem" } }}>
+                      <StatusBadge value={item.status} />
+                    </Box>
+                  )}
                 </Stack>
-                {item.body && <Typography variant="body1">{item.body}</Typography>}
+                {body ? (
+                  <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                    {body}
+                  </Typography>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    Adjuntos
+                  </Typography>
+                )}
                 {item.attachments.length > 0 && <AttachmentList attachments={item.attachments} />}
               </CardContent>
             </Card>
-          ))
+            );
+          })
         )}
       </Stack>
     </Stack>

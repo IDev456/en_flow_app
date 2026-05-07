@@ -1,9 +1,12 @@
-import { useEffect, useRef, type MouseEvent, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
+import CheckRoundedIcon from "@mui/icons-material/CheckRounded";
+import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
+import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import NotesRoundedIcon from "@mui/icons-material/NotesRounded";
 import type { Theme } from "@mui/material/styles";
 import { alpha, useTheme } from "@mui/material/styles";
-import { Box, Button, ButtonBase, Card, Chip, Stack, Typography } from "@mui/material";
+import { Box, Button, ButtonBase, Card, Chip, IconButton, Stack, TextField, Typography } from "@mui/material";
 
 import type { Step } from "../types";
 import { formatDate, formatElapsedTime, getStatusTone, humanizeStatus } from "../utils";
@@ -19,6 +22,7 @@ type WorkflowGraphProps = {
   onOpenStep: (stepId: string) => void;
   onOpenTrigger: () => void;
   onCompleteStepIntent?: (stepId: string) => void;
+  onRenameStep?: (step: Step, nextName: string) => Promise<void>;
 };
 
 export function WorkflowGraph(props: WorkflowGraphProps) {
@@ -166,11 +170,179 @@ function getStepStateColors(theme: Theme, status: Step["estado"]) {
   };
 }
 
+function canEditStepName(step: Step) {
+  return ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado);
+}
+
+type StepNameEditorProps = {
+  step: Step;
+  onRenameStep?: (step: Step, nextName: string) => Promise<void>;
+  dense?: boolean;
+};
+
+function StepNameEditor({ step, onRenameStep, dense = false }: StepNameEditorProps) {
+  const [editing, setEditing] = useState(false);
+  const [draftName, setDraftName] = useState(step.nombre);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const allowInlineEdit = canEditStepName(step) && Boolean(onRenameStep);
+
+  useEffect(() => {
+    setEditing(false);
+    setDraftName(step.nombre);
+    setError(null);
+    setSaving(false);
+  }, [step.id, step.nombre]);
+
+  function handleStartEditing(event: MouseEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!allowInlineEdit || saving) return;
+    setDraftName(step.nombre);
+    setError(null);
+    setEditing(true);
+  }
+
+  async function handleSave() {
+    const nextName = draftName.trim();
+    if (!nextName) {
+      setError("El nombre no puede estar vacío.");
+      return;
+    }
+    if (nextName === step.nombre) {
+      setEditing(false);
+      setError(null);
+      return;
+    }
+    if (!onRenameStep) {
+      setEditing(false);
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError(null);
+      await onRenameStep(step, nextName);
+      setEditing(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo actualizar el nombre.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleCancel() {
+    if (saving) return;
+    setEditing(false);
+    setDraftName(step.nombre);
+    setError(null);
+  }
+
+  function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void handleSave();
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      handleCancel();
+    }
+  }
+
+  if (editing) {
+    return (
+      <Stack spacing={0.5} sx={{ mt: dense ? 0 : 1, flex: 1 }}>
+        <Stack direction="row" spacing={0.75} sx={{ alignItems: "flex-start" }}>
+          <TextField
+            size="small"
+            autoFocus
+            fullWidth
+            value={draftName}
+            onChange={(event) => setDraftName(event.target.value)}
+            onKeyDown={handleInputKeyDown}
+            error={Boolean(error)}
+            disabled={saving}
+            slotProps={{ htmlInput: { maxLength: 180 } }}
+          />
+          <IconButton
+            size="small"
+            color="primary"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void handleSave();
+            }}
+            disabled={saving}
+            aria-label={`Guardar nombre de ${step.nombre}`}
+          >
+            <CheckRoundedIcon fontSize="small" />
+          </IconButton>
+          <IconButton
+            size="small"
+            color="inherit"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              handleCancel();
+            }}
+            disabled={saving}
+            aria-label={`Cancelar edición de ${step.nombre}`}
+          >
+            <CloseRoundedIcon fontSize="small" />
+          </IconButton>
+        </Stack>
+        {error && (
+          <Typography variant="caption" color="error">
+            {error}
+          </Typography>
+        )}
+      </Stack>
+    );
+  }
+
+  return (
+    <Stack
+      direction="row"
+      spacing={0.5}
+      sx={{
+        alignItems: "center",
+        mt: dense ? 0 : 1,
+        "& .step-name-edit-button": {
+          opacity: 0,
+          visibility: "hidden",
+          transition: "opacity 160ms ease",
+        },
+        "&:hover .step-name-edit-button, &:focus-within .step-name-edit-button": {
+          opacity: 1,
+          visibility: "visible",
+        },
+      }}
+    >
+      <Typography variant="h6" sx={{ lineHeight: 1.2 }}>
+        {step.nombre}
+      </Typography>
+      {allowInlineEdit ? (
+        <IconButton
+          className="step-name-edit-button"
+          size="small"
+          color="inherit"
+          onClick={handleStartEditing}
+          aria-label={`Editar nombre de ${step.nombre}`}
+        >
+          <EditRoundedIcon sx={{ fontSize: 16 }} />
+        </IconButton>
+      ) : null}
+    </Stack>
+  );
+}
+
 function VerticalWorkflowGraph({
   steps,
   selectedStepId,
   onOpenStep,
   onCompleteStepIntent,
+  onRenameStep,
 }: WorkflowGraphProps) {
   const theme = useTheme();
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -327,13 +499,7 @@ function VerticalWorkflowGraph({
                   ) : null}
                   <Box sx={{ p: 1.5 }}>
                     <Stack spacing={0.95}>
-                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                        <Box sx={{ flex: 1 }}>
-                          <Typography variant="h6" sx={{ mt: 1 }}>
-                            {step.nombre}
-                          </Typography>
-                        </Box>
-                      </Stack>
+                      <StepNameEditor step={step} onRenameStep={onRenameStep} />
 
                       {renderStepTiming(step)}
                       {renderStepRecordsIndicator(step, () => onOpenStep(step.id))}
@@ -353,6 +519,7 @@ function GitLogWorkflowGraph({
   steps,
   selectedStepId,
   onOpenStep,
+  onRenameStep,
 }: WorkflowGraphProps) {
   const theme = useTheme();
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -393,7 +560,7 @@ function GitLogWorkflowGraph({
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
                     <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", gap: 1 }}>
                       <Chip label={`T${step.orden.toString().padStart(2, "0")}`} size="small" variant="outlined" />
-                      <Typography variant="h6">{step.nombre}</Typography>
+                      <StepNameEditor step={step} onRenameStep={onRenameStep} dense />
                     </Stack>
                   </Stack>
                   {renderStepTiming(step)}

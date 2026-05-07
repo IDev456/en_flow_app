@@ -356,164 +356,158 @@ export function StepDetailPanel({
       />
       <CardContent sx={{ p: 0 }}>
         <Box sx={{ p: { xs: 2.5, md: 3 } }}>
-          <Stack spacing={2}>
-            <Stack direction="row" spacing={1.5} sx={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-              <Box>
-                <Typography variant="overline" color="primary.light">
-                  Tarea {step.orden}
-                </Typography>
-                {editingStep ? (
-                  <Stack spacing={1.25} sx={{ mt: 0.75, minWidth: { xs: "100%", sm: 360 } }}>
-                    <TextField
-                      label="Nombre de la tarea"
-                      value={stepDraftName}
-                      onChange={(event) => setStepDraftName(event.target.value)}
-                      disabled={savingStep}
-                      autoFocus
-                    />
-                    <TextField
-                      label="Descripción"
-                      multiline
-                      minRows={2}
-                      value={stepDraftDescription}
-                      onChange={(event) => setStepDraftDescription(event.target.value)}
-                      disabled={savingStep}
-                    />
-                  </Stack>
-                ) : (
-                  <>
-                    <Typography variant="h5" sx={{ mt: 0.25 }}>
-                      {displayStepName}
-                    </Typography>
-                    {drawer && (
-                      <Box sx={{ mt: 1 }}>
-                        <StatusBadge value={step.estado} />
-                      </Box>
-                    )}
-                    {!drawer && displayStepDescription && (
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
-                        {displayStepDescription}
-                      </Typography>
-                    )}
-                  </>
-                )}
-              </Box>
-
-              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                {drawer ? (
-                  onClose ? (
-                    <IconButton onClick={onClose} aria-label="Cerrar detalle de la tarea">
-                      <CloseRoundedIcon />
-                    </IconButton>
-                  ) : null
-                ) : (
-                  <>
-                    {editingStep ? (
-                      <>
-                        <Button variant="text" color="inherit" onClick={handleCancelStepEdit} disabled={savingStep}>
-                          Cancelar
-                        </Button>
-                        <Button variant="contained" onClick={() => void handleSaveStepEdit()} disabled={savingStep}>
-                          {savingStep ? "Guardando..." : "Guardar"}
-                        </Button>
-                      </>
-                    ) : (
-                      <Button variant="text" color="inherit" onClick={handleStartStepEdit}>
-                        Editar
-                      </Button>
-                    )}
-                    {isWaitingExternal && onRegisterExternalEvent && (
-                      <Button variant="contained" color="info" onClick={() => setExternalDialogOpen(true)} sx={{ textTransform: "none" }}>
-                        Registrar respuesta recibida
-                      </Button>
-                    )}
-                    {canChangeStatus && (
-                      <>
-                        <IconButton onClick={(event) => setMenuAnchor(event.currentTarget)} aria-label="Cambiar estado">
-                          <MoreHorizRoundedIcon />
-                        </IconButton>
-                        <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
-                          <MenuItem onClick={() => handleStatusIntent("espera")}>Pausar tarea</MenuItem>
-                          <MenuItem onClick={() => handleStatusIntent("problema")}>Registrar problema</MenuItem>
-                        </Menu>
-                      </>
-                    )}
-                  </>
-                )}
-              </Stack>
+          {drawer ? (
+            <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", justifyContent: "space-between" }}>
+              <Typography variant="h6">Registros del paso</Typography>
+              {onClose ? (
+                <IconButton onClick={onClose} aria-label="Cerrar panel de registros">
+                  <CloseRoundedIcon />
+                </IconButton>
+              ) : null}
             </Stack>
+          ) : (
+            <Stack spacing={2}>
+              <Stack direction="row" spacing={1.5} sx={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+                <Box>
+                  <Typography variant="overline" color="primary.light">
+                    Tarea {step.orden}
+                  </Typography>
+                  {editingStep ? (
+                    <Stack spacing={1.25} sx={{ mt: 0.75, minWidth: { xs: "100%", sm: 360 } }}>
+                      <TextField
+                        label="Nombre de la tarea"
+                        value={stepDraftName}
+                        onChange={(event) => setStepDraftName(event.target.value)}
+                        disabled={savingStep}
+                        autoFocus
+                      />
+                      <TextField
+                        label="Descripción"
+                        multiline
+                        minRows={2}
+                        value={stepDraftDescription}
+                        onChange={(event) => setStepDraftDescription(event.target.value)}
+                        disabled={savingStep}
+                      />
+                    </Stack>
+                  ) : (
+                    <>
+                      <Typography variant="h5" sx={{ mt: 0.25 }}>
+                        {displayStepName}
+                      </Typography>
+                      {displayStepDescription && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
+                          {displayStepDescription}
+                        </Typography>
+                      )}
+                    </>
+                  )}
+                </Box>
 
-            {stepEditError && <Alert severity="error">{stepEditError}</Alert>}
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                  {editingStep ? (
+                    <>
+                      <Button variant="text" color="inherit" onClick={handleCancelStepEdit} disabled={savingStep}>
+                        Cancelar
+                      </Button>
+                      <Button variant="contained" onClick={() => void handleSaveStepEdit()} disabled={savingStep}>
+                        {savingStep ? "Guardando..." : "Guardar"}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button variant="text" color="inherit" onClick={handleStartStepEdit}>
+                      Editar
+                    </Button>
+                  )}
+                  {isWaitingExternal && onRegisterExternalEvent && (
+                    <Button variant="contained" color="info" onClick={() => setExternalDialogOpen(true)} sx={{ textTransform: "none" }}>
+                      Registrar respuesta recibida
+                    </Button>
+                  )}
+                  {canChangeStatus && (
+                    <>
+                      <IconButton onClick={(event) => setMenuAnchor(event.currentTarget)} aria-label="Cambiar estado">
+                        <MoreHorizRoundedIcon />
+                      </IconButton>
+                      <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
+                        <MenuItem onClick={() => handleStatusIntent("espera")}>Pausar tarea</MenuItem>
+                        <MenuItem onClick={() => handleStatusIntent("problema")}>Registrar problema</MenuItem>
+                      </Menu>
+                    </>
+                  )}
+                </Stack>
+              </Stack>
 
-            {!drawer && (
-              <>
+              {stepEditError && <Alert severity="error">{stepEditError}</Alert>}
+
+              <Card variant="outlined">
+                <CardContent sx={{ p: 1.75 }}>
+                  <Stack spacing={1}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Estado operativo
+                    </Typography>
+                    <StatusBadge value={step.estado} />
+                    <Stack spacing={0.5}>
+                      <Typography variant="body2" color="text.secondary">
+                        Último registro
+                      </Typography>
+                      <Typography variant="body2" color={latestMessage === "Sin registros todavía" ? "text.secondary" : "text.primary"}>
+                        {latestMessage}
+                      </Typography>
+                    </Stack>
+                  </Stack>
+                </CardContent>
+              </Card>
+
+              {isWaitingExternal ? (
                 <Card variant="outlined">
                   <CardContent sx={{ p: 1.75 }}>
                     <Stack spacing={1}>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Estado operativo
-                      </Typography>
-                      <StatusBadge value={step.estado} />
-                      <Stack spacing={0.5}>
+                      <Alert severity="info">Esperando respuesta externa</Alert>
+                      {step.expected_external_event && (
                         <Typography variant="body2" color="text.secondary">
-                          Último registro
+                          Qué se espera: {step.expected_external_event}
                         </Typography>
-                        <Typography variant="body2" color={latestMessage === "Sin registros todavía" ? "text.secondary" : "text.primary"}>
-                          {latestMessage}
+                      )}
+                      {step.external_wait_reason && (
+                        <Typography variant="body2" color="text.secondary">
+                          Detalle: {step.external_wait_reason}
                         </Typography>
-                      </Stack>
+                      )}
+                      {step.external_reference && (
+                        <Typography variant="body2" color="text.secondary">
+                          Referencia: {step.external_reference}
+                        </Typography>
+                      )}
                     </Stack>
                   </CardContent>
                 </Card>
-
-                {isWaitingExternal ? (
-                  <Card variant="outlined">
-                    <CardContent sx={{ p: 1.75 }}>
-                      <Stack spacing={1}>
-                        <Alert severity="info">Esperando respuesta externa</Alert>
-                        {step.expected_external_event && (
-                          <Typography variant="body2" color="text.secondary">
-                            Qué se espera: {step.expected_external_event}
-                          </Typography>
-                        )}
-                        {step.external_wait_reason && (
-                          <Typography variant="body2" color="text.secondary">
-                            Detalle: {step.external_wait_reason}
-                          </Typography>
-                        )}
-                        {step.external_reference && (
-                          <Typography variant="body2" color="text.secondary">
-                            Referencia: {step.external_reference}
-                          </Typography>
-                        )}
-                      </Stack>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <Card variant="outlined">
-                    <CardContent sx={{ p: 1.75 }}>
-                      <Stack spacing={0.9}>
-                        <Typography variant="subtitle2" color="text.secondary">
-                          ¿Qué sigue?
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Al cerrar esta tarea vas a decidir cómo continúa el flow.
-                        </Typography>
-                      </Stack>
-                    </CardContent>
-                  </Card>
-                )}
-              </>
-            )}
-          </Stack>
+              ) : (
+                <Card variant="outlined">
+                  <CardContent sx={{ p: 1.75 }}>
+                    <Stack spacing={0.9}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        ¿Qué sigue?
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Al cerrar esta tarea vas a decidir cómo continúa el flow.
+                      </Typography>
+                    </Stack>
+                  </CardContent>
+                </Card>
+              )}
+            </Stack>
+          )}
         </Box>
 
         <Divider />
 
         <Box sx={{ p: { xs: 2.5, md: 3 } }}>
-          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2 }}>
-            Registros del paso
-          </Typography>
+          {!drawer && (
+            <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2 }}>
+              Registros del paso
+            </Typography>
+          )}
           <Journal
             step={step}
             comments={comments}

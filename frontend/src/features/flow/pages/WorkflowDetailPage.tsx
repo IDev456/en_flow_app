@@ -35,6 +35,7 @@ import {
   registerExternalEvent,
   resolveExternalResponse,
   unlinkWorkflowRequirement,
+  updateStep,
   updateStepStatus,
 } from "../api";
 import { StepDetailPanel } from "../components/StepDetailPanel";
@@ -254,6 +255,38 @@ export function WorkflowDetailPage() {
     await refreshAfterStepChange(step.id);
   }
 
+  async function handleRenameStep(step: Step, nextName: string) {
+    const previousName = step.nombre.trim();
+    const sanitizedName = nextName.trim();
+
+    if (!sanitizedName) {
+      throw new Error("El nombre no puede estar vacío.");
+    }
+    if (sanitizedName === previousName) {
+      return;
+    }
+
+    await updateStep(step.id, { nombre: sanitizedName });
+
+    const refreshedHistory = await getStepHistory(step.id);
+    const historyTracksNameChange = refreshedHistory.some((entry) => {
+      const field = entry.campo.trim().toLowerCase();
+      const newValue = (entry.valor_nuevo ?? "").trim();
+      return field.includes("nombre") && newValue === sanitizedName;
+    });
+
+    if (!historyTracksNameChange) {
+      await addStepComment(step.id, {
+        autor: DEFAULT_ACTOR,
+        comentario: `Nombre del paso actualizado: ${previousName} → ${sanitizedName}`,
+        attachments: [],
+      });
+    }
+
+    await refreshAfterStepChange(step.id);
+    showToast("Nombre de la tarea actualizado.", "success");
+  }
+
   function handleOpenLinkRequirement() {
     if (!workflow) return;
     const linkedRequirementIds = new Set([
@@ -425,6 +458,7 @@ export function WorkflowDetailPage() {
                 onSelectStep={handleSelectStep}
                 onOpenStep={handleOpenStep}
                 onCompleteStepIntent={handleOpenCompleteStep}
+                onRenameStep={handleRenameStep}
                 onOpenTrigger={() => {
                   const requirementId = workflow.trigger_id ?? workflow.requirement_ids[0];
                   if (requirementId) navigate(`/requirements/${requirementId}`);
