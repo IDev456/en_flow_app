@@ -11,7 +11,6 @@ import {
   Card,
   CardContent,
   Chip,
-  Divider,
   Dialog,
   DialogContent,
   IconButton,
@@ -112,9 +111,19 @@ export function Journal({
   const [previewImage, setPreviewImage] = useState<ImagePreview | null>(null);
   const items = useMemo(() => buildJournalItems(history, comments), [history, comments]);
   const visibleItems = useMemo(() => {
+    const isAutoNextTaskEntry = (value: string) => {
+      const normalized = value
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      return normalized.includes("tarea creada desde cierre dinamico") || normalized.includes("se creo la proxima tarea");
+    };
+
     const hasAlternativeItem = items.some((item) => {
-      const normalized = item.body.trim().toLowerCase();
-      return normalized.length > 0 && !normalized.includes("tarea creada desde cierre");
+      const normalized = item.body.trim();
+      return normalized.length > 0 && !isAutoNextTaskEntry(normalized);
     });
 
     return items.filter((item) => {
@@ -122,7 +131,7 @@ export function Journal({
       if (!body && item.attachments.length === 0) {
         return false;
       }
-      if (hasAlternativeItem && body.toLowerCase().includes("tarea creada desde cierre")) {
+      if (hasAlternativeItem && isAutoNextTaskEntry(body)) {
         return false;
       }
       return true;
@@ -489,8 +498,6 @@ export function Journal({
         </Stack>
       </Box>
       ) : null}
-
-      {showComposer && <Divider />}
 
       <Snackbar
         open={savedToastOpen}

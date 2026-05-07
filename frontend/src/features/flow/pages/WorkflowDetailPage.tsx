@@ -174,10 +174,32 @@ export function WorkflowDetailPage() {
     await refreshAfterStepChange(selectedStepId);
   }
 
+  async function ensureCompletionCommentVisible(stepId: string, comentario: string | null | undefined, autor: string) {
+    const trimmedComment = comentario?.trim();
+    if (!trimmedComment) {
+      return;
+    }
+
+    const [existingComments, existingHistory] = await Promise.all([getStepComments(stepId), getStepHistory(stepId)]);
+    const alreadyVisibleInComments = existingComments.some((entry) => (entry.comentario ?? "").trim() === trimmedComment);
+    const alreadyVisibleInHistory = existingHistory.some((entry) => (entry.nota ?? "").trim() === trimmedComment);
+
+    if (alreadyVisibleInComments || alreadyVisibleInHistory) {
+      return;
+    }
+
+    await addStepComment(stepId, {
+      autor,
+      comentario: trimmedComment,
+      attachments: [],
+    });
+  }
+
   async function handleCompleteTask(stepId: string, input: StepCompleteInput) {
     try {
       const step = workflow?.steps.find(s => s.id === stepId);
       if (!step) return;
+      const trimmedComment = input.comentario?.trim() || null;
 
       if (step.estado === "esperando_respuesta") {
         if (input.transition_type === "wait_external") {
@@ -185,7 +207,7 @@ export function WorkflowDetailPage() {
         }
 
         // Registrar automáticamente un evento externo con el comentario del modal
-        const externalComment = input.comentario?.trim() || "Respuesta externa registrada desde completar tarea";
+        const externalComment = trimmedComment || "Respuesta externa registrada desde completar tarea";
         await registerExternalEvent(stepId, {
           event_type: "respuesta_externa_recibida",
           comentario: externalComment,
@@ -205,9 +227,12 @@ export function WorkflowDetailPage() {
           finish_data: input.finish_data,
           attachments: input.attachments,
         });
+
+        await ensureCompletionCommentVisible(stepId, trimmedComment, input.usuario);
       } else {
         // Flujo estandar para tareas activas, en pausa o con problema
         await completeStep(stepId, input);
+        await ensureCompletionCommentVisible(stepId, trimmedComment, input.usuario);
       }
 
       const currentWorkflow = await getWorkflow(workflowId);
@@ -283,7 +308,7 @@ export function WorkflowDetailPage() {
     if (!historyTracksNameChange) {
       await addStepComment(step.id, {
         autor: DEFAULT_ACTOR,
-        comentario: `Nombre del paso actualizado: ${previousName} → ${sanitizedName}`,
+        comentario: `Nombre de la tarea actualizado: "${previousName}" → "${sanitizedName}"`,
         attachments: [],
       });
     }

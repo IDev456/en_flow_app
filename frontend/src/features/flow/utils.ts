@@ -110,6 +110,21 @@ export type JournalItem =
       attachments: Attachment[];
     };
 
+function normalizeJournalText(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isAutoNextTaskMessage(value: string) {
+  const normalized = normalizeJournalText(value);
+  if (!normalized) return false;
+  return normalized.includes("se creo la proxima tarea") || normalized.includes("tarea creada desde cierre dinamico");
+}
+
 export function buildJournalItems(history: StepHistoryEntry[], comments: StepComment[]): JournalItem[] {
   const statusEntries = history
     .filter((entry) => entry.campo === "estado" && entry.nota)
@@ -124,7 +139,11 @@ export function buildJournalItems(history: StepHistoryEntry[], comments: StepCom
     }));
 
   const historyNoteEntries = history
-    .filter((entry) => entry.campo !== "estado" && ((entry.nota && entry.nota.trim()) || entry.attachments.length > 0))
+    .filter((entry) => {
+      if (entry.campo === "estado") return false;
+      if (!((entry.nota && entry.nota.trim()) || entry.attachments.length > 0)) return false;
+      return !isAutoNextTaskMessage(entry.nota ?? "");
+    })
     .map((entry) => ({
       id: `history-note-${entry.id}`,
       kind: "comment" as const,
@@ -134,14 +153,16 @@ export function buildJournalItems(history: StepHistoryEntry[], comments: StepCom
       attachments: entry.attachments ?? []
     }));
 
-  const commentEntries = comments.map((comment) => ({
-    id: `comment-${comment.id}`,
-    kind: "comment" as const,
-    author: comment.autor,
-    date: comment.fecha_creacion,
-    body: comment.comentario ?? "",
-    attachments: comment.attachments ?? []
-  }));
+  const commentEntries = comments
+    .filter((comment) => !isAutoNextTaskMessage(comment.comentario ?? ""))
+    .map((comment) => ({
+      id: `comment-${comment.id}`,
+      kind: "comment" as const,
+      author: comment.autor,
+      date: comment.fecha_creacion,
+      body: comment.comentario ?? "",
+      attachments: comment.attachments ?? []
+    }));
 
   return [...statusEntries, ...historyNoteEntries, ...commentEntries].sort(
     (left, right) => new Date(right.date).getTime() - new Date(left.date).getTime()

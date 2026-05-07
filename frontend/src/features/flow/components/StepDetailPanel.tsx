@@ -500,7 +500,7 @@ export function StepDetailPanel({
           )}
         </Box>
 
-        <Divider />
+        {!drawer && <Divider />}
 
         <Box sx={{ p: { xs: 2.5, md: 3 } }}>
           {!drawer && (
