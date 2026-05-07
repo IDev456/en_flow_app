@@ -152,45 +152,54 @@ function getStepStateColors(theme: Theme, status: Step["estado"]) {
 
   if (tone === "completado" || tone === "finalizado" || tone === "resuelto") {
     return {
-      borderColor: alpha(theme.palette.success.main, 0.48),
-      backgroundColor: alpha(theme.palette.success.main, 0.16),
-      textColor: theme.palette.success.light,
-      lineColor: alpha(theme.palette.success.main, 0.36),
+      borderColor: alpha(theme.palette.success.main, 0.68),
+      backgroundColor: alpha(theme.palette.success.main, 0.24),
+      textColor: theme.palette.success.dark,
+      lineColor: alpha(theme.palette.success.main, 0.64),
     };
   }
 
   if (tone === "espera") {
     return {
-      borderColor: alpha(theme.palette.warning.main, 0.48),
-      backgroundColor: alpha(theme.palette.warning.main, 0.16),
-      textColor: theme.palette.warning.light,
-      lineColor: alpha(theme.palette.warning.main, 0.34),
+      borderColor: alpha(theme.palette.warning.main, 0.72),
+      backgroundColor: alpha(theme.palette.warning.main, 0.24),
+      textColor: theme.palette.warning.dark,
+      lineColor: alpha(theme.palette.warning.main, 0.68),
     };
   }
 
   if (tone === "espera_externa") {
     return {
-      borderColor: alpha(theme.palette.info.main, 0.85),
-      backgroundColor: alpha(theme.palette.info.main, 0.24),
-      textColor: theme.palette.info.main,
-      lineColor: alpha(theme.palette.info.main, 0.65),
+      borderColor: alpha(theme.palette.warning.main, 0.72),
+      backgroundColor: alpha(theme.palette.warning.main, 0.24),
+      textColor: theme.palette.warning.dark,
+      lineColor: alpha(theme.palette.warning.main, 0.68),
     };
   }
 
-  if (tone === "cancelado" || tone === "error" || tone === "problema") {
+  if (tone === "cancelado") {
     return {
-      borderColor: alpha(theme.palette.error.main, 0.5),
-      backgroundColor: alpha(theme.palette.error.main, 0.16),
-      textColor: theme.palette.error.light,
-      lineColor: alpha(theme.palette.error.main, 0.34),
+      borderColor: alpha(theme.palette.text.secondary, 0.46),
+      backgroundColor: alpha(theme.palette.text.secondary, 0.12),
+      textColor: theme.palette.text.secondary,
+      lineColor: alpha(theme.palette.text.secondary, 0.32),
+    };
+  }
+
+  if (tone === "error" || tone === "problema") {
+    return {
+      borderColor: alpha(theme.palette.error.main, 0.72),
+      backgroundColor: alpha(theme.palette.error.main, 0.22),
+      textColor: theme.palette.error.dark,
+      lineColor: alpha(theme.palette.error.main, 0.68),
     };
   }
 
   return {
-    borderColor: alpha(theme.palette.primary.main, 0.5),
-    backgroundColor: alpha(theme.palette.primary.main, 0.16),
-    textColor: theme.palette.primary.light,
-    lineColor: alpha(theme.palette.primary.main, 0.34),
+    borderColor: alpha(theme.palette.primary.main, 0.72),
+    backgroundColor: alpha(theme.palette.primary.main, 0.22),
+    textColor: theme.palette.primary.main,
+    lineColor: alpha(theme.palette.primary.main, 0.68),
   };
 }
 
@@ -221,7 +230,7 @@ function VerticalWorkflowGraph({
 
   return (
     <Box ref={viewportRef} sx={{ maxHeight: "72vh", overflow: "auto", pr: 0.5 }}>
-      <Stack spacing={2.5}>
+      <Stack spacing={2}>
         {orderedSteps.length > 0 && (
           <Box
             aria-hidden="true"
@@ -236,7 +245,7 @@ function VerticalWorkflowGraph({
           />
         )}
 
-        <Stack spacing={2}>
+        <Stack spacing={1.5}>
           {orderedSteps.map((step, index) => {
             const isSelected = selectedStepId === step.id;
             const lastCommentAt = step.ultimo_comentario_fecha;
@@ -294,8 +303,8 @@ function VerticalWorkflowGraph({
                   )}
                   <Box
                     sx={{
-                      width: 96,
-                      height: 96,
+                      width: 84,
+                      height: 84,
                       borderRadius: "50%",
                       display: "flex",
                       flexDirection: "column",
@@ -360,9 +369,9 @@ function VerticalWorkflowGraph({
                       Listo
                     </Button>
                   ) : null}
-                  <Box sx={{ p: 2.25 }}>
-                    <Stack spacing={1.25}>
-                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
+                  <Box sx={{ p: 1.5 }}>
+                    <Stack spacing={0.95}>
+                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
                         <Box sx={{ flex: 1 }}>
                           <Typography variant="h6" sx={{ mt: 1 }}>
                             {step.nombre}
@@ -408,8 +417,8 @@ function VerticalWorkflowGraph({
                             <Box
                               sx={{
                                 borderRadius: 1.25,
-                                px: 1,
-                                py: 0.8,
+                                px: 0.9,
+                                py: 0.7,
                                 backgroundColor: getMutedSurface(theme),
                                 borderLeft: "2px solid",
                                 borderLeftColor: alpha(theme.palette.divider, theme.palette.mode === "dark" ? 0.42 : 0.72),
@@ -423,7 +432,7 @@ function VerticalWorkflowGraph({
                               {renderLatestStepMovement(step)}
                             </Box>
                             {recordMetaParts.length > 0 && (
-                              <Stack direction="row" spacing={0.75} sx={{ mt: 0.45, flexWrap: "wrap", gap: 0.75 }}>
+                              <Stack direction="row" spacing={0.75} sx={{ mt: 0.35, flexWrap: "wrap", gap: 0.75 }}>
                                 {recordMetaParts.map((part) => (
                                   <Typography key={`${step.id}-${part}`} variant="caption" color="text.secondary" sx={{ opacity: 0.76 }}>
                                     {part}

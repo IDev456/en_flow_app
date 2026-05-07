@@ -394,35 +394,39 @@ export function StepDetailPanel({
                 )}
               </Box>
 
-              <Stack direction="row" spacing={1}>
-                {editingStep ? (
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                {!drawer && (
                   <>
-                    <Button variant="text" color="inherit" onClick={handleCancelStepEdit} disabled={savingStep}>
-                      Cancelar
-                    </Button>
-                    <Button variant="contained" onClick={() => void handleSaveStepEdit()} disabled={savingStep}>
-                      {savingStep ? "Guardando..." : "Guardar"}
-                    </Button>
-                  </>
-                ) : (
-                  <Button variant="text" color="inherit" onClick={handleStartStepEdit}>
-                    Editar
-                  </Button>
-                )}
-                {isWaitingExternal && onRegisterExternalEvent && (
-                  <Button variant="contained" color="info" onClick={() => setExternalDialogOpen(true)} sx={{ textTransform: "none" }}>
-                    Registrar respuesta recibida
-                  </Button>
-                )}
-                {canChangeStatus && (
-                  <>
-                    <IconButton onClick={(event) => setMenuAnchor(event.currentTarget)} aria-label="Cambiar estado">
-                      <MoreHorizRoundedIcon />
-                    </IconButton>
-                    <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
-                      <MenuItem onClick={() => handleStatusIntent("espera")}>Pausar tarea</MenuItem>
-                      <MenuItem onClick={() => handleStatusIntent("problema")}>Registrar problema</MenuItem>
-                    </Menu>
+                    {editingStep ? (
+                      <>
+                        <Button variant="text" color="inherit" onClick={handleCancelStepEdit} disabled={savingStep}>
+                          Cancelar
+                        </Button>
+                        <Button variant="contained" onClick={() => void handleSaveStepEdit()} disabled={savingStep}>
+                          {savingStep ? "Guardando..." : "Guardar"}
+                        </Button>
+                      </>
+                    ) : (
+                      <Button variant="text" color="inherit" onClick={handleStartStepEdit}>
+                        Editar
+                      </Button>
+                    )}
+                    {isWaitingExternal && onRegisterExternalEvent && (
+                      <Button variant="contained" color="info" onClick={() => setExternalDialogOpen(true)} sx={{ textTransform: "none" }}>
+                        Registrar respuesta recibida
+                      </Button>
+                    )}
+                    {canChangeStatus && (
+                      <>
+                        <IconButton onClick={(event) => setMenuAnchor(event.currentTarget)} aria-label="Cambiar estado">
+                          <MoreHorizRoundedIcon />
+                        </IconButton>
+                        <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
+                          <MenuItem onClick={() => handleStatusIntent("espera")}>Pausar tarea</MenuItem>
+                          <MenuItem onClick={() => handleStatusIntent("problema")}>Registrar problema</MenuItem>
+                        </Menu>
+                      </>
+                    )}
                   </>
                 )}
                 {drawer && onClose && (
@@ -478,18 +482,20 @@ export function StepDetailPanel({
                 </CardContent>
               </Card>
             ) : (
-              <Card variant="outlined">
-                <CardContent sx={{ p: 1.75 }}>
-                  <Stack spacing={0.9}>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      ¿Qué sigue?
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Al cerrar esta tarea vas a decidir cómo continúa el flow.
-                    </Typography>
-                  </Stack>
-                </CardContent>
-              </Card>
+              !drawer ? (
+                <Card variant="outlined">
+                  <CardContent sx={{ p: 1.75 }}>
+                    <Stack spacing={0.9}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        ¿Qué sigue?
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Al cerrar esta tarea vas a decidir cómo continúa el flow.
+                      </Typography>
+                    </Stack>
+                  </CardContent>
+                </Card>
+              ) : null
             )}
           </Stack>
         </Box>
@@ -501,7 +507,7 @@ export function StepDetailPanel({
             step={step}
             comments={comments}
             history={history}
-            canChangeStatus={canChangeStatus}
+            canChangeStatus={!drawer && canChangeStatus}
             selectedStatus={selectedStatus}
             onSelectedStatusChange={setSelectedStatus}
             composerExpanded={composerExpanded}
