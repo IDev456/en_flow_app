@@ -1,7 +1,5 @@
 import { useEffect, useRef, type MouseEvent, type PointerEvent } from "react";
 import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
-import AttachmentRoundedIcon from "@mui/icons-material/AttachmentRounded";
-import ImageRoundedIcon from "@mui/icons-material/ImageRounded";
 import type { Theme } from "@mui/material/styles";
 import { alpha, useTheme } from "@mui/material/styles";
 import { Box, Button, ButtonBase, Card, Chip, Stack, Typography } from "@mui/material";
@@ -34,58 +32,6 @@ function formatExpectedExternalEventLabel(expected?: string | null): string | nu
   const trimmed = expected?.trim();
   if (!trimmed) return null;
   return trimmed.toLowerCase().startsWith("esperando") ? trimmed : `Esperando ${trimmed}`;
-}
-
-function renderLatestStepMovement(step: Step) {
-  if (step.ultimo_comentario_tipo === "imagen" || step.ultimo_comentario_tipo === "adjunto") {
-    return (
-      <Stack direction="row" spacing={1.25} sx={{ alignItems: "center" }}>
-        {step.ultimo_comentario_tipo === "imagen" ? <ImageRoundedIcon color="info" /> : <AttachmentRoundedIcon color="info" />}
-        <Box>
-          <Typography variant="body2" sx={{ fontWeight: 700 }}>
-            {step.ultimo_comentario_tipo === "imagen" ? "Imagen adjunta" : "Archivo adjunto"}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {step.ultimo_comentario_adjunto_nombre ?? "Adjunto reciente"}
-          </Typography>
-        </Box>
-      </Stack>
-    );
-  }
-
-  if (step.estado === "esperando_respuesta") {
-    const expectedLabel = formatExpectedExternalEventLabel(step.expected_external_event);
-    return (
-      <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.45 }} color="text.primary">
-        {expectedLabel ?? "Esperando respuesta externa"}
-      </Typography>
-    );
-  }
-
-  const title = step.nombre?.trim();
-  const lastComment = step.ultimo_comentario?.trim();
-  const description = step.descripcion?.trim();
-  const normalizedTitle = title?.toLowerCase();
-
-  const getValidSecondaryText = (text: string | undefined | null): string | null => {
-    if (!text) return null;
-    const normalizedText = text.toLowerCase();
-    if (normalizedText === normalizedTitle) return null;
-    if (normalizedTitle && normalizedText.includes(normalizedTitle)) return null;
-    return text;
-  };
-
-  const fallbackText =
-    getValidSecondaryText(lastComment) ||
-    getValidSecondaryText(description) ||
-    "Sin registros todavía";
-  const hasComment = fallbackText !== "Sin registros todavía";
-
-  return (
-    <Typography variant="body2" sx={{ fontWeight: hasComment ? 600 : 400, lineHeight: 1.45 }} color={hasComment ? "text.primary" : "text.secondary"}>
-      {fallbackText}
-    </Typography>
-  );
 }
 
 function formatDuration(ms: number): string {
@@ -129,22 +75,6 @@ function renderStepTiming(step: Step): React.ReactElement | null {
 
 function getMutedSurface(theme: Theme) {
   return alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.16 : 0.52);
-}
-
-function getRecordMetaParts(lastCommentAt: string | null, lastCommentElapsed: string | null, stateElapsed: string | null) {
-  const parts: string[] = [];
-
-  if (lastCommentAt) {
-    parts.push(formatDate(lastCommentAt));
-  }
-
-  if (lastCommentElapsed) {
-    parts.push(lastCommentElapsed);
-  } else if (!lastCommentAt && stateElapsed) {
-    parts.push(`Estado actual: ${stateElapsed}`);
-  }
-
-  return parts;
 }
 
 function getStepStateColors(theme: Theme, status: Step["estado"]) {
@@ -248,15 +178,11 @@ function VerticalWorkflowGraph({
         <Stack spacing={1.5}>
           {orderedSteps.map((step, index) => {
             const isSelected = selectedStepId === step.id;
-            const lastCommentAt = step.ultimo_comentario_fecha;
-            const lastCommentElapsed = formatElapsedTime(lastCommentAt);
-            const stateElapsed = formatElapsedTime(step.fecha_estado_actual);
-            const recordMetaParts = getRecordMetaParts(lastCommentAt, lastCommentElapsed, stateElapsed);
+            const stateColors = getStepStateColors(theme, step.estado);
             const isFirst = index === 0;
             const isLast = index === orderedSteps.length - 1;
-            const stateColors = getStepStateColors(theme, step.estado);
-            const shouldExpand = isSelected || step.estado !== "completado";
             const canComplete = ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado);
+            const hasRecords = Boolean(step.ultimo_comentario_fecha || step.ultimo_comentario || step.resultado || step.observaciones);
 
             return (
               <Box
@@ -381,68 +307,36 @@ function VerticalWorkflowGraph({
 
                       {renderStepTiming(step)}
 
-                      {shouldExpand ? (
-                        <ButtonBase
-                          onClick={() => {
-                            onSelectStep(step.id);
-                            onOpenStep(step.id);
-                          }}
-                          aria-label={`Ver registro de la tarea ${step.nombre}`}
-                          sx={{
-                            display: "block",
-                            width: "100%",
-                            textAlign: "left",
-                            borderRadius: 1.5,
-                            px: 0,
-                            py: 0,
-                            cursor: "pointer",
-                            transition: "background-color 180ms ease",
-                            "&:hover": {
-                              backgroundColor: alpha(theme.palette.action.hover, 0.05),
-                            },
-                            "&:focus-visible": {
-                              outline: `2px solid ${alpha(theme.palette.primary.main, 0.4)}`,
-                              outlineOffset: "2px",
-                            },
-                          }}
-                        >
-                          <Box sx={{ px: 0.25, py: 0.25 }}>
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                              sx={{ mb: 0.45, opacity: 0.82 }}
-                            >
-                              Último registro
-                            </Typography>
-                            <Box
-                              sx={{
-                                borderRadius: 1.25,
-                                px: 0.9,
-                                py: 0.7,
-                                backgroundColor: getMutedSurface(theme),
-                                borderLeft: "2px solid",
-                                borderLeftColor: alpha(theme.palette.divider, theme.palette.mode === "dark" ? 0.42 : 0.72),
-                                transition: "background-color 180ms ease, border-color 180ms ease",
-                                ".MuiButtonBase-root:hover &, .MuiButtonBase-root:focus-visible &": {
-                                  backgroundColor: alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.22 : 0.62),
-                                  borderLeftColor: alpha(theme.palette.primary.main, 0.38),
-                                },
-                              }}
-                            >
-                              {renderLatestStepMovement(step)}
-                            </Box>
-                            {recordMetaParts.length > 0 && (
-                              <Stack direction="row" spacing={0.75} sx={{ mt: 0.35, flexWrap: "wrap", gap: 0.75 }}>
-                                {recordMetaParts.map((part) => (
-                                  <Typography key={`${step.id}-${part}`} variant="caption" color="text.secondary" sx={{ opacity: 0.76 }}>
-                                    {part}
-                                  </Typography>
-                                ))}
-                              </Stack>
-                            )}
-                          </Box>
-                        </ButtonBase>
-                      ) : null}
+                      <ButtonBase
+                        onClick={() => {
+                          onSelectStep(step.id);
+                          onOpenStep(step.id);
+                        }}
+                        aria-label={`Ver registro de la tarea ${step.nombre}`}
+                        sx={{
+                          display: "block",
+                          width: "100%",
+                          textAlign: "left",
+                          borderRadius: 1.5,
+                          px: 0,
+                          py: 0,
+                          cursor: "pointer",
+                          transition: "background-color 180ms ease",
+                          "&:hover": {
+                            backgroundColor: alpha(theme.palette.action.hover, 0.05),
+                          },
+                          "&:focus-visible": {
+                            outline: `2px solid ${alpha(theme.palette.primary.main, 0.4)}`,
+                            outlineOffset: "2px",
+                          },
+                        }}
+                      >
+                        <Box sx={{ px: 0.25, py: 0.25 }}>
+                          <Typography variant="caption" color="text.secondary">
+                            {hasRecords ? "Con registros" : "Sin registros todavía"}
+                          </Typography>
+                        </Box>
+                      </ButtonBase>
                     </Stack>
                   </Box>
                 </Card>
@@ -484,10 +378,7 @@ function GitLogWorkflowGraph({
       <Stack spacing={1.5}>
         {orderedSteps.map((step) => {
           const isSelected = selectedStepId === step.id;
-          const lastCommentAt = step.ultimo_comentario_fecha;
-          const lastCommentElapsed = formatElapsedTime(lastCommentAt);
-          const stateElapsed = formatElapsedTime(step.fecha_estado_actual);
-          const recordMetaParts = getRecordMetaParts(lastCommentAt, lastCommentElapsed, stateElapsed);
+          const hasRecords = Boolean(step.ultimo_comentario_fecha || step.ultimo_comentario || step.resultado || step.observaciones);
           return (
             <Card
               key={step.id}
@@ -499,14 +390,20 @@ function GitLogWorkflowGraph({
                 borderRadius: 2,
               }}
             >
-              <Box sx={{ p: 2.25 }}>
-                <Stack spacing={1.25}>
-                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
+              <Box sx={{ p: 1.5 }}>
+                <Stack spacing={0.9}>
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
                     <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", gap: 1 }}>
                       <Chip label={`T${step.orden.toString().padStart(2, "0")}`} size="small" variant="outlined" />
                       <Typography variant="h6">{step.nombre}</Typography>
                     </Stack>
                   </Stack>
+                  {renderStepTiming(step)}
+                  <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 24 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      {hasRecords ? "Con registros" : "Sin registros todavía"}
+                    </Typography>
+                  </Box>
                   <ButtonBase
                     onClick={() => {
                       onSelectStep(step.id);
@@ -532,35 +429,9 @@ function GitLogWorkflowGraph({
                     }}
                   >
                     <Box sx={{ px: 0.25, py: 0.25 }}>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 0.45, opacity: 0.82 }}>
-                        Último registro
+                      <Typography variant="caption" color="text.secondary">
+                        Ver registros
                       </Typography>
-                      <Box
-                        sx={{
-                          borderRadius: 1.25,
-                          px: 1,
-                          py: 0.8,
-                          backgroundColor: getMutedSurface(theme),
-                          borderLeft: "2px solid",
-                          borderLeftColor: alpha(theme.palette.divider, theme.palette.mode === "dark" ? 0.42 : 0.72),
-                          transition: "background-color 180ms ease, border-color 180ms ease",
-                          ".MuiButtonBase-root:hover &, .MuiButtonBase-root:focus-visible &": {
-                            backgroundColor: alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.22 : 0.62),
-                            borderLeftColor: alpha(theme.palette.primary.main, 0.38),
-                          },
-                        }}
-                      >
-                        {renderLatestStepMovement(step)}
-                      </Box>
-                      {recordMetaParts.length > 0 && (
-                        <Stack direction="row" spacing={0.75} sx={{ mt: 0.45, flexWrap: "wrap", gap: 0.75 }}>
-                          {recordMetaParts.map((part) => (
-                            <Typography key={`${step.id}-${part}`} variant="caption" color="text.secondary" sx={{ opacity: 0.76 }}>
-                              {part}
-                            </Typography>
-                          ))}
-                        </Stack>
-                      )}
                     </Box>
                   </ButtonBase>
                 </Stack>
