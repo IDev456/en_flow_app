@@ -155,7 +155,7 @@ export function isNoisyAutomaticJournalText(value: string | null | undefined): b
 
 function isCompletionStatus(value: string | null | undefined): boolean {
   const normalized = normalizeJournalText(value ?? "");
-  return normalized === "completado" || normalized === "finalizado" || normalized === "resuelto";
+  return normalized === "completado";
 }
 
 function isCompletionText(value: string | null | undefined): boolean {
