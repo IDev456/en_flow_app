@@ -37,7 +37,7 @@ import type {
   StepJournalEntryInput,
   StepTransitionType,
 } from "../types";
-import { DEFAULT_ACTOR } from "../utils";
+import { buildJournalItems, DEFAULT_ACTOR } from "../utils";
 import { Journal } from "./Journal";
 import { StatusBadge } from "./StatusBadge";
 
@@ -159,7 +159,14 @@ export function StepDetailPanel({
   const canChangeStatus = ["activo", "espera", "problema"].includes(step.estado);
   const canAddManualRecords = !["completado", "cancelada"].includes(step.estado);
   const isWaitingExternal = step.estado === "esperando_respuesta";
-  const latestMessage = step.ultimo_comentario?.trim() || (step.orden === 1 && step.descripcion?.trim() ? step.descripcion.trim() : "Sin registros todavía");
+  const latestJournalItem = buildJournalItems(history, comments).find(
+    (item) => item.body.trim().length > 0 || item.attachments.length > 0
+  );
+  const latestMessage =
+    latestJournalItem?.secondaryText?.trim() ||
+    latestJournalItem?.body.trim() ||
+    step.ultimo_comentario?.trim() ||
+    (step.orden === 1 && step.descripcion?.trim() ? step.descripcion.trim() : "Sin registros todavía");
   const displayStepName = stepDraftName.trim() || step.nombre;
   const displayStepDescription = stepDraftDescription.trim();
 

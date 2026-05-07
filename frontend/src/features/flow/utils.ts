@@ -98,6 +98,7 @@ export type JournalItem =
       author: string;
       date: string;
       body: string;
+      secondaryText: string | null;
       status: string;
       attachments: Attachment[];
     }
@@ -107,6 +108,7 @@ export type JournalItem =
       author: string;
       date: string;
       body: string;
+      secondaryText: string | null;
       attachments: Attachment[];
     };
 
@@ -125,23 +127,95 @@ function isAutoNextTaskMessage(value: string) {
   return normalized.includes("se creo la proxima tarea") || normalized.includes("tarea creada desde cierre dinamico");
 }
 
+export function isNoisyAutomaticJournalText(value: string | null | undefined): boolean {
+  const normalized = normalizeJournalText(value ?? "");
+  if (!normalized) return false;
+
+  return (
+    normalized.includes("tarea creada desde cierre dinamico") ||
+    normalized.includes("se creo la proxima tarea") ||
+    normalized.includes("esperando respuesta externa de externo") ||
+    normalized.includes("esperando respuesta de externo")
+  );
+}
+
+function isNameHistoryField(value: string | null | undefined): boolean {
+  const normalized = normalizeJournalText(value ?? "");
+  if (!normalized) return false;
+  return normalized.includes("nombre") || normalized.includes("name") || normalized.includes("title");
+}
+
+function sanitizeHistoryNote(note: string | null | undefined): string | null {
+  const trimmed = note?.trim() ?? "";
+  if (!trimmed) return null;
+  if (isNoisyAutomaticJournalText(trimmed)) return null;
+  return trimmed;
+}
+
+function formatJournalDateAsMs(value: string): number {
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatNameValue(value: string | null | undefined): string {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : "sin nombre";
+}
+
+function hasNearbyTimestamp(referenceMs: number, values: number[], thresholdMs: number): boolean {
+  return values.some((valueMs) => Math.abs(referenceMs - valueMs) <= thresholdMs);
+}
+
 export function buildJournalItems(history: StepHistoryEntry[], comments: StepComment[]): JournalItem[] {
+  const historyNoteTimestamps = new Map<string, number[]>();
+
+  history.forEach((entry) => {
+    const note = sanitizeHistoryNote(entry.nota);
+    if (!note) return;
+    const normalized = normalizeJournalText(note);
+    const current = historyNoteTimestamps.get(normalized) ?? [];
+    current.push(formatJournalDateAsMs(entry.fecha));
+    historyNoteTimestamps.set(normalized, current);
+  });
+
   const statusEntries = history
-    .filter((entry) => entry.campo === "estado" && entry.nota)
+    .filter((entry) => entry.campo === "estado")
     .map((entry) => ({
       id: `history-${entry.id}`,
       kind: "status" as const,
       author: entry.usuario,
       date: entry.fecha,
-      body: entry.nota ?? "",
+      body: `Estado cambiado: ${humanizeStatus(entry.valor_anterior ?? "sin dato")} → ${humanizeStatus(entry.valor_nuevo ?? "sin dato")}`,
+      secondaryText: sanitizeHistoryNote(entry.nota),
       status: entry.valor_nuevo ?? "activo",
+      attachments: entry.attachments ?? []
+    }));
+
+  const historyNameEntries = history
+    .filter((entry) => isNameHistoryField(entry.campo))
+    .filter((entry) => {
+      const previousName = (entry.valor_anterior ?? "").trim();
+      const nextName = (entry.valor_nuevo ?? "").trim();
+      const note = sanitizeHistoryNote(entry.nota);
+      return previousName.length > 0 || nextName.length > 0 || Boolean(note) || (entry.attachments?.length ?? 0) > 0;
+    })
+    .map((entry) => ({
+      id: `history-name-${entry.id}`,
+      kind: "comment" as const,
+      author: entry.usuario,
+      date: entry.fecha,
+      body: `Nombre actualizado: "${formatNameValue(entry.valor_anterior)}" → "${formatNameValue(entry.valor_nuevo)}"`,
+      secondaryText: sanitizeHistoryNote(entry.nota),
       attachments: entry.attachments ?? []
     }));
 
   const historyNoteEntries = history
     .filter((entry) => {
       if (entry.campo === "estado") return false;
+      if (isNameHistoryField(entry.campo)) return false;
       if (!((entry.nota && entry.nota.trim()) || entry.attachments.length > 0)) return false;
+      const note = sanitizeHistoryNote(entry.nota);
+      if (!note && entry.attachments.length === 0) return false;
       return !isAutoNextTaskMessage(entry.nota ?? "");
     })
     .map((entry) => ({
@@ -149,22 +223,35 @@ export function buildJournalItems(history: StepHistoryEntry[], comments: StepCom
       kind: "comment" as const,
       author: entry.usuario,
       date: entry.fecha,
-      body: entry.nota ?? `Movimiento: ${entry.campo}`,
+      body: sanitizeHistoryNote(entry.nota) ?? `Movimiento: ${entry.campo}`,
+      secondaryText: null,
       attachments: entry.attachments ?? []
     }));
 
   const commentEntries = comments
-    .filter((comment) => !isAutoNextTaskMessage(comment.comentario ?? ""))
+    .filter((comment) => {
+      const text = comment.comentario?.trim() ?? "";
+      if (isNoisyAutomaticJournalText(text)) return false;
+      if (!text) return (comment.attachments?.length ?? 0) > 0;
+      const normalized = normalizeJournalText(text);
+      const relatedHistoryDates = historyNoteTimestamps.get(normalized);
+      if (!relatedHistoryDates || relatedHistoryDates.length === 0) {
+        return true;
+      }
+      const commentDateMs = formatJournalDateAsMs(comment.fecha_creacion);
+      return !hasNearbyTimestamp(commentDateMs, relatedHistoryDates, 5 * 60 * 1000);
+    })
     .map((comment) => ({
       id: `comment-${comment.id}`,
       kind: "comment" as const,
       author: comment.autor,
       date: comment.fecha_creacion,
       body: comment.comentario ?? "",
+      secondaryText: null,
       attachments: comment.attachments ?? []
     }));
 
-  return [...statusEntries, ...historyNoteEntries, ...commentEntries].sort(
-    (left, right) => new Date(right.date).getTime() - new Date(left.date).getTime()
+  return [...statusEntries, ...historyNameEntries, ...historyNoteEntries, ...commentEntries].sort(
+    (left, right) => formatJournalDateAsMs(right.date) - formatJournalDateAsMs(left.date)
   );
 }

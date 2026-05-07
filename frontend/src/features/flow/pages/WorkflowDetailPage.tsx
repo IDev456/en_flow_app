@@ -52,7 +52,7 @@ import type {
   TriggerDetail,
   WorkflowDetail,
 } from "../types";
-import { DEFAULT_ACTOR, formatDate, formatElapsedTime } from "../utils";
+import { buildJournalItems, DEFAULT_ACTOR } from "../utils";
 
 export function WorkflowDetailPage() {
   const { workflowId = "" } = useParams();
@@ -308,7 +308,7 @@ export function WorkflowDetailPage() {
     if (!historyTracksNameChange) {
       await addStepComment(step.id, {
         autor: DEFAULT_ACTOR,
-        comentario: `Nombre de la tarea actualizado: "${previousName}" → "${sanitizedName}"`,
+        comentario: `Nombre actualizado: "${previousName}" → "${sanitizedName}"`,
         attachments: [],
       });
     }
@@ -397,7 +397,10 @@ export function WorkflowDetailPage() {
   }
 
   const selectedStep: Step | null = workflow.steps.find((step) => step.id === selectedStepId) ?? pickRelevantStep(workflow);
-  const selectedStepHasRecords = stepComments.length > 0 || stepHistory.length > 0;
+  const selectedStepJournalItems = buildJournalItems(stepHistory, stepComments).filter(
+    (item) => item.body.trim().length > 0 || item.attachments.length > 0
+  );
+  const selectedStepHasRecords = selectedStepJournalItems.length > 0;
   const stepHasRecords = selectedStepId ? { [selectedStepId]: selectedStepHasRecords } : undefined;
   const linkedRequirementIds = new Set([...(workflow.requirement_ids ?? []), ...(workflow.trigger_id ? [workflow.trigger_id] : [])]);
   const linkedRequirements = requirements.filter(

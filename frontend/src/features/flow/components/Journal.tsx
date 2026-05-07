@@ -111,30 +111,9 @@ export function Journal({
   const [previewImage, setPreviewImage] = useState<ImagePreview | null>(null);
   const items = useMemo(() => buildJournalItems(history, comments), [history, comments]);
   const visibleItems = useMemo(() => {
-    const isAutoNextTaskEntry = (value: string) => {
-      const normalized = value
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/\s+/g, " ")
-        .trim();
-      return normalized.includes("tarea creada desde cierre dinamico") || normalized.includes("se creo la proxima tarea");
-    };
-
-    const hasAlternativeItem = items.some((item) => {
-      const normalized = item.body.trim();
-      return normalized.length > 0 && !isAutoNextTaskEntry(normalized);
-    });
-
     return items.filter((item) => {
       const body = item.body.trim();
-      if (!body && item.attachments.length === 0) {
-        return false;
-      }
-      if (hasAlternativeItem && isAutoNextTaskEntry(body)) {
-        return false;
-      }
-      return true;
+      return body.length > 0 || item.attachments.length > 0;
     });
   }, [items]);
   const commentTrimmed = text.trim();
@@ -508,6 +487,7 @@ export function Journal({
       <Dialog open={Boolean(previewImage)} onClose={() => setPreviewImage(null)} fullWidth maxWidth="lg">
         <DialogContent
           sx={{
+            position: "relative",
             p: { xs: 1.5, md: 2 },
             display: "flex",
             justifyContent: "center",
@@ -515,6 +495,22 @@ export function Journal({
             minHeight: { xs: 240, md: 380 },
           }}
         >
+          <IconButton
+            onClick={() => setPreviewImage(null)}
+            sx={{
+              position: "absolute",
+              top: 10,
+              right: 10,
+              zIndex: 1,
+              backgroundColor: (theme) => alpha(theme.palette.background.paper, 0.9),
+              "&:hover": {
+                backgroundColor: (theme) => alpha(theme.palette.background.paper, 1),
+              },
+            }}
+            aria-label="Cerrar vista de imagen"
+          >
+            <CloseRoundedIcon fontSize="small" />
+          </IconButton>
           {previewImage && (
             <Box
               component="img"
@@ -547,6 +543,7 @@ export function Journal({
         ) : (
           visibleItems.map((item) => {
             const body = item.body.trim();
+            const secondaryText = item.secondaryText?.trim() ?? "";
             return (
             <Card key={item.id} variant="outlined" sx={{ borderColor: (theme) => alpha(theme.palette.divider, 0.85) }}>
               <CardContent sx={{ display: "grid", gap: 0.9, p: 1.35 }}>
@@ -561,7 +558,7 @@ export function Journal({
                   )}
                 </Stack>
                 {body ? (
-                  <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                  <Typography variant={item.kind === "status" ? "subtitle2" : "body2"} sx={{ whiteSpace: "pre-wrap" }}>
                     {body}
                   </Typography>
                 ) : (
@@ -569,6 +566,11 @@ export function Journal({
                     Adjunto agregado
                   </Typography>
                 )}
+                {secondaryText ? (
+                  <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                    {secondaryText}
+                  </Typography>
+                ) : null}
                 {item.attachments.length > 0 && (
                   <AttachmentList
                     attachments={item.attachments}
