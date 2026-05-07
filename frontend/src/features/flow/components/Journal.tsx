@@ -25,7 +25,7 @@ import { alpha } from "@mui/material/styles";
 import type { Theme } from "@mui/material/styles";
 
 import type { Attachment, AttachmentInput, Step, StepComment, StepHistoryEntry, StepJournalEntryInput } from "../types";
-import { buildJournalItems, formatDate, stepStatusOptions } from "../utils";
+import { buildJournalItems, formatDate, formatElapsedTime, stepStatusOptions } from "../utils";
 import { StatusBadge } from "./StatusBadge";
 
 type JournalProps = {
@@ -544,33 +544,68 @@ export function Journal({
           visibleItems.map((item) => {
             const body = item.body.trim();
             const secondaryText = item.secondaryText?.trim() ?? "";
+            const elapsed = formatElapsedTime(item.date);
+            const dateLabel = elapsed ? `${formatDate(item.date)} · ${elapsed}` : formatDate(item.date);
             return (
             <Card key={item.id} variant="outlined" sx={{ borderColor: (theme) => alpha(theme.palette.divider, 0.85) }}>
               <CardContent sx={{ display: "grid", gap: 0.9, p: 1.35 }}>
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between" }}>
-                  <Typography variant="caption" color="text.secondary">
-                    {formatDate(item.date)}
-                  </Typography>
-                  {item.kind === "status" && (
-                    <Box sx={{ "& .MuiChip-root": { height: 22, fontSize: "0.72rem" } }}>
-                      <StatusBadge value={item.status} />
-                    </Box>
-                  )}
-                </Stack>
-                {body ? (
-                  <Typography variant={item.kind === "status" ? "subtitle2" : "body2"} sx={{ whiteSpace: "pre-wrap" }}>
-                    {body}
-                  </Typography>
-                ) : (
-                  <Typography variant="body2" color="text.secondary">
-                    Adjunto agregado
-                  </Typography>
-                )}
-                {secondaryText ? (
-                  <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
-                    {secondaryText}
-                  </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {dateLabel}
+                </Typography>
+
+                {item.kind === "status" ? (
+                  <>
+                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                      {body}
+                    </Typography>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", gap: 1 }}>
+                      {item.previousStatus ? <StatusBadge value={item.previousStatus} /> : <Chip label="sin dato" size="small" variant="outlined" />}
+                      <Typography color="text.secondary">→</Typography>
+                      {item.nextStatus ? <StatusBadge value={item.nextStatus} /> : <Chip label="sin dato" size="small" variant="outlined" />}
+                    </Stack>
+                    {secondaryText ? (
+                      <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                        {secondaryText}
+                      </Typography>
+                    ) : null}
+                  </>
                 ) : null}
+
+                {item.kind === "rename" ? (
+                  <>
+                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                      {body}
+                    </Typography>
+                    <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                      "{item.previousName}" → "{item.nextName}"
+                    </Typography>
+                    {secondaryText ? (
+                      <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                        {secondaryText}
+                      </Typography>
+                    ) : null}
+                  </>
+                ) : null}
+
+                {item.kind === "comment" ? (
+                  <>
+                    {body ? (
+                      <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                        {body}
+                      </Typography>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        Adjunto agregado
+                      </Typography>
+                    )}
+                    {secondaryText ? (
+                      <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                        {secondaryText}
+                      </Typography>
+                    ) : null}
+                  </>
+                ) : null}
+
                 {item.attachments.length > 0 && (
                   <AttachmentList
                     attachments={item.attachments}

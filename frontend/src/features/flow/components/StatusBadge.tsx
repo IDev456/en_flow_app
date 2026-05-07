@@ -24,11 +24,11 @@ export function StatusBadge({ value }: StatusBadgeProps) {
       borderColor: alpha(theme.palette.info.main, isDark ? 0.95 : 0.4),
     };
   } else if (tone === "espera_externa") {
-    color = "info";
+    color = "warning";
     sx = {
-      color: isDark ? theme.palette.grey[900] : theme.palette.info.dark,
-      bgcolor: alpha(theme.palette.info.main, isDark ? 0.8 : 0.17),
-      borderColor: alpha(theme.palette.info.main, isDark ? 0.9 : 0.34),
+      color: isDark ? theme.palette.grey[900] : theme.palette.warning.dark,
+      bgcolor: alpha(theme.palette.warning.main, isDark ? 0.86 : 0.2),
+      borderColor: alpha(theme.palette.warning.main, isDark ? 0.94 : 0.4),
     };
   } else if (tone === "finalizado" || tone === "completado" || tone === "resuelto") {
     color = "success";
@@ -51,7 +51,14 @@ export function StatusBadge({ value }: StatusBadgeProps) {
       bgcolor: alpha(theme.palette.error.main, isDark ? 0.84 : 0.16),
       borderColor: alpha(theme.palette.error.main, isDark ? 0.92 : 0.34),
     };
-  } else if (tone === "cancelado" || tone === "error") {
+  } else if (tone === "cancelado") {
+    color = "default";
+    sx = {
+      color: theme.palette.text.secondary,
+      bgcolor: alpha(theme.palette.grey[500], isDark ? 0.28 : 0.12),
+      borderColor: alpha(theme.palette.grey[500], isDark ? 0.45 : 0.3),
+    };
+  } else if (tone === "error") {
     color = "error";
     sx = {
       color: isDark ? theme.palette.grey[900] : theme.palette.error.dark,

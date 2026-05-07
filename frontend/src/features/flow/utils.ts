@@ -15,6 +15,7 @@ const statusPresentationMap: Record<string, { label: string; tone: string }> = {
   esperando_respuesta: { label: "esperando respuesta", tone: "espera_externa" },
   completado: { label: "completada", tone: "completado" },
   problema: { label: "con problema", tone: "problema" },
+  cancelada: { label: "cancelada", tone: "cancelado" },
   finalizado: { label: "finalizado", tone: "finalizado" }
 };
 
@@ -100,6 +101,8 @@ export type JournalItem =
       body: string;
       secondaryText: string | null;
       status: string;
+      previousStatus: string | null;
+      nextStatus: string | null;
       attachments: Attachment[];
     }
   | {
@@ -109,6 +112,17 @@ export type JournalItem =
       date: string;
       body: string;
       secondaryText: string | null;
+      attachments: Attachment[];
+    }
+  | {
+      id: string;
+      kind: "rename";
+      author: string;
+      date: string;
+      body: string;
+      secondaryText: string | null;
+      previousName: string;
+      nextName: string;
       attachments: Attachment[];
     };
 
@@ -137,6 +151,16 @@ export function isNoisyAutomaticJournalText(value: string | null | undefined): b
     normalized.includes("esperando respuesta externa de externo") ||
     normalized.includes("esperando respuesta de externo")
   );
+}
+
+function isCompletionStatus(value: string | null | undefined): boolean {
+  const normalized = normalizeJournalText(value ?? "");
+  return normalized === "completado" || normalized === "finalizado" || normalized === "resuelto";
+}
+
+function isCompletionText(value: string | null | undefined): boolean {
+  const normalized = normalizeJournalText(value ?? "");
+  return normalized === "tarea completada";
 }
 
 function isNameHistoryField(value: string | null | undefined): boolean {
@@ -168,10 +192,18 @@ function hasNearbyTimestamp(referenceMs: number, values: number[], thresholdMs: 
 
 export function buildJournalItems(history: StepHistoryEntry[], comments: StepComment[]): JournalItem[] {
   const historyNoteTimestamps = new Map<string, number[]>();
+  const nonCompletionStatusTimestamps: number[] = [];
 
   history.forEach((entry) => {
+    if (entry.campo === "estado" && !isCompletionStatus(entry.valor_nuevo)) {
+      nonCompletionStatusTimestamps.push(formatJournalDateAsMs(entry.fecha));
+    }
+
     const note = sanitizeHistoryNote(entry.nota);
     if (!note) return;
+    if (isCompletionText(note) && entry.campo === "estado" && !isCompletionStatus(entry.valor_nuevo)) {
+      return;
+    }
     const normalized = normalizeJournalText(note);
     const current = historyNoteTimestamps.get(normalized) ?? [];
     current.push(formatJournalDateAsMs(entry.fecha));
@@ -185,9 +217,15 @@ export function buildJournalItems(history: StepHistoryEntry[], comments: StepCom
       kind: "status" as const,
       author: entry.usuario,
       date: entry.fecha,
-      body: `Estado cambiado: ${humanizeStatus(entry.valor_anterior ?? "sin dato")} → ${humanizeStatus(entry.valor_nuevo ?? "sin dato")}`,
-      secondaryText: sanitizeHistoryNote(entry.nota),
+      body: "Estado cambiado",
+      secondaryText:
+        sanitizeHistoryNote(entry.nota) &&
+        !(isCompletionText(entry.nota) && !isCompletionStatus(entry.valor_nuevo))
+          ? sanitizeHistoryNote(entry.nota)
+          : null,
       status: entry.valor_nuevo ?? "activo",
+      previousStatus: entry.valor_anterior ?? null,
+      nextStatus: entry.valor_nuevo ?? null,
       attachments: entry.attachments ?? []
     }));
 
@@ -201,11 +239,13 @@ export function buildJournalItems(history: StepHistoryEntry[], comments: StepCom
     })
     .map((entry) => ({
       id: `history-name-${entry.id}`,
-      kind: "comment" as const,
+      kind: "rename" as const,
       author: entry.usuario,
       date: entry.fecha,
-      body: `Nombre actualizado: "${formatNameValue(entry.valor_anterior)}" → "${formatNameValue(entry.valor_nuevo)}"`,
+      body: "Nombre actualizado",
       secondaryText: sanitizeHistoryNote(entry.nota),
+      previousName: formatNameValue(entry.valor_anterior),
+      nextName: formatNameValue(entry.valor_nuevo),
       attachments: entry.attachments ?? []
     }));
 
@@ -232,6 +272,12 @@ export function buildJournalItems(history: StepHistoryEntry[], comments: StepCom
     .filter((comment) => {
       const text = comment.comentario?.trim() ?? "";
       if (isNoisyAutomaticJournalText(text)) return false;
+      if (
+        isCompletionText(text) &&
+        hasNearbyTimestamp(formatJournalDateAsMs(comment.fecha_creacion), nonCompletionStatusTimestamps, 5 * 60 * 1000)
+      ) {
+        return false;
+      }
       if (!text) return (comment.attachments?.length ?? 0) > 0;
       const normalized = normalizeJournalText(text);
       const relatedHistoryDates = historyNoteTimestamps.get(normalized);
