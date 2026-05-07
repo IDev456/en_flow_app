@@ -385,7 +385,12 @@ export function StepDetailPanel({
                     <Typography variant="h5" sx={{ mt: 0.25 }}>
                       {displayStepName}
                     </Typography>
-                    {displayStepDescription && (
+                    {drawer && (
+                      <Box sx={{ mt: 1 }}>
+                        <StatusBadge value={step.estado} />
+                      </Box>
+                    )}
+                    {!drawer && displayStepDescription && (
                       <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
                         {displayStepDescription}
                       </Typography>
@@ -395,7 +400,13 @@ export function StepDetailPanel({
               </Box>
 
               <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                {!drawer && (
+                {drawer ? (
+                  onClose ? (
+                    <IconButton onClick={onClose} aria-label="Cerrar detalle de la tarea">
+                      <CloseRoundedIcon />
+                    </IconButton>
+                  ) : null
+                ) : (
                   <>
                     {editingStep ? (
                       <>
@@ -429,73 +440,70 @@ export function StepDetailPanel({
                     )}
                   </>
                 )}
-                {drawer && onClose && (
-                  <IconButton onClick={onClose} aria-label="Cerrar detalle de la tarea">
-                    <CloseRoundedIcon />
-                  </IconButton>
-                )}
               </Stack>
             </Stack>
 
             {stepEditError && <Alert severity="error">{stepEditError}</Alert>}
 
-            <Card variant="outlined">
-              <CardContent sx={{ p: 1.75 }}>
-                <Stack spacing={1}>
-                  <Typography variant="subtitle2" color="text.secondary">
-                    Estado operativo
-                  </Typography>
-                  <StatusBadge value={step.estado} />
-                  <Stack spacing={0.5}>
-                    <Typography variant="body2" color="text.secondary">
-                      Último registro
-                    </Typography>
-                    <Typography variant="body2" color={latestMessage === "Sin registros todavía" ? "text.secondary" : "text.primary"}>
-                      {latestMessage}
-                    </Typography>
-                  </Stack>
-                </Stack>
-              </CardContent>
-            </Card>
-
-            {isWaitingExternal ? (
-              <Card variant="outlined">
-                <CardContent sx={{ p: 1.75 }}>
-                  <Stack spacing={1}>
-                    <Alert severity="info">Esperando respuesta externa</Alert>
-                    {step.expected_external_event && (
-                      <Typography variant="body2" color="text.secondary">
-                        Qué se espera: {step.expected_external_event}
-                      </Typography>
-                    )}
-                    {step.external_wait_reason && (
-                      <Typography variant="body2" color="text.secondary">
-                        Detalle: {step.external_wait_reason}
-                      </Typography>
-                    )}
-                    {step.external_reference && (
-                      <Typography variant="body2" color="text.secondary">
-                        Referencia: {step.external_reference}
-                      </Typography>
-                    )}
-                  </Stack>
-                </CardContent>
-              </Card>
-            ) : (
-              !drawer ? (
+            {!drawer && (
+              <>
                 <Card variant="outlined">
                   <CardContent sx={{ p: 1.75 }}>
-                    <Stack spacing={0.9}>
+                    <Stack spacing={1}>
                       <Typography variant="subtitle2" color="text.secondary">
-                        ¿Qué sigue?
+                        Estado operativo
                       </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Al cerrar esta tarea vas a decidir cómo continúa el flow.
-                      </Typography>
+                      <StatusBadge value={step.estado} />
+                      <Stack spacing={0.5}>
+                        <Typography variant="body2" color="text.secondary">
+                          Último registro
+                        </Typography>
+                        <Typography variant="body2" color={latestMessage === "Sin registros todavía" ? "text.secondary" : "text.primary"}>
+                          {latestMessage}
+                        </Typography>
+                      </Stack>
                     </Stack>
                   </CardContent>
                 </Card>
-              ) : null
+
+                {isWaitingExternal ? (
+                  <Card variant="outlined">
+                    <CardContent sx={{ p: 1.75 }}>
+                      <Stack spacing={1}>
+                        <Alert severity="info">Esperando respuesta externa</Alert>
+                        {step.expected_external_event && (
+                          <Typography variant="body2" color="text.secondary">
+                            Qué se espera: {step.expected_external_event}
+                          </Typography>
+                        )}
+                        {step.external_wait_reason && (
+                          <Typography variant="body2" color="text.secondary">
+                            Detalle: {step.external_wait_reason}
+                          </Typography>
+                        )}
+                        {step.external_reference && (
+                          <Typography variant="body2" color="text.secondary">
+                            Referencia: {step.external_reference}
+                          </Typography>
+                        )}
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card variant="outlined">
+                    <CardContent sx={{ p: 1.75 }}>
+                      <Stack spacing={0.9}>
+                        <Typography variant="subtitle2" color="text.secondary">
+                          ¿Qué sigue?
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Al cerrar esta tarea vas a decidir cómo continúa el flow.
+                        </Typography>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
             )}
           </Stack>
         </Box>
@@ -503,11 +511,15 @@ export function StepDetailPanel({
         <Divider />
 
         <Box sx={{ p: { xs: 2.5, md: 3 } }}>
+          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2 }}>
+            Historial y comentarios
+          </Typography>
           <Journal
             step={step}
             comments={comments}
             history={history}
             canChangeStatus={!drawer && canChangeStatus}
+            showComposer={!drawer}
             selectedStatus={selectedStatus}
             onSelectedStatusChange={setSelectedStatus}
             composerExpanded={composerExpanded}
