@@ -1,5 +1,6 @@
 import { useEffect, useRef, type MouseEvent, type PointerEvent } from "react";
 import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
+import NotesRoundedIcon from "@mui/icons-material/NotesRounded";
 import type { Theme } from "@mui/material/styles";
 import { alpha, useTheme } from "@mui/material/styles";
 import { Box, Button, ButtonBase, Card, Chip, Stack, Typography } from "@mui/material";
@@ -68,6 +69,19 @@ function renderStepTiming(step: Step): React.ReactElement | null {
       <AccessTimeRoundedIcon sx={{ fontSize: 14, color: "text.secondary" }} />
       <Typography variant="caption" color="text.secondary">
         {parts.join(" · ")}
+      </Typography>
+    </Stack>
+  );
+}
+
+function renderStepRecordsIndicator(step: Step): React.ReactElement {
+  const hasRecords = Boolean(step.ultimo_comentario_fecha || step.ultimo_comentario || step.resultado || step.observaciones);
+
+  return (
+    <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", mt: 0.5 }}>
+      <NotesRoundedIcon sx={{ fontSize: 14, color: "text.secondary" }} />
+      <Typography variant="caption" color="text.secondary">
+        {hasRecords ? "Con registros" : "Sin registros"}
       </Typography>
     </Stack>
   );
@@ -306,6 +320,7 @@ function VerticalWorkflowGraph({
                       </Stack>
 
                       {renderStepTiming(step)}
+                      {renderStepRecordsIndicator(step)}
 
                       <ButtonBase
                         onClick={() => {
@@ -333,7 +348,7 @@ function VerticalWorkflowGraph({
                       >
                         <Box sx={{ px: 0.25, py: 0.25 }}>
                           <Typography variant="caption" color="text.secondary">
-                            {hasRecords ? "Con registros" : "Sin registros todavía"}
+                            Ver registros
                           </Typography>
                         </Box>
                       </ButtonBase>
@@ -399,11 +414,7 @@ function GitLogWorkflowGraph({
                     </Stack>
                   </Stack>
                   {renderStepTiming(step)}
-                  <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 24 }}>
-                    <Typography variant="caption" color="text.secondary">
-                      {hasRecords ? "Con registros" : "Sin registros todavía"}
-                    </Typography>
-                  </Box>
+                  {renderStepRecordsIndicator(step)}
                   <ButtonBase
                     onClick={() => {
                       onSelectStep(step.id);
