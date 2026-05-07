@@ -322,8 +322,6 @@ export function Journal({
       {showComposer ? (
         <Box ref={composerRef}>
           <Stack spacing={2}>
-            <Typography variant="h6">Agregar registro</Typography>
-
             {composerExpanded ? (
               <Stack spacing={2}>
                 <TextField
@@ -493,15 +491,24 @@ export function Journal({
         message="Avance guardado"
       />
 
-      <Stack spacing={1.5}>
+      <Stack spacing={1.1}>
         {visibleItems.length === 0 ? (
-          <Alert severity="info">Sin registros todavia. Cuando registres avances, adjuntos o cambios de estado apareceran aqui en orden cronologico.</Alert>
+          <Card variant="outlined" sx={{ borderColor: "divider" }}>
+            <CardContent sx={{ py: 1.25, px: 1.5 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                Sin registros todavía.
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Los comentarios, adjuntos y cambios de estado aparecerán acá.
+              </Typography>
+            </CardContent>
+          </Card>
         ) : (
           visibleItems.map((item) => {
             const body = item.body.trim();
             return (
-            <Card key={item.id} variant="outlined">
-              <CardContent sx={{ display: "grid", gap: 1, p: 1.5 }}>
+            <Card key={item.id} variant="outlined" sx={{ borderColor: (theme) => alpha(theme.palette.divider, 0.85) }}>
+              <CardContent sx={{ display: "grid", gap: 0.9, p: 1.35 }}>
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between" }}>
                   <Typography variant="caption" color="text.secondary">
                     {formatDate(item.date)}
@@ -541,8 +548,8 @@ function AttachmentList({ attachments }: AttachmentListProps) {
     <Box
       sx={{
         display: "grid",
-        gap: 1.25,
-        gridTemplateColumns: { xs: "1fr", sm: "repeat(auto-fit, minmax(220px, 1fr))" },
+        gap: 1,
+        gridTemplateColumns: { xs: "1fr", sm: "repeat(auto-fit, minmax(200px, 1fr))" },
       }}
     >
       {attachments.map((attachment) => {
@@ -557,9 +564,9 @@ function AttachmentList({ attachments }: AttachmentListProps) {
             download={attachment.nombre}
             target="_blank"
             rel="noreferrer"
-            sx={{ textDecoration: "none" }}
+            sx={{ textDecoration: "none", borderColor: (theme) => alpha(theme.palette.divider, 0.85) }}
           >
-            <CardContent sx={{ display: "grid", gap: 1.25 }}>
+            <CardContent sx={{ display: "grid", gap: 1, p: 1.25 }}>
               {isImage ? (
                 <Box
                   component="img"
@@ -567,7 +574,7 @@ function AttachmentList({ attachments }: AttachmentListProps) {
                   alt={attachment.nombre}
                   sx={{
                     width: "100%",
-                    maxHeight: 220,
+                    maxHeight: 170,
                     objectFit: "cover",
                     borderRadius: 2,
                     border: "1px solid",
@@ -593,8 +600,10 @@ function AttachmentList({ attachments }: AttachmentListProps) {
                 </Stack>
               )}
               <Box>
-                <Typography sx={{ fontWeight: 700 }}>{attachment.nombre}</Typography>
-                <Typography variant="body2" color="text.secondary">
+                <Typography sx={{ fontWeight: 700 }} noWrap>
+                  {attachment.nombre}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
                   {formatFileSize(attachment.size_bytes)}
                 </Typography>
               </Box>

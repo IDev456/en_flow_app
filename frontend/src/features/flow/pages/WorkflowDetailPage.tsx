@@ -372,8 +372,7 @@ export function WorkflowDetailPage() {
     (item) => linkedRequirementIds.has(item.id) || item.workflow_ids.includes(workflow.id)
   );
   const availableRequirements = requirements.filter((item) => !linkedRequirements.some((linked) => linked.id === item.id));
-  const linkedRequirementLabel =
-    linkedRequirements.length === 1 ? "1 requerimiento vinculado" : `${linkedRequirements.length} requerimientos vinculados`;
+  const linkedRequirementLabel = linkedRequirements.length === 1 ? "Requerimiento asociado" : "Requerimientos asociados";
   const managingRequirementsBusy = linkingRequirement || unlinkingRequirementId !== null;
 
   return (
@@ -419,34 +418,50 @@ export function WorkflowDetailPage() {
                   </Typography>
                 </Box>
 
-                <Stack spacing={0.9} sx={{ alignItems: { xs: "flex-start", md: "flex-end" } }}>
-                  {linkedRequirements.length > 0 && (
-                    <Stack
-                      direction="row"
-                      spacing={0.75}
-                      sx={{ flexWrap: "wrap", gap: 0.75, justifyContent: { md: "flex-end" }, alignItems: "center" }}
-                    >
-                      <Typography variant="caption" color="text.secondary">
-                        {linkedRequirementLabel}
-                      </Typography>
-                      {linkedRequirements.slice(0, 2).map((item) => (
-                        <Chip
-                          key={item.id}
-                          size="small"
-                          variant="outlined"
-                          label={item.descripcion?.trim() || `Req ${item.id.slice(0, 8)}`}
-                        />
-                      ))}
-                      {linkedRequirements.length > 2 && (
-                        <Chip size="small" variant="outlined" label={`+${linkedRequirements.length - 2}`} />
-                      )}
-                    </Stack>
-                  )}
-
-                  <Button variant="text" size="small" color="inherit" onClick={handleOpenLinkRequirement}>
-                    {linkedRequirements.length > 0 ? "Gestionar" : "Asociar requerimiento"}
-                  </Button>
-                </Stack>
+                <Box
+                  sx={{
+                    minWidth: { xs: "100%", md: 280 },
+                    maxWidth: { xs: "100%", md: 480 },
+                    alignSelf: { xs: "stretch", md: "flex-start" },
+                  }}
+                >
+                  <Typography variant="caption" color="text.secondary">
+                    {linkedRequirements.length > 0 ? linkedRequirementLabel : "Sin requerimientos asociados"}
+                  </Typography>
+                  <Stack
+                    direction={{ xs: "column", md: "row" }}
+                    spacing={0.75}
+                    sx={{
+                      mt: 0.5,
+                      justifyContent: { md: "flex-end" },
+                      alignItems: { xs: "stretch", md: "center" },
+                      flexWrap: "wrap",
+                      rowGap: 0.75,
+                    }}
+                  >
+                    {linkedRequirements.slice(0, 2).map((item) => (
+                      <Chip
+                        key={item.id}
+                        size="small"
+                        variant="outlined"
+                        label={item.descripcion?.trim() || `Req ${item.id.slice(0, 8)}`}
+                        sx={{
+                          maxWidth: { xs: "100%", md: 260 },
+                          "& .MuiChip-label": {
+                            display: "block",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          },
+                        }}
+                      />
+                    ))}
+                    {linkedRequirements.length > 2 && <Chip size="small" variant="outlined" label={`+${linkedRequirements.length - 2}`} />}
+                    <Button variant="text" size="small" color="inherit" onClick={handleOpenLinkRequirement}>
+                      {linkedRequirements.length > 0 ? "Gestionar" : "Asociar"}
+                    </Button>
+                  </Stack>
+                </Box>
               </Stack>
 
               <WorkflowGraph
