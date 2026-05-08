@@ -37,6 +37,7 @@ import { formatElapsedTime, getStatusTone } from "../utils";
 
 type ViewMode = "requirements" | "flows";
 type FlowFilter = "all" | "active" | "waiting" | "closed";
+type FlowSort = "latest_activity" | "creation_date";
 
 type TriggerListPageProps = {
   defaultView?: ViewMode;
@@ -57,6 +58,11 @@ const flowFilterOptions: Array<{ value: FlowFilter; label: string }> = [
   { value: "waiting", label: "Esperando" },
   { value: "closed", label: "Finalizados" },
   { value: "all", label: "Todos" },
+];
+
+const flowSortOptions: Array<{ value: FlowSort; label: string }> = [
+  { value: "latest_activity", label: "Último registro" },
+  { value: "creation_date", label: "Fecha de creación" },
 ];
 
 function getWorkflowDisplayStatus(workflow: WorkflowDetail) {
@@ -151,12 +157,19 @@ function matchesRequirementQuery(trigger: TriggerDetail, query: string) {
   return haystack.includes(normalized);
 }
 
+function getDateValue(value: string | null | undefined) {
+  if (!value) return null;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export function TriggerListPage({ defaultView = "requirements", lockView = false, title = "Requerimientos" }: TriggerListPageProps) {
   const [triggers, setTriggers] = useState<TriggerDetail[]>([]);
   const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
   const [query, setQuery] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
   const [stateFilter, setStateFilter] = useState<FlowFilter>("all");
+  const [flowSort, setFlowSort] = useState<FlowSort>("latest_activity");
   const [loading, setLoading] = useState(true);
   const [deletingTriggerId, setDeletingTriggerId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -247,22 +260,37 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
           latestMovementAt: getLatestMovementAt(workflow),
           linkedRequirements,
         };
-      })
-      .sort((a, b) => {
-        const left = new Date(a.latestMovementAt ?? a.workflow.fecha_inicio).getTime();
-        const right = new Date(b.latestMovementAt ?? b.workflow.fecha_inicio).getTime();
-        return right - left;
       });
   }, [workflowsById, requirementByWorkflowId]);
 
   const filteredFlows = useMemo(
-    () =>
-      flowCards.filter((item) => {
+    () => {
+      const filtered = flowCards.filter((item) => {
         if (!matchesFlowQuery(item, query)) return false;
         if (stateFilter === "all") return true;
         return getFlowFilterFromStatus(item.displayStatus) === stateFilter;
-      }),
-    [flowCards, query, stateFilter]
+      });
+
+      return [...filtered].sort((leftItem, rightItem) => {
+        const leftCreation = getDateValue(leftItem.workflow.fecha_inicio) ?? 0;
+        const rightCreation = getDateValue(rightItem.workflow.fecha_inicio) ?? 0;
+
+        if (flowSort === "creation_date") {
+          return rightCreation - leftCreation;
+        }
+
+        const leftLatest = getDateValue(leftItem.latestMovementAt);
+        const rightLatest = getDateValue(rightItem.latestMovementAt);
+
+        if (leftLatest === null && rightLatest === null) {
+          return rightCreation - leftCreation;
+        }
+        if (leftLatest === null) return 1;
+        if (rightLatest === null) return -1;
+        return rightLatest - leftLatest;
+      });
+    },
+    [flowCards, query, stateFilter, flowSort]
   );
 
   const flowCounts = useMemo(() => {
@@ -591,25 +619,44 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 }}
               />
 
-              <ToggleButtonGroup
-                exclusive
-                size="small"
-                value={stateFilter}
-                onChange={(_, value: FlowFilter | null) => {
-                  if (value) setStateFilter(value);
-                }}
-                sx={{ flexWrap: "wrap", rowGap: 0.75, justifyContent: { lg: "flex-end" } }}
-              >
-                {flowFilterOptions.map((option) => {
-                  const countLabel = option.value === "all" ? "" : ` (${currentCounts[option.value] ?? 0})`;
-                  return (
-                    <ToggleButton key={option.value} value={option.value}>
-                      {option.label}
-                      {countLabel}
-                    </ToggleButton>
-                  );
-                })}
-              </ToggleButtonGroup>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ alignItems: { sm: "center" }, flexWrap: "wrap" }}>
+                {viewMode === "flows" && (
+                  <TextField
+                    select
+                    size="small"
+                    label="Ordenar"
+                    value={flowSort}
+                    onChange={(event) => setFlowSort(event.target.value as FlowSort)}
+                    sx={{ minWidth: 220 }}
+                  >
+                    {flowSortOptions.map((option) => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                )}
+
+                <ToggleButtonGroup
+                  exclusive
+                  size="small"
+                  value={stateFilter}
+                  onChange={(_, value: FlowFilter | null) => {
+                    if (value) setStateFilter(value);
+                  }}
+                  sx={{ flexWrap: "wrap", rowGap: 0.75, justifyContent: { lg: "flex-end" } }}
+                >
+                  {flowFilterOptions.map((option) => {
+                    const countLabel = option.value === "all" ? "" : ` (${currentCounts[option.value] ?? 0})`;
+                    return (
+                      <ToggleButton key={option.value} value={option.value}>
+                        {option.label}
+                        {countLabel}
+                      </ToggleButton>
+                    );
+                  })}
+                </ToggleButtonGroup>
+              </Stack>
             </Stack>
 
             {loading && (
@@ -652,9 +699,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                           },
                         }}
                       >
-                        <CardContent sx={{ p: { xs: 1.2, md: 1.35 } }}>
-                          <Stack spacing={0.75}>
-                            <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start", justifyContent: "space-between" }}>
+                        <CardContent sx={{ p: { xs: 1.1, md: 1.2 } }}>
+                          <Stack spacing={0.55}>
+                            <Stack direction="row" spacing={0.75} sx={{ alignItems: "flex-start", justifyContent: "space-between" }}>
                               <StatusBadge value={item.displayStatus} />
                               <IconButton
                                 className="flow-secondary-actions"
@@ -667,34 +714,19 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                               </IconButton>
                             </Stack>
 
-                            <Box>
-                              <Typography variant="subtitle2" color="text.secondary">
-                                {stepLabel}
-                              </Typography>
-                              <Typography variant="h6" sx={{ mt: 0.1, lineHeight: 1.2 }}>
-                                {step?.nombre ?? "Sin tarea registrada"}
-                              </Typography>
-                            </Box>
-
-                            <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.3 }}>
-                              Flow: {flowTitle}
-                            </Typography>
-
-                            <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.3 }}>
-                              Último registro: {getStepRecord(step)}
-                            </Typography>
-
                             <Stack
                               direction="row"
-                              spacing={0.75}
-                              sx={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 0.55 }}
+                              spacing={1}
+                              sx={{ alignItems: "flex-start", justifyContent: "space-between", gap: 0.8 }}
                             >
-                              <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
-                                <AccessTimeRoundedIcon sx={{ fontSize: 16, color: "text.secondary" }} />
+                              <Box sx={{ minWidth: 0, flex: 1 }}>
                                 <Typography variant="caption" color="text.secondary">
-                                  {movement ?? "Sin movimiento reciente"}
+                                  {stepLabel}
                                 </Typography>
-                              </Stack>
+                                <Typography variant="subtitle1" sx={{ mt: 0.1, lineHeight: 1.2 }}>
+                                  {step?.nombre ?? "Sin tarea registrada"}
+                                </Typography>
+                              </Box>
 
                               <Button
                                 variant="outlined"
@@ -707,6 +739,21 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                               </Button>
                             </Stack>
 
+                            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.35 }}>
+                              Flow: {flowTitle}
+                            </Typography>
+
+                            <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.25 }}>
+                              Último registro: {getStepRecord(step)}
+                            </Typography>
+
+                            <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", flexWrap: "wrap", gap: 0.55 }}>
+                              <AccessTimeRoundedIcon sx={{ fontSize: 15, color: "text.secondary" }} />
+                              <Typography variant="caption" color="text.secondary">
+                                {movement ?? "Sin movimiento reciente"}
+                              </Typography>
+                            </Stack>
+
                             {item.linkedRequirements.length > 0 && (
                               <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", gap: 0.5 }}>
                                 {item.linkedRequirements.slice(0, 2).map((requirement) => (
@@ -715,6 +762,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                                     size="small"
                                     variant="outlined"
                                     label={requirement.descripcion?.trim() || `Req ${requirement.id.slice(0, 8)}`}
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      navigate(`/requirements/${requirement.id}`);
+                                    }}
+                                    sx={{ cursor: "pointer" }}
                                   />
                                 ))}
                                 {item.linkedRequirements.length > 2 && (
