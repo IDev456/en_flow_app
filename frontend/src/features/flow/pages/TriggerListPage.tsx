@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
+import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
+import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
 import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
+import NotesRoundedIcon from "@mui/icons-material/NotesRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import {
   Alert,
@@ -11,12 +14,9 @@ import {
   CardContent,
   Chip,
   CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   IconButton,
   InputAdornment,
+  ListItemIcon,
   Menu,
   MenuItem,
   Snackbar,
@@ -29,7 +29,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { HoverEntityActions } from "../../../components/HoverEntityActions";
-import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, getWorkflow, listTriggers, listWorkflows, updateWorkflow } from "../api";
+import { cancelWorkflow, createTrigger, deleteTrigger, getWorkflow, listTriggers, listWorkflows } from "../api";
 import { EmptyTriggerList } from "../components/EmptyTriggerList";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Step, TriggerDetail, WorkflowDetail } from "../types";
@@ -121,18 +121,8 @@ function getStepRecord(step: Step | null) {
   return step.ultimo_comentario?.trim() || (step.descripcion?.trim() ?? "Sin registros todavía");
 }
 
-function getFlowTitle(workflow: WorkflowDetail, linkedRequirements: TriggerDetail[]) {
-  if (workflow.objetivo_final?.trim()) return workflow.objetivo_final.trim();
-  if (linkedRequirements[0]?.descripcion?.trim()) return linkedRequirements[0].descripcion.trim() as string;
-  return `Flow ${workflow.id.slice(0, 8)}`;
-}
-
 function canCancelWorkflow(workflow: WorkflowDetail) {
   return ["en_proceso", "esperando_respuesta", "en_espera", "con_problema"].includes(workflow.estado);
-}
-
-function canDeleteWorkflow(workflow: WorkflowDetail) {
-  return ["cancelado", "finalizado"].includes(workflow.estado);
 }
 
 function matchesFlowQuery(data: FlowCardData, query: string) {
@@ -184,12 +174,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [flowToastMessage, setFlowToastMessage] = useState<string | null>(null);
   const [flowActionsAnchor, setFlowActionsAnchor] = useState<HTMLElement | null>(null);
   const [flowActionsWorkflowId, setFlowActionsWorkflowId] = useState<string | null>(null);
-  const [editingFlowId, setEditingFlowId] = useState<string | null>(null);
-  const [editFlowTitle, setEditFlowTitle] = useState("");
-  const [editFlowError, setEditFlowError] = useState<string | null>(null);
-  const [savingFlowEdit, setSavingFlowEdit] = useState(false);
   const [cancellingFlowId, setCancellingFlowId] = useState<string | null>(null);
-  const [deletingFlowId, setDeletingFlowId] = useState<string | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -392,48 +377,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     setFlowActionsWorkflowId(null);
   }
 
-  function handleStartFlowEdit(event: MouseEvent<HTMLElement>, workflowId: string, currentTitle: string) {
-    event.preventDefault();
-    event.stopPropagation();
-    handleCloseFlowActions();
-    setEditingFlowId(workflowId);
-    setEditFlowTitle(currentTitle);
-    setEditFlowError(null);
-  }
-
-  function handleCloseFlowEdit() {
-    if (savingFlowEdit) return;
-    setEditingFlowId(null);
-    setEditFlowTitle("");
-    setEditFlowError(null);
-  }
-
-  async function handleSaveFlowEdit() {
-    if (!editingFlowId) return;
-
-    const nextTitle = editFlowTitle.trim();
-    if (nextTitle.length < 3) {
-      setEditFlowError("Debes indicar el nombre del flow.");
-      return;
-    }
-
-    try {
-      setSavingFlowEdit(true);
-      setEditFlowError(null);
-      await updateWorkflow(editingFlowId, { objetivo_final: nextTitle });
-      await loadData();
-      setEditingFlowId(null);
-      setEditFlowTitle("");
-      setEditFlowError(null);
-      setFlowToastMessage("Flow actualizado.");
-      setFlowToastOpen(true);
-    } catch (err) {
-      setEditFlowError(err instanceof Error ? err.message : "No se pudo actualizar el flow.");
-    } finally {
-      setSavingFlowEdit(false);
-    }
-  }
-
   async function handleCancelFlowAction(event: MouseEvent<HTMLElement>, workflowId: string) {
     event.preventDefault();
     event.stopPropagation();
@@ -458,33 +401,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       setError(err instanceof Error ? err.message : "No se pudo cancelar el flow.");
     } finally {
       setCancellingFlowId(null);
-    }
-  }
-
-  async function handleDeleteFlowAction(event: MouseEvent<HTMLElement>, workflowId: string) {
-    event.preventDefault();
-    event.stopPropagation();
-    handleCloseFlowActions();
-
-    const workflow = workflowsById[workflowId];
-    if (!workflow || !canDeleteWorkflow(workflow)) return;
-
-    const confirmed = window.confirm(
-      "¿Eliminar este flow?\n\nEsta acción eliminará el flow, sus tareas, comentarios, historial, eventos externos y vínculos con requerimientos.\n\nEsta acción no se puede deshacer."
-    );
-    if (!confirmed) return;
-
-    try {
-      setDeletingFlowId(workflowId);
-      setError(null);
-      await deleteWorkflow(workflowId);
-      await loadData();
-      setFlowToastMessage("Flow eliminado.");
-      setFlowToastOpen(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo eliminar el flow.");
-    } finally {
-      setDeletingFlowId(null);
     }
   }
 
@@ -601,25 +517,27 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             <Stack
               direction={{ xs: "column", lg: "row" }}
               spacing={1.5}
-              sx={{ justifyContent: "space-between", alignItems: { lg: "center" } }}
+              sx={{ justifyContent: "space-between", alignItems: { lg: "flex-end" } }}
             >
-              <TextField
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={viewMode === "flows" ? "Buscar flow o tarea..." : "Buscar requerimiento..."}
-                sx={{ maxWidth: 440 }}
-                slotProps={{
-                  input: {
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <SearchRoundedIcon color="action" />
-                      </InputAdornment>
-                    ),
-                  },
-                }}
-              />
+              <Box sx={{ width: "100%", maxWidth: { lg: 520 }, flexShrink: 0 }}>
+                <TextField
+                  fullWidth
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={viewMode === "flows" ? "Buscar flow o tarea..." : "Buscar requerimiento..."}
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchRoundedIcon color="action" />
+                        </InputAdornment>
+                      ),
+                    },
+                  }}
+                />
+              </Box>
 
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ alignItems: { sm: "center" }, flexWrap: "wrap" }}>
+              <Stack spacing={1} sx={{ width: "100%", alignItems: { lg: "flex-end" } }}>
                 {viewMode === "flows" && (
                   <TextField
                     select
@@ -627,7 +545,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                     label="Ordenar"
                     value={flowSort}
                     onChange={(event) => setFlowSort(event.target.value as FlowSort)}
-                    sx={{ minWidth: 220 }}
+                    sx={{ minWidth: { xs: "100%", sm: 240 }, maxWidth: { lg: 280 } }}
                   >
                     {flowSortOptions.map((option) => (
                       <MenuItem key={option.value} value={option.value}>
@@ -644,7 +562,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   onChange={(_, value: FlowFilter | null) => {
                     if (value) setStateFilter(value);
                   }}
-                  sx={{ flexWrap: "wrap", rowGap: 0.75, justifyContent: { lg: "flex-end" } }}
+                  sx={{ flexWrap: "wrap", rowGap: 0.75, justifyContent: { lg: "flex-end" }, alignSelf: { lg: "flex-end" } }}
                 >
                   {flowFilterOptions.map((option) => {
                     const countLabel = option.value === "all" ? "" : ` (${currentCounts[option.value] ?? 0})`;
@@ -680,7 +598,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                         ? "Tarea actual"
                         : "Última tarea";
                     const movement = formatElapsedTime(item.latestMovementAt);
-                    const flowTitle = getFlowTitle(item.workflow, item.linkedRequirements);
+                    const canShowActions = canCancelWorkflow(item.workflow);
 
                     return (
                       <Card
@@ -703,15 +621,17 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                           <Stack spacing={0.55}>
                             <Stack direction="row" spacing={0.75} sx={{ alignItems: "flex-start", justifyContent: "space-between" }}>
                               <StatusBadge value={item.displayStatus} />
-                              <IconButton
-                                className="flow-secondary-actions"
-                                size="small"
-                                aria-label="Acciones del flow"
-                                onClick={(event) => handleOpenFlowActions(event, item.workflow.id)}
-                                sx={{ mt: -0.45, mr: -0.45, transition: "opacity 160ms ease" }}
-                              >
-                                <MoreHorizRoundedIcon fontSize="small" />
-                              </IconButton>
+                              {canShowActions && (
+                                <IconButton
+                                  className="flow-secondary-actions"
+                                  size="small"
+                                  aria-label="Acciones del flow"
+                                  onClick={(event) => handleOpenFlowActions(event, item.workflow.id)}
+                                  sx={{ mt: -0.45, mr: -0.45, transition: "opacity 160ms ease" }}
+                                >
+                                  <MoreHorizRoundedIcon fontSize="small" />
+                                </IconButton>
+                              )}
                             </Stack>
 
                             <Stack
@@ -723,7 +643,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                                 <Typography variant="caption" color="text.secondary">
                                   {stepLabel}
                                 </Typography>
-                                <Typography variant="subtitle1" sx={{ mt: 0.1, lineHeight: 1.2 }}>
+                                <Typography variant="h6" sx={{ mt: 0.1, lineHeight: 1.2, fontWeight: 700 }}>
                                   {step?.nombre ?? "Sin tarea registrada"}
                                 </Typography>
                               </Box>
@@ -739,13 +659,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                               </Button>
                             </Stack>
 
-                            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.35 }}>
-                              Flow: {flowTitle}
-                            </Typography>
-
-                            <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.25 }}>
-                              Último registro: {getStepRecord(step)}
-                            </Typography>
+                            <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", flexWrap: "wrap", gap: 0.55 }}>
+                              <NotesRoundedIcon sx={{ fontSize: 15, color: "text.secondary" }} />
+                              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.25 }}>
+                                Último registro: {getStepRecord(step)}
+                              </Typography>
+                            </Stack>
 
                             <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", flexWrap: "wrap", gap: 0.55 }}>
                               <AccessTimeRoundedIcon sx={{ fontSize: 15, color: "text.secondary" }} />
@@ -762,6 +681,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                                     size="small"
                                     variant="outlined"
                                     label={requirement.descripcion?.trim() || `Req ${requirement.id.slice(0, 8)}`}
+                                    icon={<AssignmentOutlinedIcon sx={{ fontSize: 14 }} />}
                                     onClick={(event) => {
                                       event.preventDefault();
                                       event.stopPropagation();
@@ -783,23 +703,15 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                           open={flowActionsWorkflowId === item.workflow.id}
                           onClose={handleCloseFlowActions}
                         >
-                          <MenuItem onClick={(event) => handleStartFlowEdit(event, item.workflow.id, flowTitle)}>
-                            Editar flow
-                          </MenuItem>
                           {canCancelWorkflow(item.workflow) && (
                             <MenuItem
                               onClick={(event) => void handleCancelFlowAction(event, item.workflow.id)}
                               disabled={cancellingFlowId === item.workflow.id}
                             >
+                              <ListItemIcon sx={{ minWidth: 30 }}>
+                                <CancelOutlinedIcon fontSize="small" />
+                              </ListItemIcon>
                               {cancellingFlowId === item.workflow.id ? "Cancelando..." : "Cancelar flow"}
-                            </MenuItem>
-                          )}
-                          {canDeleteWorkflow(item.workflow) && (
-                            <MenuItem
-                              onClick={(event) => void handleDeleteFlowAction(event, item.workflow.id)}
-                              disabled={deletingFlowId === item.workflow.id}
-                            >
-                              {deletingFlowId === item.workflow.id ? "Eliminando..." : "Eliminar flow"}
                             </MenuItem>
                           )}
                         </Menu>
@@ -900,29 +812,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         </CardContent>
       </Card>
 
-      <Dialog open={Boolean(editingFlowId)} onClose={handleCloseFlowEdit} fullWidth maxWidth="xs">
-        <DialogTitle>Editar flow</DialogTitle>
-        <DialogContent>
-          <Stack spacing={1.25} sx={{ pt: 0.5 }}>
-            <TextField
-              autoFocus
-              label="Nombre del flow"
-              value={editFlowTitle}
-              onChange={(event) => setEditFlowTitle(event.target.value)}
-              disabled={savingFlowEdit}
-            />
-            {editFlowError && <Alert severity="error">{editFlowError}</Alert>}
-          </Stack>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={handleCloseFlowEdit} color="inherit" disabled={savingFlowEdit}>
-            Cancelar
-          </Button>
-          <Button onClick={() => void handleSaveFlowEdit()} variant="contained" disabled={savingFlowEdit}>
-            {savingFlowEdit ? "Guardando..." : "Guardar"}
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Stack>
   );
 }
