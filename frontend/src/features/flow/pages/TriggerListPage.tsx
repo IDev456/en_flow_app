@@ -36,7 +36,7 @@ import type { Step, TriggerDetail, WorkflowDetail } from "../types";
 import { formatElapsedTime, getStatusTone } from "../utils";
 
 type ViewMode = "requirements" | "flows";
-type FlowFilter = "all" | "active" | "waiting" | "blocked" | "closed";
+type FlowFilter = "all" | "active" | "waiting" | "closed";
 
 type TriggerListPageProps = {
   defaultView?: ViewMode;
@@ -53,11 +53,10 @@ type FlowCardData = {
 };
 
 const flowFilterOptions: Array<{ value: FlowFilter; label: string }> = [
-  { value: "all", label: "Todos" },
   { value: "active", label: "Activos" },
   { value: "waiting", label: "Esperando" },
-  { value: "blocked", label: "Pausados / problema" },
-  { value: "closed", label: "Cerrados" },
+  { value: "closed", label: "Finalizados" },
+  { value: "all", label: "Todos" },
 ];
 
 function getWorkflowDisplayStatus(workflow: WorkflowDetail) {
@@ -78,7 +77,6 @@ function getWorkflowDisplayStatus(workflow: WorkflowDetail) {
 function getFlowFilterFromStatus(statusValue: string): Exclude<FlowFilter, "all"> {
   const tone = getStatusTone(statusValue);
   if (tone === "finalizado" || tone === "completado" || tone === "resuelto" || tone === "cancelado") return "closed";
-  if (tone === "problema") return "blocked";
   if (tone === "espera" || tone === "espera_externa" || statusValue === "en_espera") return "waiting";
   return "active";
 }
@@ -273,7 +271,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         acc[getFlowFilterFromStatus(item.displayStatus)] += 1;
         return acc;
       },
-      { active: 0, waiting: 0, blocked: 0, closed: 0 }
+      { active: 0, waiting: 0, closed: 0 }
     );
   }, [flowCards]);
 
@@ -293,7 +291,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         acc[getFlowFilterFromStatus(trigger.estado_general)] += 1;
         return acc;
       },
-      { active: 0, waiting: 0, blocked: 0, closed: 0 }
+      { active: 0, waiting: 0, closed: 0 }
     );
   }, [triggers]);
 
@@ -777,7 +775,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
                     const openCount = linkedWorkflows.filter((workflow) => {
                       const filter = getFlowFilterFromStatus(getWorkflowDisplayStatus(workflow));
-                      return filter === "active" || filter === "waiting" || filter === "blocked";
+                      return filter === "active" || filter === "waiting";
                     }).length;
                     const waitingCount = linkedWorkflows.filter(
                       (workflow) => getFlowFilterFromStatus(getWorkflowDisplayStatus(workflow)) === "waiting"
