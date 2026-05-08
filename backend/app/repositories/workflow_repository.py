@@ -60,6 +60,27 @@ def _active_step_orders(steps: list[StepInstancePublic]) -> list[int]:
     return [step.orden for step in _sort_step_instances(steps) if step.estado in OPEN_STEP_STATUSES]
 
 
+def _clean_text(value: object | None) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _resolve_first_step_name(payload: WorkflowInstanceBase) -> str:
+    first_step_override = getattr(payload, "primer_paso", None)
+    if first_step_override:
+        override_name = _clean_text(getattr(first_step_override, "nombre", None))
+        if override_name:
+            return override_name
+
+    objective_name = _clean_text(getattr(payload, "objetivo_final", None))
+    if objective_name:
+        return objective_name
+
+    return "Tarea inicial"
+
+
 def _normalize_template_steps(steps: list[StepTemplatePublic]) -> list[StepTemplatePublic]:
     ordered = _sort_template_steps(steps)
     if len(ordered) <= 1:
@@ -426,7 +447,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
     ) -> WorkflowDetail:
         now = utc_now()
         first_step_override = getattr(payload, "primer_paso", None)
-        first_step_name = first_step_override.nombre if first_step_override and first_step_override.nombre else "Tarea inicial"
+        first_step_name = _resolve_first_step_name(payload)
         workflow = WorkflowSummary(
             id=str(uuid4()),
             trigger_id=trigger_id,
@@ -873,7 +894,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
     ) -> WorkflowDetail:
         now = utc_now()
         first_step_override = getattr(payload, "primer_paso", None)
-        first_step_name = first_step_override.nombre if first_step_override and first_step_override.nombre else "Tarea inicial"
+        first_step_name = _resolve_first_step_name(payload)
         workflow = WorkflowModel(
             id=str(uuid4()),
             trigger_id=trigger_id,

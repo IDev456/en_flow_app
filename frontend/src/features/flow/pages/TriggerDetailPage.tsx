@@ -38,6 +38,7 @@ export function TriggerDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newWorkflowFirstDescription, setNewWorkflowFirstDescription] = useState("");
+  const [newWorkflowFirstName, setNewWorkflowFirstName] = useState("");
   const [newWorkflowError, setNewWorkflowError] = useState<string | null>(null);
   const [newWorkflowSuccess, setNewWorkflowSuccess] = useState<string | null>(null);
   const [creatingWorkflow, setCreatingWorkflow] = useState(false);
@@ -222,11 +223,18 @@ export function TriggerDetailPage() {
       setCreatingWorkflow(true);
       setNewWorkflowError(null);
       setNewWorkflowSuccess(null);
+      const flowTitle = trigger.descripcion?.trim() || "";
+      const firstStepNameInput = newWorkflowFirstName.trim();
+      const firstStepName =
+        firstStepNameInput ||
+        flowTitle ||
+        "Tarea inicial";
+
       const newWorkflow = await startWorkflow(trigger.id, {
-        objetivo_final: trigger.descripcion ?? "Gestionar requerimiento",
+        objetivo_final: flowTitle || null,
         resolucion_esperada: "Flujo completado con validacion final",
         primer_paso: {
-          nombre: "Tarea inicial",
+          nombre: firstStepName,
           descripcion: newWorkflowFirstDescription.trim(),
           asignado_a: DEFAULT_ACTOR,
           fecha_vencimiento: null,
@@ -234,6 +242,7 @@ export function TriggerDetailPage() {
       });
       setNewWorkflowSuccess("Nuevo flow asociado creado.");
       setNewWorkflowFirstDescription("");
+      setNewWorkflowFirstName("");
       await loadTrigger();
       navigate(`/workflows/${newWorkflow.id}`);
     } catch (err) {
@@ -492,7 +501,17 @@ export function TriggerDetailPage() {
                   Crear nuevo flow asociado
                 </Typography>
                 <TextField
-                  label="Tarea inicial del flow *"
+                  label="Nombre de la primera tarea (opcional)"
+                  value={newWorkflowFirstName}
+                  onChange={(event) => setNewWorkflowFirstName(event.target.value)}
+                  disabled={creatingWorkflow}
+                  placeholder={trigger.descripcion?.trim() || "Se usará la descripción del requerimiento"}
+                  helperText="Si no se indica, se usará el nombre del requerimiento"
+                  fullWidth
+                  slotProps={{ htmlInput: { maxLength: 120 } }}
+                />
+                <TextField
+                  label="Descripción de la tarea inicial *"
                   multiline
                   minRows={3}
                   value={newWorkflowFirstDescription}
