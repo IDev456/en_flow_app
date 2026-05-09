@@ -27,6 +27,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { HoverEntityActions } from "../../../components/HoverEntityActions";
@@ -559,6 +560,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder={viewMode === "flows" ? "Buscar flow o tarea..." : "Buscar requerimiento..."}
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      minHeight: 42,
+                    },
+                  }}
                   slotProps={{
                     input: {
                       startAdornment: (
@@ -571,7 +577,21 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 />
               </Box>
 
-              <Stack spacing={1.1} sx={{ width: "100%", alignItems: { lg: "flex-end" } }}>
+              <Stack
+                spacing={1.1}
+                sx={{
+                  width: "100%",
+                  alignItems: { lg: "flex-end" },
+                  p: { xs: 0.75, sm: 0.9 },
+                  borderRadius: 2,
+                  border: "1px solid",
+                  borderColor: "divider",
+                  backgroundColor: (theme) =>
+                    theme.palette.mode === "dark"
+                      ? alpha(theme.palette.background.paper, 0.42)
+                      : alpha(theme.palette.background.paper, 0.72),
+                }}
+              >
                 {viewMode === "flows" && (
                   <TextField
                     select
@@ -641,6 +661,19 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                         sx={{
                           position: "relative",
                           borderRadius: 2.2,
+                          borderColor: (theme) =>
+                            theme.palette.mode === "dark"
+                              ? alpha(theme.palette.primary.main, 0.22)
+                              : alpha(theme.palette.primary.main, 0.18),
+                          transition: "border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease",
+                          "&:hover": {
+                            borderColor: "primary.main",
+                            boxShadow: (theme) =>
+                              theme.palette.mode === "dark"
+                                ? "0 14px 28px rgba(0, 0, 0, 0.22)"
+                                : "0 10px 20px rgba(60, 75, 95, 0.12)",
+                            transform: "translateY(-1px)",
+                          },
                           "& .flow-secondary-actions": {
                             opacity: { xs: 1, sm: 0 },
                             visibility: { xs: "visible", sm: "hidden" },
@@ -666,7 +699,14 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                                   size="small"
                                   aria-label="Acciones del flow"
                                   onClick={(event) => handleOpenFlowActions(event, item.workflow.id)}
-                                  sx={{ mt: -0.2, mr: -0.35, transition: "opacity 160ms ease" }}
+                                  sx={{
+                                    mt: -0.2,
+                                    mr: -0.35,
+                                    transition: "opacity 160ms ease",
+                                    border: "1px solid",
+                                    borderColor: "divider",
+                                    backgroundColor: "background.paper",
+                                  }}
                                 >
                                   <MoreHorizRoundedIcon fontSize="small" />
                                 </IconButton>
@@ -690,23 +730,38 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                                 color="inherit"
                                 endIcon={<LaunchRoundedIcon fontSize="small" />}
                                 onClick={() => navigate(`/workflows/${item.workflow.id}`)}
+                                sx={{ px: 1.5 }}
                               >
                                 Abrir flow
                               </Button>
                             </Stack>
 
-                            <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", flexWrap: "wrap", gap: 0.55 }}>
-                              <NotesRoundedIcon sx={{ fontSize: 15, color: "text.secondary" }} />
-                              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.25 }}>
-                                Último registro: {getStepRecord(step)}
-                              </Typography>
-                            </Stack>
+                            <Stack
+                              spacing={0.55}
+                              sx={{
+                                p: 0.85,
+                                borderRadius: 1.6,
+                                border: "1px solid",
+                                borderColor: "divider",
+                                backgroundColor: (theme) =>
+                                  theme.palette.mode === "dark"
+                                    ? alpha(theme.palette.background.default, 0.32)
+                                    : alpha(theme.palette.background.default, 0.42),
+                              }}
+                            >
+                              <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", flexWrap: "wrap", gap: 0.55 }}>
+                                <NotesRoundedIcon sx={{ fontSize: 15, color: "text.secondary" }} />
+                                <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.25 }}>
+                                  Último registro: {getStepRecord(step)}
+                                </Typography>
+                              </Stack>
 
-                            <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", flexWrap: "wrap", gap: 0.55 }}>
-                              <AccessTimeRoundedIcon sx={{ fontSize: 15, color: "text.secondary" }} />
-                              <Typography variant="caption" color="text.secondary">
-                                {movement ?? "Sin movimiento reciente"}
-                              </Typography>
+                              <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", flexWrap: "wrap", gap: 0.55 }}>
+                                <AccessTimeRoundedIcon sx={{ fontSize: 15, color: "text.secondary" }} />
+                                <Typography variant="caption" color="text.secondary">
+                                  {movement ?? "Sin movimiento reciente"}
+                                </Typography>
+                              </Stack>
                             </Stack>
 
                             {item.linkedRequirements.length > 0 && (
@@ -723,7 +778,19 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                                       event.stopPropagation();
                                       navigate(`/requirements/${requirement.id}`);
                                     }}
-                                    sx={{ cursor: "pointer" }}
+                                    sx={{
+                                      cursor: "pointer",
+                                      borderColor: "divider",
+                                      backgroundColor: (theme) =>
+                                        theme.palette.mode === "dark"
+                                          ? alpha(theme.palette.background.default, 0.28)
+                                          : alpha(theme.palette.background.default, 0.35),
+                                      "&:hover": {
+                                        borderColor: "primary.main",
+                                        backgroundColor: (theme) =>
+                                          alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.2 : 0.12),
+                                      },
+                                    }}
                                   />
                                 ))}
                                 {item.linkedRequirements.length > 2 && (
@@ -794,7 +861,27 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                     ).length;
 
                     return (
-                      <Card key={trigger.id} variant="outlined" className="hover-entity-parent" sx={{ position: "relative", borderRadius: 2.2 }}>
+                      <Card
+                        key={trigger.id}
+                        variant="outlined"
+                        className="hover-entity-parent"
+                        sx={{
+                          position: "relative",
+                          borderRadius: 2.2,
+                          borderColor: (theme) =>
+                            theme.palette.mode === "dark"
+                              ? alpha(theme.palette.primary.main, 0.18)
+                              : alpha(theme.palette.primary.main, 0.14),
+                          transition: "border-color 160ms ease, box-shadow 160ms ease",
+                          "&:hover": {
+                            borderColor: "primary.main",
+                            boxShadow: (theme) =>
+                              theme.palette.mode === "dark"
+                                ? "0 12px 24px rgba(0, 0, 0, 0.2)"
+                                : "0 9px 18px rgba(60, 75, 95, 0.1)",
+                          },
+                        }}
+                      >
                         <HoverEntityActions
                           onDelete={
                             deletingTriggerId || trigger.workflow_ids.length > 0
@@ -819,7 +906,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
                             <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", gap: 0.75 }}>
                               {linkedWorkflows.length === 0 ? (
-                                <Chip size="small" variant="outlined" label="Sin flows" />
+                                <Chip
+                                  size="small"
+                                  variant="outlined"
+                                  label="Sin flows"
+                                  sx={{ backgroundColor: (theme) => alpha(theme.palette.background.default, 0.4) }}
+                                />
                               ) : (
                                 <Chip
                                   size="small"
@@ -829,10 +921,16 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                                       ? `${linkedWorkflows.length} flows · ${openCount} abiertos`
                                       : `${linkedWorkflows.length} flows`
                                   }
+                                  sx={{ backgroundColor: (theme) => alpha(theme.palette.background.default, 0.4) }}
                                 />
                               )}
                               {waitingCount > 0 && (
-                                <Chip size="small" variant="outlined" label={`Esperando: ${waitingCount}`} />
+                                <Chip
+                                  size="small"
+                                  variant="outlined"
+                                  label={`Esperando: ${waitingCount}`}
+                                  sx={{ backgroundColor: (theme) => alpha(theme.palette.warning.main, theme.palette.mode === "dark" ? 0.2 : 0.12) }}
+                                />
                               )}
                             </Stack>
 

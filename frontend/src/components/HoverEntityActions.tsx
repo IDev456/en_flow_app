@@ -1,5 +1,6 @@
 import type { MouseEvent } from "react";
 import { Box, Button, Stack, type SxProps, type Theme } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 
 type HoverEntityActionsProps = {
   onEdit?: () => void;
@@ -43,7 +44,10 @@ export function HoverEntityActions({ onEdit, onDelete, sx }: HoverEntityActionsP
         sx={{
           p: 0.5,
           borderRadius: 1.5,
-          backgroundColor: "rgba(8, 14, 26, 0.86)",
+          backgroundColor: (theme) =>
+            theme.palette.mode === "dark"
+              ? alpha(theme.palette.background.paper, 0.88)
+              : alpha(theme.palette.background.paper, 0.92),
           border: "1px solid",
           borderColor: "divider",
           backdropFilter: "blur(6px)",

@@ -1,4 +1,5 @@
-import { Button, Typography } from "@mui/material";
+import { Box, Button, Stack, Typography } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 
 type EmptyTriggerListProps = {
   filtered: boolean;
@@ -7,18 +8,30 @@ type EmptyTriggerListProps = {
 
 export function EmptyTriggerList({ filtered, onCreateNew }: EmptyTriggerListProps) {
   return (
-    <div className="trigger-list-empty">
+    <Box
+      className="trigger-list-empty"
+      sx={{
+        p: { xs: 1.6, md: 1.9 },
+        borderRadius: 2,
+        border: "1px dashed",
+        borderColor: "divider",
+        backgroundColor: (theme) =>
+          theme.palette.mode === "dark"
+            ? alpha(theme.palette.background.paper, 0.35)
+            : alpha(theme.palette.background.paper, 0.7),
+      }}
+    >
       {filtered ? (
-        <>
+        <Stack spacing={0.5}>
           <Typography variant="subtitle2" color="text.secondary">
             Sin resultados
           </Typography>
           <Typography variant="body2" color="text.secondary">
             Probá limpiar el filtro o buscar con otro término.
           </Typography>
-        </>
+        </Stack>
       ) : (
-        <>
+        <Stack spacing={0.75}>
           <Typography variant="subtitle2" color="text.secondary">
             No hay requerimientos
           </Typography>
@@ -30,8 +43,8 @@ export function EmptyTriggerList({ filtered, onCreateNew }: EmptyTriggerListProp
               Nuevo requerimiento
             </Button>
           )}
-        </>
+        </Stack>
       )}
-    </div>
+    </Box>
   );
 }
