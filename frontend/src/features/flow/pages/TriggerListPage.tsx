@@ -1,12 +1,18 @@
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
 import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
+import BoltRoundedIcon from "@mui/icons-material/BoltRounded";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
+import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
+import FilterListRoundedIcon from "@mui/icons-material/FilterListRounded";
+import HourglassTopRoundedIcon from "@mui/icons-material/HourglassTopRounded";
+import InboxRoundedIcon from "@mui/icons-material/InboxRounded";
 import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
 import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
 import NotesRoundedIcon from "@mui/icons-material/NotesRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
+import SortRoundedIcon from "@mui/icons-material/SortRounded";
 import {
   Alert,
   Box,
@@ -67,6 +73,13 @@ const flowSortOptions: Array<{ value: FlowSort; label: string }> = [
   { value: "latest_activity", label: "Último registro" },
   { value: "creation_date", label: "Fecha de creación" },
 ];
+
+function getFilterIcon(filter: FlowFilter) {
+  if (filter === "active") return <BoltRoundedIcon sx={{ fontSize: 14 }} />;
+  if (filter === "waiting") return <HourglassTopRoundedIcon sx={{ fontSize: 14 }} />;
+  if (filter === "finalized") return <CheckCircleRoundedIcon sx={{ fontSize: 14 }} />;
+  return <InboxRoundedIcon sx={{ fontSize: 14 }} />;
+}
 
 function getWorkflowDisplayStatus(workflow: WorkflowDetail) {
   if (workflow.estado === "esperando_respuesta") return "esperando_respuesta";
@@ -509,7 +522,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
             <Card variant="outlined" sx={{ borderStyle: "dashed" }}>
               <CardContent sx={{ p: { xs: 1.35, sm: 1.7 } }}>
-                <Stack spacing={1.1}>
+                <Stack spacing={1.15}>
                   <Stack
                     direction={{ xs: "column", lg: "row" }}
                     spacing={1.2}
@@ -526,7 +539,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                           input: {
                             startAdornment: (
                               <InputAdornment position="start">
-                                <SearchRoundedIcon color="action" fontSize="small" />
+                                <SearchRoundedIcon color="action" sx={{ fontSize: 18 }} />
                               </InputAdornment>
                             ),
                           },
@@ -536,22 +549,35 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
                     <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ width: { xs: "100%", lg: "auto" } }}>
                       {viewMode === "flows" && (
-                        <TextField
-                          select
-                          size="small"
-                          label="Ordenar"
-                          value={flowSort}
-                          onChange={(event) => setFlowSort(event.target.value as FlowSort)}
-                          sx={{ minWidth: { xs: "100%", sm: 220 } }}
-                        >
-                          {flowSortOptions.map((option) => (
-                            <MenuItem key={option.value} value={option.value}>
-                              {option.label}
-                            </MenuItem>
-                          ))}
-                        </TextField>
+                        <Stack spacing={0.45} sx={{ minWidth: { xs: "100%", sm: 220 } }}>
+                          <Stack direction="row" spacing={0.6} sx={{ alignItems: "center" }}>
+                            <SortRoundedIcon sx={{ fontSize: 15, color: "text.secondary" }} />
+                            <Typography variant="caption" color="text.secondary">
+                              Ordenar
+                            </Typography>
+                          </Stack>
+                          <TextField
+                            select
+                            size="small"
+                            value={flowSort}
+                            onChange={(event) => setFlowSort(event.target.value as FlowSort)}
+                          >
+                            {flowSortOptions.map((option) => (
+                              <MenuItem key={option.value} value={option.value}>
+                                {option.label}
+                              </MenuItem>
+                            ))}
+                          </TextField>
+                        </Stack>
                       )}
                     </Stack>
+                  </Stack>
+
+                  <Stack direction="row" spacing={0.6} sx={{ alignItems: "center" }}>
+                    <FilterListRoundedIcon sx={{ fontSize: 15, color: "text.secondary" }} />
+                    <Typography variant="caption" color="text.secondary">
+                      Estado
+                    </Typography>
                   </Stack>
 
                   <ToggleButtonGroup
@@ -572,8 +598,13 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       const countLabel = option.value === "all" ? "" : ` (${currentCounts[option.value] ?? 0})`;
                       return (
                         <ToggleButton key={option.value} value={option.value}>
-                          {option.label}
-                          {countLabel}
+                          <Stack direction="row" spacing={0.55} sx={{ alignItems: "center" }}>
+                            {getFilterIcon(option.value)}
+                            <Box component="span">
+                              {option.label}
+                              {countLabel}
+                            </Box>
+                          </Stack>
                         </ToggleButton>
                       );
                     })}
@@ -673,7 +704,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                         <CardContent sx={{ p: { xs: 1.45, md: 1.7 } }}>
                           <Stack spacing={1.2}>
                             <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-                              <Stack direction="row" spacing={0.8} sx={{ alignItems: "center", flexWrap: "wrap", minWidth: 0 }}>
+                              <Stack direction="row" spacing={0.8} sx={{ alignItems: "center", flexWrap: "wrap", minWidth: 0, rowGap: 0.4 }}>
+                                <Typography variant="caption" color="text.secondary" sx={{ display: "inline-flex", alignItems: "center", gap: 0.35 }}>
+                                  <AssignmentOutlinedIcon sx={{ fontSize: 13 }} />
+                                  {item.workflow.id.slice(0, 8)}
+                                </Typography>
                                 <Typography variant="caption" color="text.secondary">
                                   {stepLabel}
                                 </Typography>

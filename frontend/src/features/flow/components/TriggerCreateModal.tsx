@@ -1,5 +1,6 @@
 import { useState } from "react";
 import AddTaskRoundedIcon from "@mui/icons-material/AddTaskRounded";
+import TuneRoundedIcon from "@mui/icons-material/TuneRounded";
 import {
   Alert,
   Box,
@@ -75,7 +76,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
     <Dialog open onClose={submitting ? undefined : () => handleClose()} fullWidth maxWidth="md">
       <DialogTitle sx={{ pb: 1 }}>
         <Stack spacing={1}>
-          <Typography variant="subtitle2" color="primary.light">
+          <Typography variant="subtitle2" color="text.secondary">
             Captura rápida
           </Typography>
           <Typography variant="h4">Capturar tarea</Typography>
@@ -95,6 +96,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
           />
 
           <Button variant="text" color="inherit" onClick={() => setShowOptional((current) => !current)} sx={{ alignSelf: "flex-start", px: 0.5 }}>
+            <TuneRoundedIcon sx={{ fontSize: 16, mr: 0.6 }} />
             {showOptional ? "Ocultar datos opcionales" : "Agregar datos opcionales"}
           </Button>
 
@@ -106,7 +108,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
                 border: "1px solid",
                 borderColor: "divider",
                 backgroundColor: (theme) =>
-                  alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.4 : 0.75),
+                  alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.34 : 0.82),
               }}
             >
               <Stack spacing={1.5}>

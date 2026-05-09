@@ -1,9 +1,12 @@
 import AddCircleOutlineRoundedIcon from "@mui/icons-material/AddCircleOutlineRounded";
 import AssignmentTurnedInRoundedIcon from "@mui/icons-material/AssignmentTurnedInRounded";
 import DarkModeRoundedIcon from "@mui/icons-material/DarkModeRounded";
+import FactCheckRoundedIcon from "@mui/icons-material/FactCheckRounded";
 import FormatListBulletedRoundedIcon from "@mui/icons-material/FormatListBulletedRounded";
 import LightModeRoundedIcon from "@mui/icons-material/LightModeRounded";
+import MenuOpenRoundedIcon from "@mui/icons-material/MenuOpenRounded";
 import MenuRoundedIcon from "@mui/icons-material/MenuRounded";
+import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import TimelineRoundedIcon from "@mui/icons-material/TimelineRounded";
 import {
   AppBar,
@@ -29,8 +32,8 @@ import { alpha } from "@mui/material/styles";
 import { type ReactNode, useMemo, useState } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
-import { NotFoundPage } from "./features/flow/pages/NotFoundPage";
 import { TriggerCreateModal } from "./features/flow/components/TriggerCreateModal";
+import { NotFoundPage } from "./features/flow/pages/NotFoundPage";
 import { StepDetailPage } from "./features/flow/pages/StepDetailPage";
 import { TriggerCreatePage } from "./features/flow/pages/TriggerCreatePage";
 import { TriggerDetailPage } from "./features/flow/pages/TriggerDetailPage";
@@ -39,16 +42,19 @@ import { WorkflowDetailPage } from "./features/flow/pages/WorkflowDetailPage";
 import { AppThemeMode, createAppTheme } from "./theme";
 
 const THEME_STORAGE_KEY = "enflow_theme_mode";
-const DRAWER_WIDTH = 268;
+const DRAWER_STATE_KEY = "enflow_drawer_collapsed";
+const DRAWER_EXPANDED_WIDTH = 268;
+const DRAWER_COLLAPSED_WIDTH = 84;
 
 type NavItem = {
   label: string;
   description: string;
-  path: string;
+  path?: string;
   icon: ReactNode;
+  disabled?: boolean;
 };
 
-const navigationItems: NavItem[] = [
+const primaryNavItems: NavItem[] = [
   {
     label: "Flows",
     description: "Secuencias activas y seguimiento",
@@ -60,6 +66,21 @@ const navigationItems: NavItem[] = [
     description: "Entradas y agrupadores",
     path: "/requirements",
     icon: <FormatListBulletedRoundedIcon fontSize="small" />,
+  },
+];
+
+const futureNavItems: NavItem[] = [
+  {
+    label: "Tareas",
+    description: "Seguimiento operativo",
+    icon: <FactCheckRoundedIcon fontSize="small" />,
+    disabled: true,
+  },
+  {
+    label: "Configuración",
+    description: "Preferencias del tablero",
+    icon: <SettingsRoundedIcon fontSize="small" />,
+    disabled: true,
   },
 ];
 
@@ -131,10 +152,13 @@ function AppDashboardLayout({ mode, onToggleMode }: AppLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [drawerCollapsed, setDrawerCollapsed] = useState(() => localStorage.getItem(DRAWER_STATE_KEY) === "1");
 
   const sectionData = useMemo(() => getSectionData(location.pathname), [location.pathname]);
   const params = new URLSearchParams(location.search);
   const isCreateModalOpen = params.get("modal") === "capture";
+
+  const desktopDrawerWidth = drawerCollapsed ? DRAWER_COLLAPSED_WIDTH : DRAWER_EXPANDED_WIDTH;
 
   function closeCreateModal() {
     const nextParams = new URLSearchParams(location.search);
@@ -149,6 +173,14 @@ function AppDashboardLayout({ mode, onToggleMode }: AppLayoutProps) {
     navigate(`${location.pathname}?${nextParams.toString()}`);
   }
 
+  function toggleDesktopDrawer() {
+    setDrawerCollapsed((current) => {
+      const next = !current;
+      localStorage.setItem(DRAWER_STATE_KEY, next ? "1" : "0");
+      return next;
+    });
+  }
+
   function isRouteActive(path: string) {
     if (path === "/flows") return location.pathname === "/flows" || location.pathname.startsWith("/workflows/") || location.pathname.startsWith("/steps/");
     if (path === "/requirements") {
@@ -157,75 +189,154 @@ function AppDashboardLayout({ mode, onToggleMode }: AppLayoutProps) {
     return location.pathname === path || location.pathname.startsWith(`${path}/`);
   }
 
-  const drawerContent = (
-    <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", p: 2.25, pb: 2 }}>
-        <Box
+  function renderNavItems(items: NavItem[], compact: boolean, closeOnNavigate: boolean) {
+    return items.map((item) => {
+      const active = item.path ? isRouteActive(item.path) : false;
+      const content = (
+        <ListItemButton
+          key={item.label}
+          selected={active}
+          disabled={item.disabled}
+          onClick={() => {
+            if (!item.path || item.disabled) return;
+            navigate(item.path);
+            if (closeOnNavigate) {
+              setMobileDrawerOpen(false);
+            }
+          }}
           sx={{
-            width: 40,
-            height: 40,
             borderRadius: 2,
-            display: "grid",
-            placeItems: "center",
-            bgcolor: alpha(theme.palette.primary.main, 0.14),
+            py: 1,
+            px: compact ? 1 : 1.15,
+            minHeight: 44,
+            justifyContent: compact ? "center" : "flex-start",
             border: "1px solid",
-            borderColor: alpha(theme.palette.primary.main, 0.3),
+            borderColor: active ? alpha(theme.palette.primary.main, 0.35) : "transparent",
+            bgcolor: active ? alpha(theme.palette.primary.main, 0.14) : "transparent",
+            opacity: item.disabled ? 0.62 : 1,
+            "&:hover": {
+              bgcolor: active
+                ? alpha(theme.palette.primary.main, 0.18)
+                : alpha(theme.palette.action.hover, theme.palette.mode === "dark" ? 0.3 : 0.7),
+            },
           }}
         >
-          <AssignmentTurnedInRoundedIcon color="primary" fontSize="small" />
-        </Box>
-        <Box>
-          <Typography variant="subtitle2" color="text.secondary">
-            En Flow
-          </Typography>
-          <Typography variant="h6" sx={{ lineHeight: 1.1 }}>
-            CRUD Workspace
-          </Typography>
-        </Box>
-      </Stack>
-
-      <Divider />
-
-      <List sx={{ px: 1.25, py: 1.5, gap: 0.6, display: "grid" }}>
-        {navigationItems.map((item) => {
-          const active = isRouteActive(item.path);
-          return (
-            <ListItemButton
-              key={item.path}
-              onClick={() => {
-                navigate(item.path);
-                setMobileDrawerOpen(false);
+          <ListItemIcon
+            sx={{
+              minWidth: compact ? 0 : 34,
+              mr: compact ? 0 : 0.6,
+              color: active ? "primary.main" : "text.secondary",
+              justifyContent: "center",
+            }}
+          >
+            {item.icon}
+          </ListItemIcon>
+          {!compact && (
+            <ListItemText
+              primary={item.label}
+              secondary={item.description}
+              slotProps={{
+                primary: { sx: { fontWeight: active ? 700 : 600 } },
+                secondary: { variant: "caption", sx: { mt: 0.1 } },
               }}
-              selected={active}
+            />
+          )}
+        </ListItemButton>
+      );
+
+      if (!compact) return content;
+
+      return (
+        <Tooltip key={`${item.label}-tooltip`} title={item.disabled ? `${item.label} (próximamente)` : item.label} placement="right">
+          <Box>{content}</Box>
+        </Tooltip>
+      );
+    });
+  }
+
+  function renderDrawerContent(compact: boolean, mobile: boolean) {
+    return (
+      <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+        <Stack
+          direction="row"
+          spacing={1.2}
+          sx={{
+            alignItems: "center",
+            justifyContent: compact ? "center" : "space-between",
+            px: compact ? 1 : 2.1,
+            py: 1.7,
+          }}
+        >
+          <Stack direction="row" spacing={compact ? 0 : 1.25} sx={{ alignItems: "center" }}>
+            <Box
               sx={{
+                width: 34,
+                height: 34,
                 borderRadius: 2,
-                alignItems: "flex-start",
-                py: 1,
-                px: 1.15,
+                display: "grid",
+                placeItems: "center",
+                bgcolor: alpha(theme.palette.primary.main, 0.15),
                 border: "1px solid",
-                borderColor: active ? alpha(theme.palette.primary.main, 0.35) : "transparent",
-                bgcolor: active ? alpha(theme.palette.primary.main, 0.12) : "transparent",
+                borderColor: alpha(theme.palette.primary.main, 0.3),
               }}
             >
-              <ListItemIcon sx={{ minWidth: 34, color: active ? "primary.main" : "text.secondary", mt: 0.2 }}>{item.icon}</ListItemIcon>
-              <ListItemText
-                primary={item.label}
-                secondary={item.description}
-                slotProps={{
-                  primary: { sx: { fontWeight: active ? 700 : 600 } },
-                  secondary: { variant: "caption", sx: { mt: 0.2 } },
-                }}
-              />
-            </ListItemButton>
-          );
-        })}
-      </List>
+              <AssignmentTurnedInRoundedIcon color="primary" sx={{ fontSize: 18 }} />
+            </Box>
+            {!compact && (
+              <Box>
+                <Typography variant="subtitle2" color="text.secondary">
+                  En Flow
+                </Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  CRUD Dashboard
+                </Typography>
+              </Box>
+            )}
+          </Stack>
 
-      <Box sx={{ mt: "auto", p: 2 }}>
-        <Chip label="Operación guiada" color="primary" variant="outlined" size="small" />
+          {!mobile && !compact && (
+            <Tooltip title="Colapsar barra lateral">
+              <IconButton size="small" onClick={toggleDesktopDrawer}>
+                <MenuOpenRoundedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Stack>
+
+        {!compact && <Divider />}
+
+        <List sx={{ px: compact ? 1 : 1.25, pt: 1.4, pb: 0.8, display: "grid", gap: 0.55 }}>
+          {!compact && (
+            <Typography variant="caption" color="text.secondary" sx={{ px: 1, pb: 0.6 }}>
+              OPERACIÓN
+            </Typography>
+          )}
+          {renderNavItems(primaryNavItems, compact, mobile)}
+        </List>
+
+        <Divider sx={{ mx: compact ? 1 : 1.25, my: 1 }} />
+
+        <List sx={{ px: compact ? 1 : 1.25, pt: 0.4, pb: 1.25, display: "grid", gap: 0.55 }}>
+          {!compact && (
+            <Typography variant="caption" color="text.secondary" sx={{ px: 1, pb: 0.6 }}>
+              PRÓXIMAMENTE
+            </Typography>
+          )}
+          {renderNavItems(futureNavItems, compact, mobile)}
+        </List>
+
+        <Box sx={{ mt: "auto", p: compact ? 1 : 2 }}>
+          {compact ? (
+            <Tooltip title="Operación guiada">
+              <Chip label="●" size="small" color="primary" variant="outlined" sx={{ width: "100%" }} />
+            </Tooltip>
+          ) : (
+            <Chip label="Operación guiada" size="small" color="primary" variant="outlined" />
+          )}
+        </Box>
       </Box>
-    </Box>
-  );
+    );
+  }
 
   return (
     <Box sx={{ minHeight: "100vh", display: "flex", bgcolor: "background.default" }}>
@@ -237,22 +348,33 @@ function AppDashboardLayout({ mode, onToggleMode }: AppLayoutProps) {
           zIndex: (appTheme) => appTheme.zIndex.drawer + 1,
           borderBottom: "1px solid",
           borderColor: "divider",
-          bgcolor: alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.9 : 0.82),
+          bgcolor: alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.82 : 0.8),
         }}
       >
-        <Toolbar sx={{ minHeight: { xs: 64, md: 72 } }}>
+        <Toolbar sx={{ minHeight: { xs: 64, md: 68 }, gap: 1.2 }}>
           <IconButton
             color="inherit"
             edge="start"
             onClick={() => setMobileDrawerOpen(true)}
-            sx={{ mr: 1, display: { md: "none" } }}
+            sx={{ display: { md: "none" } }}
             aria-label="Abrir navegación"
           >
             <MenuRoundedIcon />
           </IconButton>
 
+          <Tooltip title={drawerCollapsed ? "Expandir barra lateral" : "Colapsar barra lateral"}>
+            <IconButton
+              color="inherit"
+              onClick={toggleDesktopDrawer}
+              sx={{ display: { xs: "none", md: "inline-flex" } }}
+              aria-label="Alternar barra lateral"
+            >
+              {drawerCollapsed ? <MenuRoundedIcon /> : <MenuOpenRoundedIcon />}
+            </IconButton>
+          </Tooltip>
+
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="h6" sx={{ lineHeight: 1.2 }}>
+            <Typography variant="h6" sx={{ lineHeight: 1.15 }}>
               {sectionData.title}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ display: { xs: "none", sm: "block" } }}>
@@ -260,26 +382,28 @@ function AppDashboardLayout({ mode, onToggleMode }: AppLayoutProps) {
             </Typography>
           </Box>
 
-          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+          <Stack direction="row" spacing={0.8} sx={{ alignItems: "center" }}>
             <Tooltip title={mode === "dark" ? "Cambiar a claro" : "Cambiar a oscuro"}>
               <IconButton
                 color="inherit"
                 onClick={onToggleMode}
                 aria-label={mode === "dark" ? "Activar tema claro" : "Activar tema oscuro"}
-                sx={{ border: "1px solid", borderColor: "divider", bgcolor: alpha(theme.palette.background.default, 0.3) }}
+                sx={{ border: "1px solid", borderColor: "divider", bgcolor: alpha(theme.palette.background.default, 0.28) }}
               >
                 {mode === "dark" ? <LightModeRoundedIcon fontSize="small" /> : <DarkModeRoundedIcon fontSize="small" />}
               </IconButton>
             </Tooltip>
 
-            <Button variant="contained" startIcon={<AddCircleOutlineRoundedIcon />} onClick={openCreateModal}>
-              Capturar tarea
+            <Button variant="contained" startIcon={<AddCircleOutlineRoundedIcon />} onClick={openCreateModal} sx={{ minWidth: { xs: 0, sm: "auto" } }}>
+              <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
+                Capturar tarea
+              </Box>
             </Button>
           </Stack>
         </Toolbar>
       </AppBar>
 
-      <Box component="nav" sx={{ width: { md: DRAWER_WIDTH }, flexShrink: { md: 0 } }}>
+      <Box component="nav" sx={{ width: { md: desktopDrawerWidth }, flexShrink: { md: 0 } }}>
         <Drawer
           variant="temporary"
           open={mobileDrawerOpen}
@@ -287,10 +411,10 @@ function AppDashboardLayout({ mode, onToggleMode }: AppLayoutProps) {
           ModalProps={{ keepMounted: true }}
           sx={{
             display: { xs: "block", md: "none" },
-            "& .MuiDrawer-paper": { width: DRAWER_WIDTH },
+            "& .MuiDrawer-paper": { width: DRAWER_EXPANDED_WIDTH },
           }}
         >
-          {drawerContent}
+          {renderDrawerContent(false, true)}
         </Drawer>
 
         <Drawer
@@ -299,13 +423,18 @@ function AppDashboardLayout({ mode, onToggleMode }: AppLayoutProps) {
           sx={{
             display: { xs: "none", md: "block" },
             "& .MuiDrawer-paper": {
-              width: DRAWER_WIDTH,
+              width: desktopDrawerWidth,
               boxSizing: "border-box",
+              overflowX: "hidden",
+              transition: theme.transitions.create("width", {
+                easing: theme.transitions.easing.sharp,
+                duration: theme.transitions.duration.shorter,
+              }),
             },
           }}
         >
-          <Toolbar sx={{ minHeight: { xs: 64, md: 72 } }} />
-          {drawerContent}
+          <Toolbar sx={{ minHeight: { xs: 64, md: 68 } }} />
+          {renderDrawerContent(drawerCollapsed, false)}
         </Drawer>
       </Box>
 
@@ -314,11 +443,11 @@ function AppDashboardLayout({ mode, onToggleMode }: AppLayoutProps) {
         sx={{
           flexGrow: 1,
           minWidth: 0,
-          px: { xs: 2, sm: 3 },
-          py: { xs: 2.25, md: 3 },
+          px: { xs: 1.5, sm: 2.5, md: 3 },
+          py: { xs: 2, md: 2.5 },
         }}
       >
-        <Toolbar sx={{ minHeight: { xs: 64, md: 72 } }} />
+        <Toolbar sx={{ minHeight: { xs: 64, md: 68 } }} />
         <Box sx={{ maxWidth: 1400, mx: "auto" }}>
           <Outlet />
         </Box>

@@ -1,4 +1,6 @@
 import type { MouseEvent } from "react";
+import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
+import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import { Box, Button, Stack, type SxProps, type Theme } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 
@@ -43,14 +45,14 @@ export function HoverEntityActions({ onEdit, onDelete, sx }: HoverEntityActionsP
         spacing={0.75}
         sx={{
           p: 0.5,
-          borderRadius: 1.5,
+          borderRadius: 1.25,
           backgroundColor: (theme) =>
             theme.palette.mode === "dark"
-              ? alpha(theme.palette.background.paper, 0.88)
-              : alpha(theme.palette.background.paper, 0.92),
+              ? alpha(theme.palette.background.paper, 0.9)
+              : alpha(theme.palette.background.paper, 0.94),
           border: "1px solid",
           borderColor: "divider",
-          backdropFilter: "blur(6px)",
+          backdropFilter: "blur(5px)",
         }}
       >
         {onEdit && (
@@ -63,7 +65,8 @@ export function HoverEntityActions({ onEdit, onDelete, sx }: HoverEntityActionsP
               stopEvent(event);
               onEdit();
             }}
-            sx={{ minWidth: 0, px: 1.15, py: 0.5, borderRadius: 1.25 }}
+            startIcon={<EditRoundedIcon sx={{ fontSize: 14 }} />}
+            sx={{ minWidth: 0, px: 1.05, py: 0.45, borderRadius: 1, gap: 0.45 }}
           >
             Editar
           </Button>
@@ -78,7 +81,8 @@ export function HoverEntityActions({ onEdit, onDelete, sx }: HoverEntityActionsP
               stopEvent(event);
               onDelete();
             }}
-            sx={{ minWidth: 0, px: 1.15, py: 0.5, borderRadius: 1.25 }}
+            startIcon={<DeleteOutlineRoundedIcon sx={{ fontSize: 14 }} />}
+            sx={{ minWidth: 0, px: 1.05, py: 0.45, borderRadius: 1, gap: 0.45 }}
           >
             Eliminar
           </Button>

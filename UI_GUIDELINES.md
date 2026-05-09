@@ -26,12 +26,16 @@ Se toma como referencia para:
 - Botones
 - Chips
 - Tablas
+- Toolbar
+- Iconografía
 - Tipografía
 - Bordes
 - Sombras
 - Espaciados
 - Jerarquía visual
 - Layout y navegación
+- Densidad visual
+- Comportamiento responsive
 
 ## 4. Qué está permitido
 Se puede mejorar:
@@ -176,6 +180,7 @@ Pasos obligatorios:
 - Leer PROJECT_CONTEXT.md, AI_WORKFLOW.md, LOCAL_MODEL_INSTRUCTIONS.md y UI_GUIDELINES.md.
 - Identificar pantalla o componente a modificar.
 - Usar CRUD Dashboard como referencia principal de layout, navegación y estilo visual.
+- Alinear toolbar, filtros, iconografía y densidad visual con CRUD Dashboard.
 - Aplicar el cambio mínimo necesario.
 - No hacer refactors generales.
 - No romper rutas existentes ni reglas de negocio.
