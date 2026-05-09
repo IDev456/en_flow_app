@@ -99,6 +99,7 @@ En Flow App es una aplicación web para gestionar requerimientos mediante **fluj
 - **API**: Cliente centralizado en src/api/client.ts
 - **Estado**: useState/useEffect para manejo local
 - **UI**: Material-UI con tema consistente
+- **Cambios de UI**: Para ajustes de interfaz/estilo/UX, leer `UI_GUIDELINES.md` como contexto obligatorio; mantener distribución actual y usar el template MUI Dashboard solo como referencia estética.
 
 ### Base de Datos
 - **Tablas**: triggers, workflows, steps, workflow_templates, etc.

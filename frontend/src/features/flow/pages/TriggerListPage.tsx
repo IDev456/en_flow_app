@@ -37,7 +37,7 @@ import type { Step, TriggerDetail, WorkflowDetail } from "../types";
 import { formatElapsedTime, getStatusTone } from "../utils";
 
 type ViewMode = "requirements" | "flows";
-type FlowFilter = "all" | "active" | "waiting" | "finalized" | "canceled";
+type FlowFilter = "all" | "active" | "waiting" | "finalized";
 type FlowSort = "latest_activity" | "creation_date";
 
 type TriggerListPageProps = {
@@ -58,7 +58,6 @@ const flowFilterOptions: Array<{ value: FlowFilter; label: string }> = [
   { value: "active", label: "Activos" },
   { value: "waiting", label: "Esperando" },
   { value: "finalized", label: "Finalizados" },
-  { value: "canceled", label: "Cancelados" },
   { value: "all", label: "Todos" },
 ];
 
@@ -84,7 +83,7 @@ function getWorkflowDisplayStatus(workflow: WorkflowDetail) {
 
 function getFlowFilterFromStatus(statusValue: string): Exclude<FlowFilter, "all"> {
   const tone = getStatusTone(statusValue);
-  if (tone === "cancelado") return "canceled";
+  if (tone === "cancelado") return "finalized";
   if (tone === "finalizado" || tone === "completado" || tone === "resuelto") return "finalized";
   if (tone === "espera" || tone === "espera_externa" || statusValue === "en_espera") return "waiting";
   return "active";
@@ -292,7 +291,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         acc[getFlowFilterFromStatus(item.displayStatus)] += 1;
         return acc;
       },
-      { active: 0, waiting: 0, finalized: 0, canceled: 0 }
+      { active: 0, waiting: 0, finalized: 0 }
     );
   }, [flowCards]);
 
@@ -312,7 +311,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         acc[getFlowFilterFromStatus(trigger.estado_general)] += 1;
         return acc;
       },
-      { active: 0, waiting: 0, finalized: 0, canceled: 0 }
+      { active: 0, waiting: 0, finalized: 0 }
     );
   }, [triggers]);
 
