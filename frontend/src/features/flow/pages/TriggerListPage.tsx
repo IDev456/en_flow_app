@@ -15,6 +15,7 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Divider,
   IconButton,
   InputAdornment,
   ListItemIcon,
@@ -439,8 +440,10 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     }
   }
 
+  const selectedWorkflowForActions = flowActionsWorkflowId ? workflowsById[flowActionsWorkflowId] ?? null : null;
+
   return (
-    <Stack spacing={2.25}>
+    <Stack spacing={2.5}>
       <Snackbar
         open={requirementToastOpen}
         autoHideDuration={2600}
@@ -455,24 +458,24 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       />
 
       <Card>
-        <CardContent sx={{ p: { xs: 2.25, md: 2.5 } }}>
-          <Stack spacing={2}>
+        <CardContent sx={{ p: { xs: 2.25, md: 2.75 } }}>
+          <Stack spacing={2.25}>
             <Stack
               direction={{ xs: "column", md: "row" }}
-              spacing={1.25}
+              spacing={1.5}
               sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", md: "center" } }}
             >
               <Box>
                 <Typography variant="h3">{title}</Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
-                  {viewMode === "flows" ? "Trabajo abierto y seguimiento operativo" : "Agrupación y seguimiento general"}
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.45 }}>
+                  {viewMode === "flows" ? "Trabajo activo, estados y continuidad operativa." : "Entradas, contexto y trazabilidad general."}
                 </Typography>
               </Box>
 
-              <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 0.8 }}>
                 {viewMode === "requirements" && (
                   <Button
-                    variant="outlined"
+                    variant={createRequirementOpen ? "text" : "outlined"}
                     color="inherit"
                     size="small"
                     onClick={() => {
@@ -480,7 +483,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       setCreateRequirementError(null);
                     }}
                   >
-                    {createRequirementOpen ? "Cancelar" : "Nuevo requerimiento"}
+                    {createRequirementOpen ? "Cerrar formulario" : "Nuevo requerimiento"}
                   </Button>
                 )}
 
@@ -504,10 +507,85 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
               </Stack>
             </Stack>
 
+            <Card variant="outlined" sx={{ borderStyle: "dashed" }}>
+              <CardContent sx={{ p: { xs: 1.35, sm: 1.7 } }}>
+                <Stack spacing={1.1}>
+                  <Stack
+                    direction={{ xs: "column", lg: "row" }}
+                    spacing={1.2}
+                    sx={{ alignItems: { lg: "center" }, justifyContent: "space-between" }}
+                  >
+                    <Box sx={{ width: "100%", maxWidth: { lg: 560 } }}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        value={query}
+                        onChange={(event) => setQuery(event.target.value)}
+                        placeholder={viewMode === "flows" ? "Buscar flow, tarea o requerimiento vinculado..." : "Buscar requerimiento..."}
+                        slotProps={{
+                          input: {
+                            startAdornment: (
+                              <InputAdornment position="start">
+                                <SearchRoundedIcon color="action" fontSize="small" />
+                              </InputAdornment>
+                            ),
+                          },
+                        }}
+                      />
+                    </Box>
+
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ width: { xs: "100%", lg: "auto" } }}>
+                      {viewMode === "flows" && (
+                        <TextField
+                          select
+                          size="small"
+                          label="Ordenar"
+                          value={flowSort}
+                          onChange={(event) => setFlowSort(event.target.value as FlowSort)}
+                          sx={{ minWidth: { xs: "100%", sm: 220 } }}
+                        >
+                          {flowSortOptions.map((option) => (
+                            <MenuItem key={option.value} value={option.value}>
+                              {option.label}
+                            </MenuItem>
+                          ))}
+                        </TextField>
+                      )}
+                    </Stack>
+                  </Stack>
+
+                  <ToggleButtonGroup
+                    exclusive
+                    size="small"
+                    value={stateFilter}
+                    onChange={(_, value: FlowFilter | null) => {
+                      if (value) setStateFilter(value);
+                    }}
+                    sx={{
+                      flexWrap: "wrap",
+                      rowGap: 0.8,
+                      justifyContent: { xs: "flex-start", lg: "flex-end" },
+                      alignSelf: { xs: "stretch", lg: "flex-end" },
+                    }}
+                  >
+                    {flowFilterOptions.map((option) => {
+                      const countLabel = option.value === "all" ? "" : ` (${currentCounts[option.value] ?? 0})`;
+                      return (
+                        <ToggleButton key={option.value} value={option.value}>
+                          {option.label}
+                          {countLabel}
+                        </ToggleButton>
+                      );
+                    })}
+                  </ToggleButtonGroup>
+                </Stack>
+              </CardContent>
+            </Card>
+
             {viewMode === "requirements" && createRequirementOpen && (
               <Card variant="outlined">
                 <CardContent sx={{ p: { xs: 1.75, md: 2 } }}>
-                  <Stack spacing={1.25}>
+                  <Stack spacing={1.3}>
                     <Typography variant="subtitle2" color="text.secondary">
                       Crear requerimiento
                     </Typography>
@@ -549,88 +627,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
               </Card>
             )}
 
-            <Stack
-              direction={{ xs: "column", lg: "row" }}
-              spacing={{ xs: 1.25, lg: 1.75 }}
-              sx={{ justifyContent: "space-between", alignItems: { lg: "flex-end" } }}
-            >
-              <Box sx={{ width: "100%", maxWidth: { lg: 560 }, flexShrink: 0 }}>
-                <TextField
-                  fullWidth
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={viewMode === "flows" ? "Buscar flow o tarea..." : "Buscar requerimiento..."}
-                  sx={{
-                    "& .MuiOutlinedInput-root": {
-                      minHeight: 42,
-                    },
-                  }}
-                  slotProps={{
-                    input: {
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <SearchRoundedIcon color="action" />
-                        </InputAdornment>
-                      ),
-                    },
-                  }}
-                />
-              </Box>
-
-              <Stack
-                spacing={1.1}
-                sx={{
-                  width: "100%",
-                  alignItems: { lg: "flex-end" },
-                  p: { xs: 0.75, sm: 0.9 },
-                  borderRadius: 2,
-                  border: "1px solid",
-                  borderColor: "divider",
-                  backgroundColor: (theme) =>
-                    theme.palette.mode === "dark"
-                      ? alpha(theme.palette.background.paper, 0.42)
-                      : alpha(theme.palette.background.paper, 0.72),
-                }}
-              >
-                {viewMode === "flows" && (
-                  <TextField
-                    select
-                    size="small"
-                    label="Ordenar"
-                    value={flowSort}
-                    onChange={(event) => setFlowSort(event.target.value as FlowSort)}
-                    sx={{ minWidth: { xs: "100%", sm: 260 }, maxWidth: { lg: 300 } }}
-                  >
-                    {flowSortOptions.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                )}
-
-                <ToggleButtonGroup
-                  exclusive
-                  size="small"
-                  value={stateFilter}
-                  onChange={(_, value: FlowFilter | null) => {
-                    if (value) setStateFilter(value);
-                  }}
-                  sx={{ flexWrap: "wrap", rowGap: 0.8, justifyContent: { lg: "flex-end" }, alignSelf: { lg: "flex-end" } }}
-                >
-                  {flowFilterOptions.map((option) => {
-                    const countLabel = option.value === "all" ? "" : ` (${currentCounts[option.value] ?? 0})`;
-                    return (
-                      <ToggleButton key={option.value} value={option.value}>
-                        {option.label}
-                        {countLabel}
-                      </ToggleButton>
-                    );
-                  })}
-                </ToggleButtonGroup>
-              </Stack>
-            </Stack>
-
             {loading && (
               <Stack direction="row" spacing={1.25} sx={{ py: 4, alignItems: "center", justifyContent: "center" }}>
                 <CircularProgress size={22} />
@@ -641,7 +637,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             {error && <Alert severity="error">{error}</Alert>}
 
             {!loading && !error && viewMode === "flows" && (
-              <Stack spacing={1.15}>
+              <Stack spacing={1.35}>
                 {filteredFlows.length === 0 ? (
                   <Alert severity="info">{emptyFlowMessage}</Alert>
                 ) : (
@@ -659,35 +655,25 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                         key={item.workflow.id}
                         variant="outlined"
                         sx={{
-                          position: "relative",
-                          borderRadius: 2.2,
                           borderColor: (theme) =>
                             theme.palette.mode === "dark"
-                              ? alpha(theme.palette.primary.main, 0.22)
-                              : alpha(theme.palette.primary.main, 0.18),
+                              ? alpha(theme.palette.primary.main, 0.2)
+                              : alpha(theme.palette.primary.main, 0.16),
                           transition: "border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease",
                           "&:hover": {
                             borderColor: "primary.main",
                             boxShadow: (theme) =>
                               theme.palette.mode === "dark"
-                                ? "0 14px 28px rgba(0, 0, 0, 0.22)"
-                                : "0 10px 20px rgba(60, 75, 95, 0.12)",
+                                ? "0 14px 26px rgba(2, 8, 23, 0.35)"
+                                : "0 12px 20px rgba(15, 23, 42, 0.12)",
                             transform: "translateY(-1px)",
-                          },
-                          "& .flow-secondary-actions": {
-                            opacity: { xs: 1, sm: 0 },
-                            visibility: { xs: "visible", sm: "hidden" },
-                          },
-                          "&:hover .flow-secondary-actions, &:focus-within .flow-secondary-actions": {
-                            opacity: 1,
-                            visibility: "visible",
                           },
                         }}
                       >
-                        <CardContent sx={{ p: { xs: 1.25, md: 1.35 } }}>
-                          <Stack spacing={0.85}>
-                            <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", justifyContent: "space-between" }}>
-                              <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", minWidth: 0 }}>
+                        <CardContent sx={{ p: { xs: 1.45, md: 1.7 } }}>
+                          <Stack spacing={1.2}>
+                            <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+                              <Stack direction="row" spacing={0.8} sx={{ alignItems: "center", flexWrap: "wrap", minWidth: 0 }}>
                                 <Typography variant="caption" color="text.secondary">
                                   {stepLabel}
                                 </Typography>
@@ -695,18 +681,10 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                               </Stack>
                               {canShowActions && (
                                 <IconButton
-                                  className="flow-secondary-actions"
                                   size="small"
                                   aria-label="Acciones del flow"
                                   onClick={(event) => handleOpenFlowActions(event, item.workflow.id)}
-                                  sx={{
-                                    mt: -0.2,
-                                    mr: -0.35,
-                                    transition: "opacity 160ms ease",
-                                    border: "1px solid",
-                                    borderColor: "divider",
-                                    backgroundColor: "background.paper",
-                                  }}
+                                  sx={{ border: "1px solid", borderColor: "divider", bgcolor: "background.paper" }}
                                 >
                                   <MoreHorizRoundedIcon fontSize="small" />
                                 </IconButton>
@@ -714,12 +692,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                             </Stack>
 
                             <Stack
-                              direction="row"
-                              spacing={1}
-                              sx={{ alignItems: "flex-start", justifyContent: "space-between", gap: 0.8 }}
+                              direction={{ xs: "column", sm: "row" }}
+                              spacing={1.1}
+                              sx={{ alignItems: { sm: "flex-start" }, justifyContent: "space-between" }}
                             >
                               <Box sx={{ minWidth: 0, flex: 1 }}>
-                                <Typography variant="h6" sx={{ mt: 0.1, lineHeight: 1.2, fontWeight: 700 }}>
+                                <Typography variant="h6" sx={{ lineHeight: 1.25, fontWeight: 700 }}>
                                   {step?.nombre ?? "Sin tarea registrada"}
                                 </Typography>
                               </Box>
@@ -730,34 +708,23 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                                 color="inherit"
                                 endIcon={<LaunchRoundedIcon fontSize="small" />}
                                 onClick={() => navigate(`/workflows/${item.workflow.id}`)}
-                                sx={{ px: 1.5 }}
                               >
                                 Abrir flow
                               </Button>
                             </Stack>
 
-                            <Stack
-                              spacing={0.55}
-                              sx={{
-                                p: 0.85,
-                                borderRadius: 1.6,
-                                border: "1px solid",
-                                borderColor: "divider",
-                                backgroundColor: (theme) =>
-                                  theme.palette.mode === "dark"
-                                    ? alpha(theme.palette.background.default, 0.32)
-                                    : alpha(theme.palette.background.default, 0.42),
-                              }}
-                            >
-                              <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", flexWrap: "wrap", gap: 0.55 }}>
-                                <NotesRoundedIcon sx={{ fontSize: 15, color: "text.secondary" }} />
-                                <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.25 }}>
+                            <Divider />
+
+                            <Stack spacing={0.8}>
+                              <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", minWidth: 0 }}>
+                                <NotesRoundedIcon sx={{ fontSize: 16, color: "text.secondary" }} />
+                                <Typography variant="body2" color="text.secondary" sx={{ minWidth: 0 }}>
                                   Último registro: {getStepRecord(step)}
                                 </Typography>
                               </Stack>
 
-                              <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", flexWrap: "wrap", gap: 0.55 }}>
-                                <AccessTimeRoundedIcon sx={{ fontSize: 15, color: "text.secondary" }} />
+                              <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", minWidth: 0 }}>
+                                <AccessTimeRoundedIcon sx={{ fontSize: 16, color: "text.secondary" }} />
                                 <Typography variant="caption" color="text.secondary">
                                   {movement ?? "Sin movimiento reciente"}
                                 </Typography>
@@ -783,8 +750,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                                       borderColor: "divider",
                                       backgroundColor: (theme) =>
                                         theme.palette.mode === "dark"
-                                          ? alpha(theme.palette.background.default, 0.28)
-                                          : alpha(theme.palette.background.default, 0.35),
+                                          ? alpha(theme.palette.background.default, 0.26)
+                                          : alpha(theme.palette.background.default, 0.42),
                                       "&:hover": {
                                         borderColor: "primary.main",
                                         backgroundColor: (theme) =>
@@ -800,35 +767,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                             )}
                           </Stack>
                         </CardContent>
-
-                        <Menu
-                          anchorEl={flowActionsAnchor}
-                          open={flowActionsWorkflowId === item.workflow.id}
-                          onClose={handleCloseFlowActions}
-                        >
-                          {canCancelWorkflow(item.workflow) && (
-                            <MenuItem
-                              onClick={(event) => void handleCancelFlowAction(event, item.workflow.id)}
-                              disabled={cancellingFlowId === item.workflow.id}
-                            >
-                              <ListItemIcon sx={{ minWidth: 30 }}>
-                                <CancelOutlinedIcon fontSize="small" />
-                              </ListItemIcon>
-                              {cancellingFlowId === item.workflow.id ? "Cancelando..." : "Cancelar flow"}
-                            </MenuItem>
-                          )}
-                          {canDeleteWorkflow(item.workflow) && (
-                            <MenuItem
-                              onClick={(event) => void handleDeleteFlowAction(event, item.workflow.id)}
-                              disabled={deletingFlowId === item.workflow.id}
-                            >
-                              <ListItemIcon sx={{ minWidth: 30 }}>
-                                <DeleteOutlineRoundedIcon fontSize="small" />
-                              </ListItemIcon>
-                              {deletingFlowId === item.workflow.id ? "Eliminando..." : "Eliminar flow"}
-                            </MenuItem>
-                          )}
-                        </Menu>
                       </Card>
                     );
                   })
@@ -867,18 +805,17 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                         className="hover-entity-parent"
                         sx={{
                           position: "relative",
-                          borderRadius: 2.2,
                           borderColor: (theme) =>
                             theme.palette.mode === "dark"
-                              ? alpha(theme.palette.primary.main, 0.18)
-                              : alpha(theme.palette.primary.main, 0.14),
+                              ? alpha(theme.palette.primary.main, 0.15)
+                              : alpha(theme.palette.primary.main, 0.12),
                           transition: "border-color 160ms ease, box-shadow 160ms ease",
                           "&:hover": {
                             borderColor: "primary.main",
                             boxShadow: (theme) =>
                               theme.palette.mode === "dark"
-                                ? "0 12px 24px rgba(0, 0, 0, 0.2)"
-                                : "0 9px 18px rgba(60, 75, 95, 0.1)",
+                                ? "0 12px 24px rgba(2, 8, 23, 0.34)"
+                                : "0 9px 18px rgba(15, 23, 42, 0.12)",
                           },
                         }}
                       >
@@ -929,7 +866,10 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                                   size="small"
                                   variant="outlined"
                                   label={`Esperando: ${waitingCount}`}
-                                  sx={{ backgroundColor: (theme) => alpha(theme.palette.warning.main, theme.palette.mode === "dark" ? 0.2 : 0.12) }}
+                                  sx={{
+                                    backgroundColor: (theme) =>
+                                      alpha(theme.palette.warning.main, theme.palette.mode === "dark" ? 0.2 : 0.12),
+                                  }}
                                 />
                               )}
                             </Stack>
@@ -957,6 +897,30 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         </CardContent>
       </Card>
 
+      <Menu anchorEl={flowActionsAnchor} open={Boolean(flowActionsAnchor)} onClose={handleCloseFlowActions}>
+        {selectedWorkflowForActions && canCancelWorkflow(selectedWorkflowForActions) && (
+          <MenuItem
+            onClick={(event) => void handleCancelFlowAction(event, selectedWorkflowForActions.id)}
+            disabled={cancellingFlowId === selectedWorkflowForActions.id}
+          >
+            <ListItemIcon sx={{ minWidth: 30 }}>
+              <CancelOutlinedIcon fontSize="small" />
+            </ListItemIcon>
+            {cancellingFlowId === selectedWorkflowForActions.id ? "Cancelando..." : "Cancelar flow"}
+          </MenuItem>
+        )}
+        {selectedWorkflowForActions && canDeleteWorkflow(selectedWorkflowForActions) && (
+          <MenuItem
+            onClick={(event) => void handleDeleteFlowAction(event, selectedWorkflowForActions.id)}
+            disabled={deletingFlowId === selectedWorkflowForActions.id}
+          >
+            <ListItemIcon sx={{ minWidth: 30 }}>
+              <DeleteOutlineRoundedIcon fontSize="small" />
+            </ListItemIcon>
+            {deletingFlowId === selectedWorkflowForActions.id ? "Eliminando..." : "Eliminar flow"}
+          </MenuItem>
+        )}
+      </Menu>
     </Stack>
   );
 }

@@ -1,14 +1,23 @@
 # UI_GUIDELINES.md
 
 ## 1. Objetivo
-Este documento define criterios visuales para mantener coherencia en pantallas, componentes, colores, estados, espaciados y experiencia de usuario en la aplicación.
+Este documento define criterios para mantener coherencia de interfaz en pantallas, navegación, layout, componentes, colores, estados, espaciados y experiencia de usuario en la aplicación.
 
 ## 2. Regla principal
-La aplicación debe conservar su estructura y distribución actual.  
-El template de Material UI Dashboard se usa solo como referencia estética, no como layout a copiar.
+El template CRUD Dashboard de Material UI es la referencia principal de UI para:
+- Layout
+- Navegación
+- Estructura visual
+- Theme
+- Componentes
+- Cards
+- Tablas/listados
+- Filtros
+- Toolbar
+- Organización general de la interfaz
 
 ## 3. Referencia visual
-Referencia: https://github.com/mui/material-ui/tree/v9.0.1/docs/data/material/getting-started/templates/dashboard
+Referencia principal: https://github.com/mui/material-ui/tree/v9.0.1/docs/data/material/getting-started/templates/crud-dashboard
 
 Se toma como referencia para:
 - Colores
@@ -22,9 +31,12 @@ Se toma como referencia para:
 - Sombras
 - Espaciados
 - Jerarquía visual
+- Layout y navegación
 
 ## 4. Qué está permitido
 Se puede mejorar:
+- Layout de pantallas
+- Navegación visual entre secciones
 - Colores
 - Cards
 - Botones
@@ -37,13 +49,11 @@ Se puede mejorar:
 
 ## 5. Qué no está permitido salvo pedido explícito
 No se debe:
-- Cambiar la navegación principal
-- Cambiar la distribución general
-- Reemplazar pantallas completas
-- Reorganizar módulos
-- Copiar el layout del dashboard template
-- Introducir un sidebar nuevo si la app no lo usa
-- Cambiar rutas
+- Modificar backend
+- Romper rutas existentes
+- Eliminar funcionalidades
+- Cambiar reglas de negocio
+- Instalar dependencias sin justificación
 - Hacer refactors generales
 
 ## 6. Uso de Material UI
@@ -151,8 +161,8 @@ Usar variantes de Material UI:
 Reglas:
 - Usar Stack, Grid y Box.
 - Mantener spacing consistente.
-- Mejorar padding interno sin alterar layout global.
-- No mover bloques principales sin pedido explícito.
+- Mejorar padding interno y distribución para alinearlo con CRUD Dashboard.
+- Mantener legibilidad y equilibrio visual.
 
 ## 15. Modo claro / oscuro
 Reglas:
@@ -165,20 +175,19 @@ Reglas:
 Pasos obligatorios:
 - Leer PROJECT_CONTEXT.md, AI_WORKFLOW.md, LOCAL_MODEL_INSTRUCTIONS.md y UI_GUIDELINES.md.
 - Identificar pantalla o componente a modificar.
-- Mantener distribución actual.
-- Usar el template de MUI Dashboard solo como referencia estética.
+- Usar CRUD Dashboard como referencia principal de layout, navegación y estilo visual.
 - Aplicar el cambio mínimo necesario.
 - No hacer refactors generales.
-- No cambiar navegación, rutas ni organización global.
+- No romper rutas existentes ni reglas de negocio.
 - No introducir nuevas dependencias visuales sin autorización.
 
 ## 17. Checklist de revisión
 Antes de cerrar un cambio de UI:
-- Se mantuvo la distribución actual.
-- No se cambió navegación ni estructura general.
-- Los colores se acercan al estilo MUI Dashboard.
+- La distribución y navegación avanzan hacia el estilo CRUD Dashboard.
+- No se rompieron rutas existentes ni flujos funcionales.
+- Los colores se alinean al estilo CRUD Dashboard.
 - Los componentes usan Material UI de forma consistente.
 - No se copiaron pantallas completas del template.
 - No se agregaron dependencias innecesarias.
 - Los estados y filtros siguen siendo funcionalmente correctos.
-- La pantalla sigue funcionando igual, pero se ve más limpia y consistente.
+- La pantalla mantiene funcionalidades y reglas de negocio, con UI más consistente.
