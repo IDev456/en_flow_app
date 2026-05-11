@@ -5,6 +5,8 @@ import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
 import BoltRoundedIcon from "@mui/icons-material/BoltRounded";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
+import ClearRoundedIcon from "@mui/icons-material/ClearRounded";
+import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
 import FilterListRoundedIcon from "@mui/icons-material/FilterListRounded";
@@ -16,7 +18,6 @@ import NotesRoundedIcon from "@mui/icons-material/NotesRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import SortRoundedIcon from "@mui/icons-material/SortRounded";
-import TuneRoundedIcon from "@mui/icons-material/TuneRounded";
 import ViewColumnRoundedIcon from "@mui/icons-material/ViewColumnRounded";
 import {
   Alert,
@@ -50,7 +51,7 @@ import type { Step, TriggerDetail, WorkflowDetail } from "../types";
 import { formatElapsedTime, getStatusTone } from "../utils";
 
 type ViewMode = "requirements" | "flows";
-type FlowFilter = "all" | "active" | "waiting" | "finalized";
+type FlowFilter = "all" | "active" | "waiting" | "finalized" | "cancelled";
 type FlowSort = "latest_activity" | "creation_date";
 
 type TriggerListPageProps = {
@@ -71,6 +72,7 @@ const flowFilterOptions: Array<{ value: FlowFilter; label: string }> = [
   { value: "active", label: "Activos" },
   { value: "waiting", label: "Esperando" },
   { value: "finalized", label: "Finalizados" },
+  { value: "cancelled", label: "Cancelados" },
   { value: "all", label: "Todos" },
 ];
 
@@ -83,6 +85,7 @@ function getFilterIcon(filter: FlowFilter) {
   if (filter === "active") return <BoltRoundedIcon sx={{ fontSize: 14 }} />;
   if (filter === "waiting") return <HourglassTopRoundedIcon sx={{ fontSize: 14 }} />;
   if (filter === "finalized") return <CheckCircleRoundedIcon sx={{ fontSize: 14 }} />;
+  if (filter === "cancelled") return <CancelOutlinedIcon sx={{ fontSize: 14 }} />;
   return <InboxRoundedIcon sx={{ fontSize: 14 }} />;
 }
 
@@ -103,10 +106,14 @@ function getWorkflowDisplayStatus(workflow: WorkflowDetail) {
 
 function getFlowFilterFromStatus(statusValue: string): Exclude<FlowFilter, "all"> {
   const tone = getStatusTone(statusValue);
-  if (tone === "cancelado") return "finalized";
+  if (tone === "cancelado") return "cancelled";
   if (tone === "finalizado" || tone === "completado" || tone === "resuelto") return "finalized";
   if (tone === "espera" || tone === "espera_externa" || statusValue === "en_espera") return "waiting";
   return "active";
+}
+
+function getDefaultFilterForView(view: ViewMode): FlowFilter {
+  return view === "flows" ? "active" : "all";
 }
 
 function pickRelevantStep(workflow: WorkflowDetail): Step | null {
@@ -183,8 +190,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [triggers, setTriggers] = useState<TriggerDetail[]>([]);
   const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
   const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
-  const [stateFilter, setStateFilter] = useState<FlowFilter>("all");
+  const [stateFilter, setStateFilter] = useState<FlowFilter>(() => getDefaultFilterForView(defaultView));
   const [flowSort, setFlowSort] = useState<FlowSort>("latest_activity");
   const [loading, setLoading] = useState(true);
   const [deletingTriggerId, setDeletingTriggerId] = useState<string | null>(null);
@@ -211,7 +219,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
   useEffect(() => {
     setViewMode(defaultView);
-    setStateFilter("all");
+    setStateFilter(getDefaultFilterForView(defaultView));
+    setSearchOpen(false);
   }, [defaultView]);
 
   useEffect(() => {
@@ -311,7 +320,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         acc[getFlowFilterFromStatus(item.displayStatus)] += 1;
         return acc;
       },
-      { active: 0, waiting: 0, finalized: 0 }
+      { active: 0, waiting: 0, finalized: 0, cancelled: 0 }
     );
   }, [flowCards]);
 
@@ -331,7 +340,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         acc[getFlowFilterFromStatus(trigger.estado_general)] += 1;
         return acc;
       },
-      { active: 0, waiting: 0, finalized: 0 }
+      { active: 0, waiting: 0, finalized: 0, cancelled: 0 }
     );
   }, [triggers]);
 
@@ -471,6 +480,25 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     navigate(`${location.pathname}?${nextParams.toString()}`);
   }
 
+  function handleToggleSearch() {
+    if (!searchOpen) {
+      setSearchOpen(true);
+      return;
+    }
+    if (!query.trim()) {
+      setSearchOpen(false);
+    }
+  }
+
+  function handleClearSearch() {
+    setQuery("");
+  }
+
+  function handleCloseSearch() {
+    setQuery("");
+    setSearchOpen(false);
+  }
+
   return (
     <Stack spacing={2.25}>
       <Snackbar
@@ -518,28 +546,20 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         }
       >
         <Stack spacing={1.6}>
-          <Paper sx={{ p: { xs: 1.25, sm: 1.5 } }}>
-            <Stack spacing={1.2}>
-              <Stack direction={{ xs: "column", lg: "row" }} spacing={1} sx={{ justifyContent: "space-between", alignItems: { lg: "center" } }}>
-                <Box sx={{ width: "100%", maxWidth: { lg: 560 } }}>
-                  <TextField
-                    size="small"
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder={isFlowsView ? "Buscar flow, tarea o requerimiento vinculado..." : "Buscar requerimiento..."}
-                    slotProps={{
-                      input: {
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <SearchRoundedIcon color="action" sx={{ fontSize: 18 }} />
-                          </InputAdornment>
-                        ),
-                      },
-                    }}
-                  />
-                </Box>
+          <Paper sx={{ p: { xs: 1, sm: 1.15 } }}>
+            <Stack spacing={0.8}>
+              <Stack
+                direction={{ xs: "column", md: "row" }}
+                spacing={0.85}
+                sx={{ justifyContent: "space-between", alignItems: { md: "center" } }}
+              >
+                <Stack direction="row" spacing={0.65} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 0.65 }}>
+                  <Tooltip title={searchOpen ? (query.trim() ? "Búsqueda activa" : "Cerrar búsqueda") : "Buscar"}>
+                    <IconButton size="small" aria-label="Buscar" onClick={handleToggleSearch}>
+                      <SearchRoundedIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
 
-                <Stack direction="row" spacing={0.8} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 0.8 }}>
                   {!lockView && (
                     <ToggleButtonGroup
                       exclusive
@@ -548,7 +568,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       onChange={(_, value: ViewMode | null) => {
                         if (!value) return;
                         setViewMode(value);
-                        setStateFilter("all");
+                        setStateFilter(getDefaultFilterForView(value));
                         setCreateRequirementOpen(false);
                         setCreateRequirementError(null);
                       }}
@@ -557,9 +577,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       <ToggleButton value="requirements">Requerimientos</ToggleButton>
                     </ToggleButtonGroup>
                   )}
+                </Stack>
 
+                <Stack direction="row" spacing={0.65} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 0.65 }}>
                   {isFlowsView && (
-                    <Box sx={{ minWidth: { xs: "100%", sm: 220 } }}>
+                    <Box sx={{ minWidth: { xs: "100%", sm: 214 } }}>
                       <TextField
                         select
                         size="small"
@@ -584,21 +606,14 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                     </Box>
                   )}
 
-                  <Tooltip title="Filtros integrados">
-                    <span>
-                      <IconButton size="small" aria-label="Filtros" disabled>
-                        <TuneRoundedIcon fontSize="small" />
-                      </IconButton>
-                    </span>
-                  </Tooltip>
-                  <Tooltip title="Columnas (próximamente)">
+                  <Tooltip title="No disponible todavía">
                     <span>
                       <IconButton size="small" aria-label="Columnas" disabled>
                         <ViewColumnRoundedIcon fontSize="small" />
                       </IconButton>
                     </span>
                   </Tooltip>
-                  <Tooltip title="Descargar (próximamente)">
+                  <Tooltip title="No disponible todavía">
                     <span>
                       <IconButton size="small" aria-label="Descargar" disabled>
                         <DownloadRoundedIcon fontSize="small" />
@@ -608,42 +623,86 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 </Stack>
               </Stack>
 
-              <Stack direction="row" spacing={0.6} sx={{ alignItems: "center" }}>
-                <FilterListRoundedIcon sx={{ fontSize: 15, color: "text.secondary" }} />
-                <Typography variant="caption" color="text.secondary">
-                  Estado
-                </Typography>
-              </Stack>
+              {searchOpen && (
+                <Box sx={{ width: "100%", maxWidth: { xs: "100%", md: 460 } }}>
+                  <TextField
+                    size="small"
+                    value={query}
+                    autoFocus
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder={isFlowsView ? "Buscar flow, tarea o requerimiento vinculado..." : "Buscar requerimiento..."}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Escape") return;
+                      event.preventDefault();
+                      if (query.trim()) {
+                        handleClearSearch();
+                        return;
+                      }
+                      setSearchOpen(false);
+                    }}
+                    slotProps={{
+                      input: {
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <SearchRoundedIcon color="action" sx={{ fontSize: 18 }} />
+                          </InputAdornment>
+                        ),
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            {query.trim() ? (
+                              <Tooltip title="Limpiar búsqueda">
+                                <IconButton size="small" onClick={handleClearSearch} aria-label="Limpiar búsqueda">
+                                  <ClearRoundedIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            ) : (
+                              <Tooltip title="Cerrar búsqueda">
+                                <IconButton size="small" onClick={handleCloseSearch} aria-label="Cerrar búsqueda">
+                                  <CloseRoundedIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </InputAdornment>
+                        ),
+                      },
+                    }}
+                  />
+                </Box>
+              )}
 
-              <ToggleButtonGroup
-                exclusive
-                size="small"
-                value={stateFilter}
-                onChange={(_, value: FlowFilter | null) => {
-                  if (value) setStateFilter(value);
-                }}
-                sx={{
-                  flexWrap: "wrap",
-                  rowGap: 0.8,
-                  justifyContent: { xs: "flex-start", lg: "flex-end" },
-                  alignSelf: { xs: "stretch", lg: "flex-end" },
-                }}
-              >
-                {flowFilterOptions.map((option) => {
-                  const countLabel = option.value === "all" ? "" : ` (${currentCounts[option.value] ?? 0})`;
-                  return (
-                    <ToggleButton key={option.value} value={option.value}>
-                      <Stack direction="row" spacing={0.55} sx={{ alignItems: "center" }}>
-                        {getFilterIcon(option.value)}
-                        <Box component="span">
-                          {option.label}
-                          {countLabel}
-                        </Box>
-                      </Stack>
-                    </ToggleButton>
-                  );
-                })}
-              </ToggleButtonGroup>
+              <Stack direction={{ xs: "column", md: "row" }} spacing={0.55} sx={{ alignItems: { md: "center" }, justifyContent: "space-between" }}>
+                <Stack direction="row" spacing={0.6} sx={{ alignItems: "center" }}>
+                  <FilterListRoundedIcon sx={{ fontSize: 15, color: "text.secondary" }} />
+                  <Typography variant="caption" color="text.secondary">
+                    Estado
+                  </Typography>
+                </Stack>
+
+                <ToggleButtonGroup
+                  exclusive
+                  size="small"
+                  value={stateFilter}
+                  onChange={(_, value: FlowFilter | null) => {
+                    if (value) setStateFilter(value);
+                  }}
+                  sx={{ flexWrap: "wrap", rowGap: 0.65, justifyContent: { xs: "flex-start", md: "flex-end" } }}
+                >
+                  {flowFilterOptions.map((option) => {
+                    const countLabel = option.value === "all" ? "" : ` (${currentCounts[option.value] ?? 0})`;
+                    return (
+                      <ToggleButton key={option.value} value={option.value}>
+                        <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+                          {getFilterIcon(option.value)}
+                          <Box component="span">
+                            {option.label}
+                            {countLabel}
+                          </Box>
+                        </Stack>
+                      </ToggleButton>
+                    );
+                  })}
+                </ToggleButtonGroup>
+              </Stack>
             </Stack>
           </Paper>
 

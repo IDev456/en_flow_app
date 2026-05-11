@@ -140,7 +140,8 @@ Para Flows, el orden debe ser:
 1. Activos
 2. Esperando
 3. Finalizados
-4. Todos
+4. Cancelados
+5. Todos
 
 Reglas:
 - Todos debe ir al final.
