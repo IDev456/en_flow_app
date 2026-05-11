@@ -60,11 +60,10 @@ const navItems: DashboardNavItem[] = [
 type DashboardLayoutProps = {
   mode: AppThemeMode;
   onToggleMode: () => void;
-  onOpenCapture: () => void;
   children: ReactNode;
 };
 
-export function DashboardLayout({ mode, onToggleMode, onOpenCapture, children }: DashboardLayoutProps) {
+export function DashboardLayout({ mode, onToggleMode, children }: DashboardLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -105,7 +104,6 @@ export function DashboardLayout({ mode, onToggleMode, onOpenCapture, children }:
         onToggleMode={onToggleMode}
         onToggleDesktopNav={handleToggleCollapsed}
         onOpenMobileNav={() => setMobileOpen(true)}
-        onOpenCapture={onOpenCapture}
       />
 
       <DashboardSidebar

@@ -19,15 +19,16 @@ import {
   Button,
   Chip,
   CircularProgress,
+  IconButton,
   Paper,
   Snackbar,
   Stack,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from "@mui/material";
-import { alpha } from "@mui/material/styles";
 import {
   ColumnsPanelTrigger,
   DataGrid,
@@ -487,9 +488,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
   const isFlowsView = viewMode === "flows";
   const pageTitle = title || (isFlowsView ? "Flows" : "Requerimientos");
-  const pageSubtitle = isFlowsView
-    ? "Trabajo activo, estados y continuidad operativa."
-    : "Entradas, contexto y trazabilidad general.";
   const currentCounts = isFlowsView ? flowCounts : requirementCounts;
 
   const flowColumns = useMemo<GridColDef<FlowGridRow>[]>(
@@ -713,7 +711,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
   function GridToolbar({ quickFilterPlaceholder }: { quickFilterPlaceholder: string }) {
     return (
-      <Toolbar aria-label="Toolbar del listado">
+      <Toolbar aria-label="Toolbar del listado" style={{ gap: "6px", flexWrap: "wrap" }}>
         <QuickFilter>
           <QuickFilterTrigger
             aria-label="Buscar"
@@ -740,9 +738,33 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
           aria-label="Descargar"
           render={<ToolbarButton aria-label="Descargar CSV">{<DownloadRoundedIcon fontSize="small" />}</ToolbarButton>}
         />
-        <ToolbarButton aria-label="Refrescar" onClick={() => void loadData()}>
-          <RefreshRoundedIcon fontSize="small" />
-        </ToolbarButton>
+
+        <Box sx={{ width: "100%", display: "flex", justifyContent: "flex-end", pt: 0.35 }}>
+          <ToggleButtonGroup
+            exclusive
+            size="small"
+            value={stateFilter}
+            onChange={(_, value: FlowFilter | null) => {
+              if (value) setStateFilter(value);
+            }}
+            sx={{ flexWrap: "wrap", rowGap: 0.6, justifyContent: "flex-end" }}
+          >
+            {flowFilterOptions.map((option) => {
+              const countLabel = option.value === "all" ? "" : ` (${currentCounts[option.value] ?? 0})`;
+              return (
+                <ToggleButton key={option.value} value={option.value}>
+                  <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+                    {getFilterIcon(option.value)}
+                    <Box component="span">
+                      {option.label}
+                      {countLabel}
+                    </Box>
+                  </Stack>
+                </ToggleButton>
+              );
+            })}
+          </ToggleButtonGroup>
+        </Box>
       </Toolbar>
     );
   }
@@ -765,12 +787,13 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       <PageContainer
         breadcrumbs={[{ label: pageTitle }]}
         title={pageTitle}
-        subtitle={pageSubtitle}
         actions={
           <>
-            <Button variant="outlined" color="inherit" startIcon={<RefreshRoundedIcon />} onClick={() => void loadData()}>
-              Refresh
-            </Button>
+            <Tooltip title="Refrescar">
+              <IconButton color="inherit" aria-label="Refrescar listado" onClick={() => void loadData()}>
+                <RefreshRoundedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
 
             {isFlowsView ? (
               <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={openCaptureModal}>
@@ -810,40 +833,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
               <ToggleButton value="requirements">Requerimientos</ToggleButton>
             </ToggleButtonGroup>
           )}
-
-          <Stack direction={{ xs: "column", md: "row" }} spacing={0.55} sx={{ alignItems: { md: "center" }, justifyContent: "space-between" }}>
-            <Stack direction="row" spacing={0.6} sx={{ alignItems: "center" }}>
-              <FilterListRoundedIcon sx={{ fontSize: 15, color: "text.secondary" }} />
-              <Typography variant="caption" color="text.secondary">
-                Estado
-              </Typography>
-            </Stack>
-
-            <ToggleButtonGroup
-              exclusive
-              size="small"
-              value={stateFilter}
-              onChange={(_, value: FlowFilter | null) => {
-                if (value) setStateFilter(value);
-              }}
-              sx={{ flexWrap: "wrap", rowGap: 0.65, justifyContent: { xs: "flex-start", md: "flex-end" } }}
-            >
-              {flowFilterOptions.map((option) => {
-                const countLabel = option.value === "all" ? "" : ` (${currentCounts[option.value] ?? 0})`;
-                return (
-                  <ToggleButton key={option.value} value={option.value}>
-                    <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
-                      {getFilterIcon(option.value)}
-                      <Box component="span">
-                        {option.label}
-                        {countLabel}
-                      </Box>
-                    </Stack>
-                  </ToggleButton>
-                );
-              })}
-            </ToggleButtonGroup>
-          </Stack>
 
           {!isFlowsView && createRequirementOpen && (
             <Paper sx={{ p: { xs: 1.5, md: 1.8 } }}>

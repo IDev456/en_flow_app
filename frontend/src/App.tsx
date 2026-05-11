@@ -75,14 +75,8 @@ function AppShell({ mode, onToggleMode }: AppShellProps) {
     navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ""}`);
   }
 
-  function openCreateModal() {
-    const nextParams = new URLSearchParams(location.search);
-    nextParams.set("modal", "capture");
-    navigate(`${location.pathname}?${nextParams.toString()}`);
-  }
-
   return (
-    <DashboardLayout mode={mode} onToggleMode={onToggleMode} onOpenCapture={openCreateModal}>
+    <DashboardLayout mode={mode} onToggleMode={onToggleMode}>
       <Outlet />
       {isCreateModalOpen && <TriggerCreateModal onClose={closeCreateModal} />}
     </DashboardLayout>

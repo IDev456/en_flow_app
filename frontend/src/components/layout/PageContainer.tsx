@@ -17,22 +17,29 @@ type PageContainerProps = {
 
 export function PageContainer({ breadcrumbs = [], title, subtitle, actions, children }: PageContainerProps) {
   return (
-    <Stack spacing={2.25}>
+    <Stack spacing={1.75}>
       {breadcrumbs.length > 0 && (
-        <Breadcrumbs separator="›" aria-label="breadcrumb">
+        <Breadcrumbs separator="›" aria-label="breadcrumb" sx={{ "& .MuiBreadcrumbs-separator": { mx: 0.75 } }}>
           {breadcrumbs.map((item, index) => {
             const isLast = index === breadcrumbs.length - 1;
 
             if (item.to && !isLast) {
               return (
-                <Link key={`${item.label}-${index}`} component={RouterLink} underline="hover" color="inherit" to={item.to}>
+                <Link
+                  key={`${item.label}-${index}`}
+                  component={RouterLink}
+                  underline="hover"
+                  color="text.secondary"
+                  to={item.to}
+                  sx={{ typography: "caption" }}
+                >
                   {item.label}
                 </Link>
               );
             }
 
             return (
-              <Typography key={`${item.label}-${index}`} color={isLast ? "text.primary" : "text.secondary"}>
+              <Typography key={`${item.label}-${index}`} color={isLast ? "text.primary" : "text.secondary"} variant="caption">
                 {item.label}
               </Typography>
             );
@@ -42,21 +49,25 @@ export function PageContainer({ breadcrumbs = [], title, subtitle, actions, chil
 
       <Stack
         direction={{ xs: "column", sm: "row" }}
-        spacing={1.5}
+        spacing={1}
         sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", sm: "center" } }}
       >
         <Box>
-          <Typography variant="h2" sx={{ fontSize: { xs: "1.55rem", md: "1.85rem" } }}>
+          <Typography variant="h4" sx={{ fontSize: { xs: "1.45rem", md: "1.65rem" }, lineHeight: 1.2 }}>
             {title}
           </Typography>
           {subtitle && (
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25, display: "block" }}>
               {subtitle}
             </Typography>
           )}
         </Box>
 
-        {actions && <Stack direction="row" spacing={0.85} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 0.6 }}>{actions}</Stack>}
+        {actions && (
+          <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 0.6 }}>
+            {actions}
+          </Stack>
+        )}
       </Stack>
 
       {children}

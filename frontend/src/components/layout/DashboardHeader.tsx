@@ -1,4 +1,3 @@
-import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import DarkModeRoundedIcon from "@mui/icons-material/DarkModeRounded";
 import LightModeRoundedIcon from "@mui/icons-material/LightModeRounded";
 import MenuOpenRoundedIcon from "@mui/icons-material/MenuOpenRounded";
@@ -6,7 +5,6 @@ import MenuRoundedIcon from "@mui/icons-material/MenuRounded";
 import {
   AppBar,
   Box,
-  Button,
   IconButton,
   Stack,
   Toolbar,
@@ -24,7 +22,6 @@ type DashboardHeaderProps = {
   onToggleMode: () => void;
   onToggleDesktopNav: () => void;
   onOpenMobileNav: () => void;
-  onOpenCapture: () => void;
 };
 
 export function DashboardHeader({
@@ -33,7 +30,6 @@ export function DashboardHeader({
   onToggleMode,
   onToggleDesktopNav,
   onOpenMobileNav,
-  onOpenCapture,
 }: DashboardHeaderProps) {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up("md"));
@@ -85,20 +81,6 @@ export function DashboardHeader({
               {mode === "dark" ? <LightModeRoundedIcon fontSize="small" /> : <DarkModeRoundedIcon fontSize="small" />}
             </IconButton>
           </Tooltip>
-
-          <Button
-            variant="contained"
-            startIcon={<AddRoundedIcon />}
-            onClick={onOpenCapture}
-            sx={{
-              borderRadius: 2,
-              px: 1.5,
-            }}
-          >
-            <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
-              Capturar tarea
-            </Box>
-          </Button>
         </Stack>
       </Toolbar>
     </AppBar>

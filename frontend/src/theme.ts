@@ -118,8 +118,8 @@ export function createAppTheme(mode: AppThemeMode) {
         },
         styleOverrides: {
           root: {
-            borderRadius: 10,
-            minHeight: 36,
+            borderRadius: 8,
+            minHeight: 34,
             paddingInline: 14,
           },
         },
@@ -129,8 +129,11 @@ export function createAppTheme(mode: AppThemeMode) {
             style: {
               backgroundColor: isDark ? "#f3f4f6" : "#111827",
               color: isDark ? "#111827" : "#f9fafb",
+              border: `1px solid ${isDark ? alpha("#ffffff", 0.4) : alpha("#0f172a", 0.1)}`,
+              boxShadow: "none",
               "&:hover": {
                 backgroundColor: isDark ? "#ffffff" : "#0b1220",
+                boxShadow: "none",
               },
             },
           },
@@ -264,6 +267,24 @@ export function createAppTheme(mode: AppThemeMode) {
             padding: theme.spacing(1, 1.25),
             borderBottom: `1px solid ${alpha(theme.palette.divider, 0.9)}`,
             gap: theme.spacing(0.5),
+            "& .MuiDataGrid-toolbarButton": {
+              minWidth: 32,
+              minHeight: 32,
+              borderRadius: 8,
+              border: `1px solid ${alpha(theme.palette.divider, 0.92)}`,
+            },
+            "& .MuiDataGrid-toolbarButton:hover": {
+              backgroundColor: alpha(theme.palette.action.hover, 0.55),
+            },
+            "& .MuiDataGrid-toolbarButton .MuiSvgIcon-root": {
+              fontSize: "1rem",
+            },
+            "& .MuiDataGrid-toolbarQuickFilter": {
+              minWidth: 220,
+            },
+            "& .MuiDataGrid-toolbarQuickFilter .MuiInputBase-root": {
+              minHeight: 34,
+            },
           }),
           footerContainer: ({ theme }) => ({
             borderTop: `1px solid ${alpha(theme.palette.divider, 0.95)}`,
