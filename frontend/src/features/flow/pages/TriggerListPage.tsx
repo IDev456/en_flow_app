@@ -711,8 +711,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
   function GridToolbar({ quickFilterPlaceholder }: { quickFilterPlaceholder: string }) {
     return (
-      <Toolbar aria-label="Toolbar del listado" style={{ gap: "6px", flexWrap: "wrap" }}>
-        <QuickFilter>
+      <Toolbar aria-label="Toolbar del listado" style={{ gap: "6px" }}>
+        <QuickFilter defaultExpanded={false}>
           <QuickFilterTrigger
             aria-label="Buscar"
             render={<ToolbarButton aria-label="Buscar">{<SearchRoundedIcon fontSize="small" />}</ToolbarButton>}
@@ -738,33 +738,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
           aria-label="Descargar"
           render={<ToolbarButton aria-label="Descargar CSV">{<DownloadRoundedIcon fontSize="small" />}</ToolbarButton>}
         />
-
-        <Box sx={{ width: "100%", display: "flex", justifyContent: "flex-end", pt: 0.35 }}>
-          <ToggleButtonGroup
-            exclusive
-            size="small"
-            value={stateFilter}
-            onChange={(_, value: FlowFilter | null) => {
-              if (value) setStateFilter(value);
-            }}
-            sx={{ flexWrap: "wrap", rowGap: 0.6, justifyContent: "flex-end" }}
-          >
-            {flowFilterOptions.map((option) => {
-              const countLabel = option.value === "all" ? "" : ` (${currentCounts[option.value] ?? 0})`;
-              return (
-                <ToggleButton key={option.value} value={option.value}>
-                  <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
-                    {getFilterIcon(option.value)}
-                    <Box component="span">
-                      {option.label}
-                      {countLabel}
-                    </Box>
-                  </Stack>
-                </ToggleButton>
-              );
-            })}
-          </ToggleButtonGroup>
-        </Box>
       </Toolbar>
     );
   }
@@ -879,6 +852,44 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
           {error && <Alert severity="error">{error}</Alert>}
 
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: { xs: "flex-start", md: "center" },
+              gap: 0.85,
+              flexWrap: "wrap",
+            }}
+          >
+            <Typography variant="caption" color="text.secondary">
+              Estado
+            </Typography>
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              value={stateFilter}
+              onChange={(_, value: FlowFilter | null) => {
+                if (value) setStateFilter(value);
+              }}
+              sx={{ flexWrap: "wrap", rowGap: 0.55 }}
+            >
+              {flowFilterOptions.map((option) => {
+                const countLabel = option.value === "all" ? "" : ` (${currentCounts[option.value] ?? 0})`;
+                return (
+                  <ToggleButton key={option.value} value={option.value}>
+                    <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+                      {getFilterIcon(option.value)}
+                      <Box component="span">
+                        {option.label}
+                        {countLabel}
+                      </Box>
+                    </Stack>
+                  </ToggleButton>
+                );
+              })}
+            </ToggleButtonGroup>
+          </Box>
+
           <Paper sx={{ overflow: "hidden" }}>
             {loading ? (
               <Stack direction="row" spacing={1.25} sx={{ py: 5, alignItems: "center", justifyContent: "center" }}>
@@ -886,52 +897,49 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 <Typography color="text.secondary">Cargando...</Typography>
               </Stack>
             ) : isFlowsView ? (
-              <DataGrid
-                rows={flowRows}
-                columns={flowColumns}
-                disableRowSelectionOnClick
-                autoHeight
-                showToolbar
-                onRowClick={(params: GridRowParams<FlowGridRow>) => {
-                  navigate(`/workflows/${params.row.id}`);
-                }}
-                slots={{
-                  toolbar: () => <GridToolbar quickFilterPlaceholder="Buscar flow, tarea o requerimiento vinculado..." />,
-                }}
-                initialState={{
-                  sorting: {
-                    sortModel: [{ field: "movementAt", sort: "desc" }],
-                  },
-                  columns: {
-                    columnVisibilityModel: {
-                      createdAt: false,
+              <Box sx={{ height: { xs: 560, md: 640 }, width: "100%" }}>
+                <DataGrid
+                  rows={flowRows}
+                  columns={flowColumns}
+                  disableRowSelectionOnClick
+                  showToolbar
+                  onRowClick={(params: GridRowParams<FlowGridRow>) => {
+                    navigate(`/workflows/${params.row.id}`);
+                  }}
+                  slots={{
+                    toolbar: () => <GridToolbar quickFilterPlaceholder="Buscar flow, tarea o requerimiento vinculado..." />,
+                  }}
+                  initialState={{
+                    sorting: {
+                      sortModel: [{ field: "movementAt", sort: "desc" }],
                     },
-                  },
-                }}
-                pageSizeOptions={[10, 25, 50]}
-                sx={{ border: 0 }}
-              />
+                  }}
+                  pageSizeOptions={[10, 25, 50]}
+                  sx={{ border: 0, height: "100%" }}
+                />
+              </Box>
             ) : (
-              <DataGrid
-                rows={requirementRows}
-                columns={requirementColumns}
-                disableRowSelectionOnClick
-                autoHeight
-                showToolbar
-                onRowClick={(params: GridRowParams<RequirementGridRow>) => {
-                  navigate(`/requirements/${params.row.id}`);
-                }}
-                slots={{
-                  toolbar: () => <GridToolbar quickFilterPlaceholder="Buscar requerimiento o contexto..." />,
-                }}
-                initialState={{
-                  sorting: {
-                    sortModel: [{ field: "description", sort: "asc" }],
-                  },
-                }}
-                pageSizeOptions={[10, 25, 50]}
-                sx={{ border: 0 }}
-              />
+              <Box sx={{ height: { xs: 560, md: 640 }, width: "100%" }}>
+                <DataGrid
+                  rows={requirementRows}
+                  columns={requirementColumns}
+                  disableRowSelectionOnClick
+                  showToolbar
+                  onRowClick={(params: GridRowParams<RequirementGridRow>) => {
+                    navigate(`/requirements/${params.row.id}`);
+                  }}
+                  slots={{
+                    toolbar: () => <GridToolbar quickFilterPlaceholder="Buscar requerimiento o contexto..." />,
+                  }}
+                  initialState={{
+                    sorting: {
+                      sortModel: [{ field: "description", sort: "asc" }],
+                    },
+                  }}
+                  pageSizeOptions={[10, 25, 50]}
+                  sx={{ border: 0, height: "100%" }}
+                />
+              </Box>
             )}
           </Paper>
 

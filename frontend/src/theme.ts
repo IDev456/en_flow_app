@@ -267,6 +267,7 @@ export function createAppTheme(mode: AppThemeMode) {
             padding: theme.spacing(1, 1.25),
             borderBottom: `1px solid ${alpha(theme.palette.divider, 0.9)}`,
             gap: theme.spacing(0.5),
+            alignItems: "center",
             "& .MuiDataGrid-toolbarButton": {
               minWidth: 32,
               minHeight: 32,
@@ -279,10 +280,7 @@ export function createAppTheme(mode: AppThemeMode) {
             "& .MuiDataGrid-toolbarButton .MuiSvgIcon-root": {
               fontSize: "1rem",
             },
-            "& .MuiDataGrid-toolbarQuickFilter": {
-              minWidth: 220,
-            },
-            "& .MuiDataGrid-toolbarQuickFilter .MuiInputBase-root": {
+            "& .MuiDataGrid-toolbarQuickFilterControl .MuiInputBase-root": {
               minHeight: 34,
             },
           }),
