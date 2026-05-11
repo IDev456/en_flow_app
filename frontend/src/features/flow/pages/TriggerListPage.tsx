@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
-import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
 import BoltRoundedIcon from "@mui/icons-material/BoltRounded";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
@@ -36,11 +35,8 @@ import {
   FilterPanelTrigger,
   GridActionsCellItem,
   type GridColDef,
+  type GridFilterModel,
   type GridRowParams,
-  QuickFilter,
-  QuickFilterClear,
-  QuickFilterControl,
-  QuickFilterTrigger,
   Toolbar,
   ToolbarButton,
 } from "@mui/x-data-grid";
@@ -71,14 +67,12 @@ type FlowCardData = {
 
 type FlowGridRow = {
   id: string;
-  shortId: string;
   status: string;
   taskName: string;
   stepLabel: string;
   lastRecord: string;
   movementLabel: string;
   movementAt: number;
-  createdAt: number;
   requirementsLabel: string;
   requirementsCount: number;
   canCancel: boolean;
@@ -188,6 +182,21 @@ function getDateValue(value: string | null | undefined) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function toQuickFilterValues(search: string) {
+  const normalized = search.trim();
+  if (!normalized) return [];
+  return normalized.split(/\s+/);
+}
+
+type GridToolbarProps = {
+  quickFilterPlaceholder: string;
+  searchOpen: boolean;
+  searchValue: string;
+  onSearchToggle: () => void;
+  onSearchChange: (value: string) => void;
+  onSearchClearOrClose: () => void;
+};
+
 export function TriggerListPage({ defaultView = "requirements", lockView = false, title = "Requerimientos" }: TriggerListPageProps) {
   const [triggers, setTriggers] = useState<TriggerDetail[]>([]);
   const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
@@ -207,6 +216,18 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [flowToastMessage, setFlowToastMessage] = useState<string | null>(null);
   const [cancellingFlowId, setCancellingFlowId] = useState<string | null>(null);
   const [deletingFlowId, setDeletingFlowId] = useState<string | null>(null);
+  const [flowSearchOpen, setFlowSearchOpen] = useState(false);
+  const [flowSearchValue, setFlowSearchValue] = useState("");
+  const [requirementSearchOpen, setRequirementSearchOpen] = useState(false);
+  const [requirementSearchValue, setRequirementSearchValue] = useState("");
+  const [flowFilterModel, setFlowFilterModel] = useState<GridFilterModel>({
+    items: [],
+    quickFilterValues: [],
+  });
+  const [requirementFilterModel, setRequirementFilterModel] = useState<GridFilterModel>({
+    items: [],
+    quickFilterValues: [],
+  });
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -323,18 +344,14 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
           ? "Tarea actual"
           : "Última tarea";
       const movementAt = getDateValue(item.latestMovementAt) ?? 0;
-      const createdAt = getDateValue(item.workflow.fecha_inicio) ?? 0;
-
       return {
         id: item.workflow.id,
-        shortId: item.workflow.id.slice(0, 8),
         status: item.displayStatus,
         taskName: step?.nombre ?? "Sin tarea registrada",
         stepLabel,
         lastRecord: getStepRecord(step),
         movementLabel: formatElapsedTime(item.latestMovementAt) ?? "Sin movimiento reciente",
-        movementAt,
-        createdAt,
+        movementAt: movementAt || Number.MAX_SAFE_INTEGER,
         requirementsLabel:
           item.linkedRequirements.length === 0
             ? "Sin requerimientos"
@@ -492,20 +509,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
   const flowColumns = useMemo<GridColDef<FlowGridRow>[]>(
     () => [
-      {
-        field: "shortId",
-        headerName: "ID",
-        width: 110,
-        minWidth: 100,
-        renderCell: (params) => (
-          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
-            <AssignmentOutlinedIcon sx={{ fontSize: 14, color: "text.secondary" }} />
-            <Typography variant="caption" color="text.secondary">
-              {params.value}
-            </Typography>
-          </Stack>
-        ),
-      },
       {
         field: "status",
         headerName: "Estado",
@@ -709,20 +712,47 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     [deletingTriggerId, navigate, triggers]
   );
 
-  function GridToolbar({ quickFilterPlaceholder }: { quickFilterPlaceholder: string }) {
+  function GridToolbar({
+    quickFilterPlaceholder,
+    searchOpen,
+    searchValue,
+    onSearchToggle,
+    onSearchChange,
+    onSearchClearOrClose,
+  }: GridToolbarProps) {
+    const searchIsEmpty = searchValue.trim().length === 0;
+
     return (
-      <Toolbar aria-label="Toolbar del listado" style={{ gap: "6px" }}>
-        <QuickFilter defaultExpanded={false}>
-          <QuickFilterTrigger
-            aria-label="Buscar"
-            render={<ToolbarButton aria-label="Buscar">{<SearchRoundedIcon fontSize="small" />}</ToolbarButton>}
-          />
-          <QuickFilterControl aria-label="Búsqueda rápida" placeholder={quickFilterPlaceholder} size="small" />
-          <QuickFilterClear
-            aria-label="Limpiar búsqueda"
-            render={<ToolbarButton aria-label="Limpiar búsqueda">{<CancelOutlinedIcon fontSize="small" />}</ToolbarButton>}
-          />
-        </QuickFilter>
+      <Toolbar aria-label="Toolbar del listado" style={{ gap: "6px", justifyContent: "space-between" }}>
+        <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", minWidth: 0 }}>
+          <ToolbarButton aria-label={searchOpen ? "Alternar búsqueda" : "Buscar"} onClick={onSearchToggle}>
+            <SearchRoundedIcon fontSize="small" />
+          </ToolbarButton>
+          {searchOpen ? (
+            <>
+              <TextField
+                aria-label="Búsqueda rápida"
+                placeholder={quickFilterPlaceholder}
+                size="small"
+                fullWidth={false}
+                value={searchValue}
+                onChange={(event) => onSearchChange(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape" && searchIsEmpty) {
+                    onSearchClearOrClose();
+                  }
+                }}
+                sx={{ width: { xs: 180, sm: 280 } }}
+              />
+              <ToolbarButton
+                aria-label={searchIsEmpty ? "Cerrar búsqueda" : "Limpiar búsqueda"}
+                onClick={onSearchClearOrClose}
+              >
+                <CancelOutlinedIcon fontSize="small" />
+              </ToolbarButton>
+            </>
+          ) : null}
+        </Stack>
 
         <Box sx={{ flex: 1 }} />
 
@@ -901,17 +931,50 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 <DataGrid
                   rows={flowRows}
                   columns={flowColumns}
+                  filterModel={flowFilterModel}
+                  onFilterModelChange={setFlowFilterModel}
                   disableRowSelectionOnClick
                   showToolbar
                   onRowClick={(params: GridRowParams<FlowGridRow>) => {
                     navigate(`/workflows/${params.row.id}`);
                   }}
                   slots={{
-                    toolbar: () => <GridToolbar quickFilterPlaceholder="Buscar flow, tarea o requerimiento vinculado..." />,
+                    toolbar: () => (
+                      <GridToolbar
+                        quickFilterPlaceholder="Buscar flow, tarea o requerimiento vinculado..."
+                        searchOpen={flowSearchOpen}
+                        searchValue={flowSearchValue}
+                        onSearchToggle={() => {
+                          if (flowSearchOpen && flowSearchValue.trim().length === 0) {
+                            setFlowSearchOpen(false);
+                            return;
+                          }
+                          setFlowSearchOpen(true);
+                        }}
+                        onSearchChange={(value) => {
+                          setFlowSearchValue(value);
+                          setFlowFilterModel((previous) => ({
+                            ...previous,
+                            quickFilterValues: toQuickFilterValues(value),
+                          }));
+                        }}
+                        onSearchClearOrClose={() => {
+                          if (flowSearchValue.trim().length > 0) {
+                            setFlowSearchValue("");
+                            setFlowFilterModel((previous) => ({
+                              ...previous,
+                              quickFilterValues: [],
+                            }));
+                            return;
+                          }
+                          setFlowSearchOpen(false);
+                        }}
+                      />
+                    ),
                   }}
                   initialState={{
                     sorting: {
-                      sortModel: [{ field: "movementAt", sort: "desc" }],
+                      sortModel: [{ field: "movementAt", sort: "asc" }],
                     },
                   }}
                   pageSizeOptions={[10, 25, 50]}
@@ -923,13 +986,46 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 <DataGrid
                   rows={requirementRows}
                   columns={requirementColumns}
+                  filterModel={requirementFilterModel}
+                  onFilterModelChange={setRequirementFilterModel}
                   disableRowSelectionOnClick
                   showToolbar
                   onRowClick={(params: GridRowParams<RequirementGridRow>) => {
                     navigate(`/requirements/${params.row.id}`);
                   }}
                   slots={{
-                    toolbar: () => <GridToolbar quickFilterPlaceholder="Buscar requerimiento o contexto..." />,
+                    toolbar: () => (
+                      <GridToolbar
+                        quickFilterPlaceholder="Buscar requerimiento o contexto..."
+                        searchOpen={requirementSearchOpen}
+                        searchValue={requirementSearchValue}
+                        onSearchToggle={() => {
+                          if (requirementSearchOpen && requirementSearchValue.trim().length === 0) {
+                            setRequirementSearchOpen(false);
+                            return;
+                          }
+                          setRequirementSearchOpen(true);
+                        }}
+                        onSearchChange={(value) => {
+                          setRequirementSearchValue(value);
+                          setRequirementFilterModel((previous) => ({
+                            ...previous,
+                            quickFilterValues: toQuickFilterValues(value),
+                          }));
+                        }}
+                        onSearchClearOrClose={() => {
+                          if (requirementSearchValue.trim().length > 0) {
+                            setRequirementSearchValue("");
+                            setRequirementFilterModel((previous) => ({
+                              ...previous,
+                              quickFilterValues: [],
+                            }));
+                            return;
+                          }
+                          setRequirementSearchOpen(false);
+                        }}
+                      />
+                    ),
                   }}
                   initialState={{
                     sorting: {
