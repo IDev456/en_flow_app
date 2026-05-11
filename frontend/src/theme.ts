@@ -1,4 +1,5 @@
 import { alpha, createTheme } from "@mui/material/styles";
+import type {} from "@mui/x-data-grid/themeAugmentation";
 
 export type AppThemeMode = "dark" | "warmLight";
 
@@ -239,6 +240,60 @@ export function createAppTheme(mode: AppThemeMode) {
             border: `1px solid ${alpha(theme.palette.divider, 0.95)}`,
             boxShadow: "none",
           }),
+        },
+      },
+      MuiDataGrid: {
+        styleOverrides: {
+          root: ({ theme }) => ({
+            border: `1px solid ${alpha(theme.palette.divider, 0.92)}`,
+            borderRadius: 10,
+            backgroundColor: theme.palette.background.paper,
+            "--DataGrid-rowBorderColor": alpha(theme.palette.divider, 0.86),
+          }),
+          columnHeaders: ({ theme }) => ({
+            backgroundColor:
+              theme.palette.mode === "dark"
+                ? alpha(theme.palette.background.default, 0.38)
+                : alpha(theme.palette.background.default, 0.72),
+            borderBottom: `1px solid ${alpha(theme.palette.divider, 0.95)}`,
+          }),
+          columnHeaderTitle: {
+            fontWeight: 700,
+          },
+          toolbarContainer: ({ theme }) => ({
+            padding: theme.spacing(1, 1.25),
+            borderBottom: `1px solid ${alpha(theme.palette.divider, 0.9)}`,
+            gap: theme.spacing(0.5),
+          }),
+          footerContainer: ({ theme }) => ({
+            borderTop: `1px solid ${alpha(theme.palette.divider, 0.95)}`,
+            backgroundColor:
+              theme.palette.mode === "dark"
+                ? alpha(theme.palette.background.default, 0.2)
+                : alpha(theme.palette.background.default, 0.55),
+          }),
+          row: ({ theme }) => ({
+            "&:hover": {
+              backgroundColor: alpha(theme.palette.action.hover, 0.42),
+            },
+          }),
+          cell: ({ theme }) => ({
+            borderBottom: `1px solid ${alpha(theme.palette.divider, 0.82)}`,
+            "&:focus": {
+              outline: "none",
+            },
+            "&:focus-within": {
+              outline: "none",
+            },
+          }),
+          columnHeader: {
+            "&:focus": {
+              outline: "none",
+            },
+            "&:focus-within": {
+              outline: "none",
+            },
+          },
         },
       },
     },

@@ -1,23 +1,17 @@
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
-import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
 import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
 import BoltRoundedIcon from "@mui/icons-material/BoltRounded";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
-import ClearRoundedIcon from "@mui/icons-material/ClearRounded";
-import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
 import FilterListRoundedIcon from "@mui/icons-material/FilterListRounded";
 import HourglassTopRoundedIcon from "@mui/icons-material/HourglassTopRounded";
 import InboxRoundedIcon from "@mui/icons-material/InboxRounded";
 import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
-import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
-import NotesRoundedIcon from "@mui/icons-material/NotesRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
-import SortRoundedIcon from "@mui/icons-material/SortRounded";
 import ViewColumnRoundedIcon from "@mui/icons-material/ViewColumnRounded";
 import {
   Alert,
@@ -25,13 +19,7 @@ import {
   Button,
   Chip,
   CircularProgress,
-  IconButton,
-  InputAdornment,
   Paper,
-  ListItemIcon,
-  Menu,
-  MenuItem,
-  Tooltip,
   Snackbar,
   Stack,
   TextField,
@@ -40,19 +28,31 @@ import {
   Typography,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
+import {
+  ColumnsPanelTrigger,
+  DataGrid,
+  ExportCsv,
+  FilterPanelTrigger,
+  GridActionsCellItem,
+  type GridColDef,
+  type GridRowParams,
+  QuickFilter,
+  QuickFilterClear,
+  QuickFilterControl,
+  QuickFilterTrigger,
+  Toolbar,
+  ToolbarButton,
+} from "@mui/x-data-grid";
 import { useLocation, useNavigate } from "react-router-dom";
 
-import { HoverEntityActions } from "../../../components/HoverEntityActions";
 import { PageContainer } from "../../../components/layout/PageContainer";
 import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, getWorkflow, listTriggers, listWorkflows } from "../api";
-import { EmptyTriggerList } from "../components/EmptyTriggerList";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Step, TriggerDetail, WorkflowDetail } from "../types";
 import { formatElapsedTime, getStatusTone } from "../utils";
 
 type ViewMode = "requirements" | "flows";
 type FlowFilter = "all" | "active" | "waiting" | "finalized" | "cancelled";
-type FlowSort = "latest_activity" | "creation_date";
 
 type TriggerListPageProps = {
   defaultView?: ViewMode;
@@ -68,17 +68,40 @@ type FlowCardData = {
   linkedRequirements: TriggerDetail[];
 };
 
+type FlowGridRow = {
+  id: string;
+  shortId: string;
+  status: string;
+  taskName: string;
+  stepLabel: string;
+  lastRecord: string;
+  movementLabel: string;
+  movementAt: number;
+  createdAt: number;
+  requirementsLabel: string;
+  requirementsCount: number;
+  canCancel: boolean;
+  canDelete: boolean;
+};
+
+type RequirementGridRow = {
+  id: string;
+  description: string;
+  context: string;
+  status: string;
+  flowsLabel: string;
+  waitingLabel: string;
+  openCount: number;
+  waitingCount: number;
+  canDelete: boolean;
+};
+
 const flowFilterOptions: Array<{ value: FlowFilter; label: string }> = [
   { value: "active", label: "Activos" },
   { value: "waiting", label: "Esperando" },
   { value: "finalized", label: "Finalizados" },
   { value: "cancelled", label: "Cancelados" },
   { value: "all", label: "Todos" },
-];
-
-const flowSortOptions: Array<{ value: FlowSort; label: string }> = [
-  { value: "latest_activity", label: "Último registro" },
-  { value: "creation_date", label: "Fecha de creación" },
 ];
 
 function getFilterIcon(filter: FlowFilter) {
@@ -158,28 +181,6 @@ function canDeleteWorkflow(workflow: WorkflowDetail) {
   return ["cancelado", "finalizado"].includes(workflow.estado);
 }
 
-function matchesFlowQuery(data: FlowCardData, query: string) {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) return true;
-  const haystack = [
-    data.workflow.id,
-    data.workflow.objetivo_final ?? "",
-    data.relevantStep?.nombre ?? "",
-    data.relevantStep?.descripcion ?? "",
-    ...data.linkedRequirements.map((item) => item.descripcion ?? ""),
-  ]
-    .join(" ")
-    .toLowerCase();
-  return haystack.includes(normalized);
-}
-
-function matchesRequirementQuery(trigger: TriggerDetail, query: string) {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) return true;
-  const haystack = `${trigger.id} ${trigger.descripcion ?? ""} ${trigger.solicitante ?? ""}`.toLowerCase();
-  return haystack.includes(normalized);
-}
-
 function getDateValue(value: string | null | undefined) {
   if (!value) return null;
   const parsed = new Date(value).getTime();
@@ -189,11 +190,8 @@ function getDateValue(value: string | null | undefined) {
 export function TriggerListPage({ defaultView = "requirements", lockView = false, title = "Requerimientos" }: TriggerListPageProps) {
   const [triggers, setTriggers] = useState<TriggerDetail[]>([]);
   const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
-  const [query, setQuery] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
   const [stateFilter, setStateFilter] = useState<FlowFilter>(() => getDefaultFilterForView(defaultView));
-  const [flowSort, setFlowSort] = useState<FlowSort>("latest_activity");
   const [loading, setLoading] = useState(true);
   const [deletingTriggerId, setDeletingTriggerId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -206,8 +204,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [requirementToastMessage, setRequirementToastMessage] = useState<string | null>(null);
   const [flowToastOpen, setFlowToastOpen] = useState(false);
   const [flowToastMessage, setFlowToastMessage] = useState<string | null>(null);
-  const [flowActionsAnchor, setFlowActionsAnchor] = useState<HTMLElement | null>(null);
-  const [flowActionsWorkflowId, setFlowActionsWorkflowId] = useState<string | null>(null);
   const [cancellingFlowId, setCancellingFlowId] = useState<string | null>(null);
   const [deletingFlowId, setDeletingFlowId] = useState<string | null>(null);
   const location = useLocation();
@@ -220,7 +216,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   useEffect(() => {
     setViewMode(defaultView);
     setStateFilter(getDefaultFilterForView(defaultView));
-    setSearchOpen(false);
   }, [defaultView]);
 
   useEffect(() => {
@@ -281,57 +276,32 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
           latestMovementAt: getLatestMovementAt(workflow),
           linkedRequirements,
         };
-      });
-  }, [workflowsById, requirementByWorkflowId]);
-
-  const filteredFlows = useMemo(
-    () => {
-      const filtered = flowCards.filter((item) => {
-        if (!matchesFlowQuery(item, query)) return false;
+      })
+      .filter((item) => {
         if (stateFilter === "all") return true;
         return getFlowFilterFromStatus(item.displayStatus) === stateFilter;
       });
-
-      return [...filtered].sort((leftItem, rightItem) => {
-        const leftCreation = getDateValue(leftItem.workflow.fecha_inicio) ?? 0;
-        const rightCreation = getDateValue(rightItem.workflow.fecha_inicio) ?? 0;
-
-        if (flowSort === "creation_date") {
-          return rightCreation - leftCreation;
-        }
-
-        const leftLatest = getDateValue(leftItem.latestMovementAt);
-        const rightLatest = getDateValue(rightItem.latestMovementAt);
-
-        if (leftLatest === null && rightLatest === null) {
-          return rightCreation - leftCreation;
-        }
-        if (leftLatest === null) return 1;
-        if (rightLatest === null) return -1;
-        return rightLatest - leftLatest;
-      });
-    },
-    [flowCards, query, stateFilter, flowSort]
-  );
+  }, [requirementByWorkflowId, stateFilter, workflowsById]);
 
   const flowCounts = useMemo(() => {
-    return flowCards.reduce<Record<Exclude<FlowFilter, "all">, number>>(
-      (acc, item) => {
-        acc[getFlowFilterFromStatus(item.displayStatus)] += 1;
-        return acc;
-      },
-      { active: 0, waiting: 0, finalized: 0, cancelled: 0 }
-    );
-  }, [flowCards]);
+    return Object.values(workflowsById)
+      .map((workflow) => getWorkflowDisplayStatus(workflow))
+      .reduce<Record<Exclude<FlowFilter, "all">, number>>(
+        (acc, status) => {
+          acc[getFlowFilterFromStatus(status)] += 1;
+          return acc;
+        },
+        { active: 0, waiting: 0, finalized: 0, cancelled: 0 }
+      );
+  }, [workflowsById]);
 
   const filteredRequirements = useMemo(
     () =>
       triggers.filter((trigger) => {
-        if (!matchesRequirementQuery(trigger, query)) return false;
         if (stateFilter === "all") return true;
         return getFlowFilterFromStatus(trigger.estado_general) === stateFilter;
       }),
-    [triggers, query, stateFilter]
+    [triggers, stateFilter]
   );
 
   const requirementCounts = useMemo(() => {
@@ -343,6 +313,71 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       { active: 0, waiting: 0, finalized: 0, cancelled: 0 }
     );
   }, [triggers]);
+
+  const flowRows = useMemo<FlowGridRow[]>(() => {
+    return flowCards.map((item) => {
+      const step = item.relevantStep;
+      const stepLabel =
+        step && ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado)
+          ? "Tarea actual"
+          : "Última tarea";
+      const movementAt = getDateValue(item.latestMovementAt) ?? 0;
+      const createdAt = getDateValue(item.workflow.fecha_inicio) ?? 0;
+
+      return {
+        id: item.workflow.id,
+        shortId: item.workflow.id.slice(0, 8),
+        status: item.displayStatus,
+        taskName: step?.nombre ?? "Sin tarea registrada",
+        stepLabel,
+        lastRecord: getStepRecord(step),
+        movementLabel: formatElapsedTime(item.latestMovementAt) ?? "Sin movimiento reciente",
+        movementAt,
+        createdAt,
+        requirementsLabel:
+          item.linkedRequirements.length === 0
+            ? "Sin requerimientos"
+            : item.linkedRequirements.map((requirement) => requirement.descripcion?.trim() || `Req ${requirement.id.slice(0, 8)}`).join(" · "),
+        requirementsCount: item.linkedRequirements.length,
+        canCancel: canCancelWorkflow(item.workflow),
+        canDelete: canDeleteWorkflow(item.workflow),
+      };
+    });
+  }, [flowCards]);
+
+  const requirementRows = useMemo<RequirementGridRow[]>(() => {
+    return filteredRequirements.map((trigger) => {
+      const linkedWorkflows = trigger.workflow_ids
+        .map((workflowId) => workflowsById[workflowId])
+        .filter((workflow): workflow is WorkflowDetail => Boolean(workflow));
+
+      const openCount = linkedWorkflows.filter((workflow) => {
+        const filter = getFlowFilterFromStatus(getWorkflowDisplayStatus(workflow));
+        return filter === "active" || filter === "waiting";
+      }).length;
+
+      const waitingCount = linkedWorkflows.filter(
+        (workflow) => getFlowFilterFromStatus(getWorkflowDisplayStatus(workflow)) === "waiting"
+      ).length;
+
+      return {
+        id: trigger.id,
+        description: trigger.descripcion?.trim() || "Requerimiento sin detalle",
+        context: trigger.solicitante?.trim() || "Sin contexto",
+        status: trigger.estado_general,
+        flowsLabel:
+          linkedWorkflows.length === 0
+            ? "Sin flows"
+            : openCount > 0
+              ? `${linkedWorkflows.length} flows · ${openCount} abiertos`
+              : `${linkedWorkflows.length} flows`,
+        waitingLabel: waitingCount > 0 ? `Esperando: ${waitingCount}` : "",
+        openCount,
+        waitingCount,
+        canDelete: trigger.workflow_ids.length === 0,
+      };
+    });
+  }, [filteredRequirements, workflowsById]);
 
   async function handleDeleteTrigger(trigger: TriggerDetail) {
     const detail = trigger.descripcion?.trim() || "Requerimiento sin detalle";
@@ -398,26 +433,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     }
   }
 
-  const emptyFlowMessage = stateFilter === "all" ? "Todavía no hay flows." : "No hay flows para este filtro.";
-  const currentCounts = viewMode === "flows" ? flowCounts : requirementCounts;
-
-  function handleOpenFlowActions(event: MouseEvent<HTMLElement>, workflowId: string) {
-    event.preventDefault();
-    event.stopPropagation();
-    setFlowActionsAnchor(event.currentTarget);
-    setFlowActionsWorkflowId(workflowId);
-  }
-
-  function handleCloseFlowActions() {
-    setFlowActionsAnchor(null);
-    setFlowActionsWorkflowId(null);
-  }
-
-  async function handleCancelFlowAction(event: MouseEvent<HTMLElement>, workflowId: string) {
-    event.preventDefault();
-    event.stopPropagation();
-    handleCloseFlowActions();
-
+  async function handleCancelFlowAction(workflowId: string) {
     const workflow = workflowsById[workflowId];
     if (!workflow || !canCancelWorkflow(workflow)) return;
 
@@ -440,11 +456,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     }
   }
 
-  async function handleDeleteFlowAction(event: MouseEvent<HTMLElement>, workflowId: string) {
-    event.preventDefault();
-    event.stopPropagation();
-    handleCloseFlowActions();
-
+  async function handleDeleteFlowAction(workflowId: string) {
     const workflow = workflowsById[workflowId];
     if (!workflow || !canDeleteWorkflow(workflow)) return;
 
@@ -467,40 +479,276 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     }
   }
 
-  const selectedWorkflowForActions = flowActionsWorkflowId ? workflowsById[flowActionsWorkflowId] ?? null : null;
-  const isFlowsView = viewMode === "flows";
-  const pageTitle = title || (isFlowsView ? "Flows" : "Requerimientos");
-  const pageSubtitle = isFlowsView
-    ? "Trabajo activo, estados y continuidad operativa."
-    : "Entradas, contexto y trazabilidad general.";
-
   function openCaptureModal() {
     const nextParams = new URLSearchParams(location.search);
     nextParams.set("modal", "capture");
     navigate(`${location.pathname}?${nextParams.toString()}`);
   }
 
-  function handleToggleSearch() {
-    if (!searchOpen) {
-      setSearchOpen(true);
-      return;
-    }
-    if (!query.trim()) {
-      setSearchOpen(false);
-    }
-  }
+  const isFlowsView = viewMode === "flows";
+  const pageTitle = title || (isFlowsView ? "Flows" : "Requerimientos");
+  const pageSubtitle = isFlowsView
+    ? "Trabajo activo, estados y continuidad operativa."
+    : "Entradas, contexto y trazabilidad general.";
+  const currentCounts = isFlowsView ? flowCounts : requirementCounts;
 
-  function handleClearSearch() {
-    setQuery("");
-  }
+  const flowColumns = useMemo<GridColDef<FlowGridRow>[]>(
+    () => [
+      {
+        field: "shortId",
+        headerName: "ID",
+        width: 110,
+        minWidth: 100,
+        renderCell: (params) => (
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+            <AssignmentOutlinedIcon sx={{ fontSize: 14, color: "text.secondary" }} />
+            <Typography variant="caption" color="text.secondary">
+              {params.value}
+            </Typography>
+          </Stack>
+        ),
+      },
+      {
+        field: "status",
+        headerName: "Estado",
+        width: 150,
+        minWidth: 140,
+        sortable: false,
+        renderCell: (params) => <StatusBadge value={params.value} />,
+      },
+      {
+        field: "taskName",
+        headerName: "Tarea actual",
+        flex: 1.2,
+        minWidth: 240,
+        valueGetter: (_, row) => `${row.stepLabel} ${row.taskName}`,
+        renderCell: (params) => {
+          const row = params.row;
+          return (
+            <Stack spacing={0.25} sx={{ minWidth: 0 }}>
+              <Typography variant="caption" color="text.secondary">
+                {row.stepLabel}
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
+                {row.taskName}
+              </Typography>
+            </Stack>
+          );
+        },
+      },
+      {
+        field: "lastRecord",
+        headerName: "Último registro",
+        flex: 1.35,
+        minWidth: 260,
+        renderCell: (params) => (
+          <Typography variant="body2" color="text.secondary" noWrap>
+            {params.value}
+          </Typography>
+        ),
+      },
+      {
+        field: "movementAt",
+        headerName: "Movimiento",
+        width: 160,
+        minWidth: 150,
+        type: "number",
+        renderCell: (params) => (
+          <Typography variant="caption" color="text.secondary">
+            {params.row.movementLabel}
+          </Typography>
+        ),
+      },
+      {
+        field: "requirementsLabel",
+        headerName: "Requerimientos",
+        flex: 1.1,
+        minWidth: 220,
+        sortable: false,
+        renderCell: (params) => (
+          <Typography variant="body2" color="text.secondary" noWrap>
+            {params.value}
+          </Typography>
+        ),
+      },
+      {
+        field: "actions",
+        type: "actions",
+        headerName: "Acciones",
+        width: 116,
+        getActions: (params) => {
+          const row = params.row;
+          return [
+            <GridActionsCellItem
+              key="open"
+              icon={<LaunchRoundedIcon fontSize="small" />}
+              label="Abrir flow"
+              onClick={(event) => {
+                event.stopPropagation();
+                navigate(`/workflows/${row.id}`);
+              }}
+              showInMenu={false}
+            />,
+            ...(row.canCancel
+              ? [
+                  <GridActionsCellItem
+                    key="cancel"
+                    icon={<CancelOutlinedIcon fontSize="small" />}
+                    label={cancellingFlowId === row.id ? "Cancelando..." : "Cancelar flow"}
+                    disabled={Boolean(cancellingFlowId || deletingFlowId)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void handleCancelFlowAction(row.id);
+                    }}
+                    showInMenu
+                  />,
+                ]
+              : []),
+            ...(row.canDelete
+              ? [
+                  <GridActionsCellItem
+                    key="delete"
+                    icon={<DeleteOutlineRoundedIcon fontSize="small" />}
+                    label={deletingFlowId === row.id ? "Eliminando..." : "Eliminar flow"}
+                    disabled={Boolean(deletingFlowId || cancellingFlowId)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void handleDeleteFlowAction(row.id);
+                    }}
+                    showInMenu
+                  />,
+                ]
+              : []),
+          ];
+        },
+      },
+    ],
+    [cancellingFlowId, deletingFlowId, navigate]
+  );
 
-  function handleCloseSearch() {
-    setQuery("");
-    setSearchOpen(false);
+  const requirementColumns = useMemo<GridColDef<RequirementGridRow>[]>(
+    () => [
+      {
+        field: "description",
+        headerName: "Requerimiento",
+        flex: 1.5,
+        minWidth: 280,
+        renderCell: (params) => (
+          <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
+            {params.value}
+          </Typography>
+        ),
+      },
+      {
+        field: "context",
+        headerName: "Contexto",
+        flex: 1.1,
+        minWidth: 220,
+        renderCell: (params) => (
+          <Typography variant="body2" color="text.secondary" noWrap>
+            {params.value}
+          </Typography>
+        ),
+      },
+      {
+        field: "status",
+        headerName: "Estado",
+        width: 150,
+        minWidth: 140,
+        sortable: false,
+        renderCell: (params) => <StatusBadge value={params.value} />,
+      },
+      {
+        field: "flowsLabel",
+        headerName: "Flows vinculados",
+        flex: 1,
+        minWidth: 220,
+        renderCell: (params) => {
+          const row = params.row;
+          return (
+            <Stack direction="row" spacing={0.6} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 0.4 }}>
+              <Chip size="small" variant="outlined" label={row.flowsLabel} />
+              {row.waitingLabel ? <Chip size="small" variant="outlined" label={row.waitingLabel} /> : null}
+            </Stack>
+          );
+        },
+      },
+      {
+        field: "actions",
+        type: "actions",
+        headerName: "Acciones",
+        width: 116,
+        getActions: (params) => {
+          const row = params.row;
+          return [
+            <GridActionsCellItem
+              key="open"
+              icon={<LaunchRoundedIcon fontSize="small" />}
+              label="Abrir requerimiento"
+              onClick={(event) => {
+                event.stopPropagation();
+                navigate(`/requirements/${row.id}`);
+              }}
+              showInMenu={false}
+            />,
+            <GridActionsCellItem
+              key="delete"
+              icon={<DeleteOutlineRoundedIcon fontSize="small" />}
+              label={deletingTriggerId === row.id ? "Eliminando..." : "Eliminar requerimiento"}
+              disabled={!row.canDelete || Boolean(deletingTriggerId)}
+              onClick={(event) => {
+                event.stopPropagation();
+                const trigger = triggers.find((item) => item.id === row.id);
+                if (!trigger) return;
+                void handleDeleteTrigger(trigger);
+              }}
+              showInMenu
+            />,
+          ];
+        },
+      },
+    ],
+    [deletingTriggerId, navigate, triggers]
+  );
+
+  function GridToolbar({ quickFilterPlaceholder }: { quickFilterPlaceholder: string }) {
+    return (
+      <Toolbar aria-label="Toolbar del listado">
+        <QuickFilter>
+          <QuickFilterTrigger
+            aria-label="Buscar"
+            render={<ToolbarButton aria-label="Buscar">{<SearchRoundedIcon fontSize="small" />}</ToolbarButton>}
+          />
+          <QuickFilterControl aria-label="Búsqueda rápida" placeholder={quickFilterPlaceholder} size="small" />
+          <QuickFilterClear
+            aria-label="Limpiar búsqueda"
+            render={<ToolbarButton aria-label="Limpiar búsqueda">{<CancelOutlinedIcon fontSize="small" />}</ToolbarButton>}
+          />
+        </QuickFilter>
+
+        <Box sx={{ flex: 1 }} />
+
+        <ColumnsPanelTrigger
+          aria-label="Columnas"
+          render={<ToolbarButton aria-label="Columnas">{<ViewColumnRoundedIcon fontSize="small" />}</ToolbarButton>}
+        />
+        <FilterPanelTrigger
+          aria-label="Filtros"
+          render={<ToolbarButton aria-label="Filtros">{<FilterListRoundedIcon fontSize="small" />}</ToolbarButton>}
+        />
+        <ExportCsv
+          aria-label="Descargar"
+          render={<ToolbarButton aria-label="Descargar CSV">{<DownloadRoundedIcon fontSize="small" />}</ToolbarButton>}
+        />
+        <ToolbarButton aria-label="Refrescar" onClick={() => void loadData()}>
+          <RefreshRoundedIcon fontSize="small" />
+        </ToolbarButton>
+      </Toolbar>
+    );
   }
 
   return (
-    <Stack spacing={2.25}>
+    <Stack spacing={2.1}>
       <Snackbar
         open={requirementToastOpen}
         autoHideDuration={2600}
@@ -520,11 +768,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         subtitle={pageSubtitle}
         actions={
           <>
-            <Tooltip title="Refrescar">
-              <IconButton color="inherit" onClick={() => void loadData()} aria-label="Refrescar listado">
-                <RefreshRoundedIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
+            <Button variant="outlined" color="inherit" startIcon={<RefreshRoundedIcon />} onClick={() => void loadData()}>
+              Refresh
+            </Button>
 
             {isFlowsView ? (
               <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={openCaptureModal}>
@@ -545,166 +791,59 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
           </>
         }
       >
-        <Stack spacing={1.6}>
-          <Paper sx={{ p: { xs: 1, sm: 1.15 } }}>
-            <Stack spacing={0.8}>
-              <Stack
-                direction={{ xs: "column", md: "row" }}
-                spacing={0.85}
-                sx={{ justifyContent: "space-between", alignItems: { md: "center" } }}
-              >
-                <Stack direction="row" spacing={0.65} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 0.65 }}>
-                  <Tooltip title={searchOpen ? (query.trim() ? "Búsqueda activa" : "Cerrar búsqueda") : "Buscar"}>
-                    <IconButton size="small" aria-label="Buscar" onClick={handleToggleSearch}>
-                      <SearchRoundedIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
+        <Stack spacing={1.2}>
+          {!lockView && (
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              value={viewMode}
+              onChange={(_, value: ViewMode | null) => {
+                if (!value) return;
+                setViewMode(value);
+                setStateFilter(getDefaultFilterForView(value));
+                setCreateRequirementOpen(false);
+                setCreateRequirementError(null);
+              }}
+              sx={{ alignSelf: "flex-start" }}
+            >
+              <ToggleButton value="flows">Flows</ToggleButton>
+              <ToggleButton value="requirements">Requerimientos</ToggleButton>
+            </ToggleButtonGroup>
+          )}
 
-                  {!lockView && (
-                    <ToggleButtonGroup
-                      exclusive
-                      size="small"
-                      value={viewMode}
-                      onChange={(_, value: ViewMode | null) => {
-                        if (!value) return;
-                        setViewMode(value);
-                        setStateFilter(getDefaultFilterForView(value));
-                        setCreateRequirementOpen(false);
-                        setCreateRequirementError(null);
-                      }}
-                    >
-                      <ToggleButton value="flows">Flows</ToggleButton>
-                      <ToggleButton value="requirements">Requerimientos</ToggleButton>
-                    </ToggleButtonGroup>
-                  )}
-                </Stack>
-
-                <Stack direction="row" spacing={0.65} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 0.65 }}>
-                  {isFlowsView && (
-                    <Box sx={{ minWidth: { xs: "100%", sm: 214 } }}>
-                      <TextField
-                        select
-                        size="small"
-                        value={flowSort}
-                        onChange={(event) => setFlowSort(event.target.value as FlowSort)}
-                        slotProps={{
-                          input: {
-                            startAdornment: (
-                              <InputAdornment position="start">
-                                <SortRoundedIcon sx={{ fontSize: 16, color: "text.secondary" }} />
-                              </InputAdornment>
-                            ),
-                          },
-                        }}
-                      >
-                        {flowSortOptions.map((option) => (
-                          <MenuItem key={option.value} value={option.value}>
-                            {option.label}
-                          </MenuItem>
-                        ))}
-                      </TextField>
-                    </Box>
-                  )}
-
-                  <Tooltip title="No disponible todavía">
-                    <span>
-                      <IconButton size="small" aria-label="Columnas" disabled>
-                        <ViewColumnRoundedIcon fontSize="small" />
-                      </IconButton>
-                    </span>
-                  </Tooltip>
-                  <Tooltip title="No disponible todavía">
-                    <span>
-                      <IconButton size="small" aria-label="Descargar" disabled>
-                        <DownloadRoundedIcon fontSize="small" />
-                      </IconButton>
-                    </span>
-                  </Tooltip>
-                </Stack>
-              </Stack>
-
-              {searchOpen && (
-                <Box sx={{ width: "100%", maxWidth: { xs: "100%", md: 460 } }}>
-                  <TextField
-                    size="small"
-                    value={query}
-                    autoFocus
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder={isFlowsView ? "Buscar flow, tarea o requerimiento vinculado..." : "Buscar requerimiento..."}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Escape") return;
-                      event.preventDefault();
-                      if (query.trim()) {
-                        handleClearSearch();
-                        return;
-                      }
-                      setSearchOpen(false);
-                    }}
-                    slotProps={{
-                      input: {
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <SearchRoundedIcon color="action" sx={{ fontSize: 18 }} />
-                          </InputAdornment>
-                        ),
-                        endAdornment: (
-                          <InputAdornment position="end">
-                            {query.trim() ? (
-                              <Tooltip title="Limpiar búsqueda">
-                                <IconButton size="small" onClick={handleClearSearch} aria-label="Limpiar búsqueda">
-                                  <ClearRoundedIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                            ) : (
-                              <Tooltip title="Cerrar búsqueda">
-                                <IconButton size="small" onClick={handleCloseSearch} aria-label="Cerrar búsqueda">
-                                  <CloseRoundedIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                            )}
-                          </InputAdornment>
-                        ),
-                      },
-                    }}
-                  />
-                </Box>
-              )}
-
-              <Stack direction={{ xs: "column", md: "row" }} spacing={0.55} sx={{ alignItems: { md: "center" }, justifyContent: "space-between" }}>
-                <Stack direction="row" spacing={0.6} sx={{ alignItems: "center" }}>
-                  <FilterListRoundedIcon sx={{ fontSize: 15, color: "text.secondary" }} />
-                  <Typography variant="caption" color="text.secondary">
-                    Estado
-                  </Typography>
-                </Stack>
-
-                <ToggleButtonGroup
-                  exclusive
-                  size="small"
-                  value={stateFilter}
-                  onChange={(_, value: FlowFilter | null) => {
-                    if (value) setStateFilter(value);
-                  }}
-                  sx={{ flexWrap: "wrap", rowGap: 0.65, justifyContent: { xs: "flex-start", md: "flex-end" } }}
-                >
-                  {flowFilterOptions.map((option) => {
-                    const countLabel = option.value === "all" ? "" : ` (${currentCounts[option.value] ?? 0})`;
-                    return (
-                      <ToggleButton key={option.value} value={option.value}>
-                        <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
-                          {getFilterIcon(option.value)}
-                          <Box component="span">
-                            {option.label}
-                            {countLabel}
-                          </Box>
-                        </Stack>
-                      </ToggleButton>
-                    );
-                  })}
-                </ToggleButtonGroup>
-              </Stack>
+          <Stack direction={{ xs: "column", md: "row" }} spacing={0.55} sx={{ alignItems: { md: "center" }, justifyContent: "space-between" }}>
+            <Stack direction="row" spacing={0.6} sx={{ alignItems: "center" }}>
+              <FilterListRoundedIcon sx={{ fontSize: 15, color: "text.secondary" }} />
+              <Typography variant="caption" color="text.secondary">
+                Estado
+              </Typography>
             </Stack>
-          </Paper>
+
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              value={stateFilter}
+              onChange={(_, value: FlowFilter | null) => {
+                if (value) setStateFilter(value);
+              }}
+              sx={{ flexWrap: "wrap", rowGap: 0.65, justifyContent: { xs: "flex-start", md: "flex-end" } }}
+            >
+              {flowFilterOptions.map((option) => {
+                const countLabel = option.value === "all" ? "" : ` (${currentCounts[option.value] ?? 0})`;
+                return (
+                  <ToggleButton key={option.value} value={option.value}>
+                    <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+                      {getFilterIcon(option.value)}
+                      <Box component="span">
+                        {option.label}
+                        {countLabel}
+                      </Box>
+                    </Stack>
+                  </ToggleButton>
+                );
+              })}
+            </ToggleButtonGroup>
+          </Stack>
 
           {!isFlowsView && createRequirementOpen && (
             <Paper sx={{ p: { xs: 1.5, md: 1.8 } }}>
@@ -749,320 +888,70 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             </Paper>
           )}
 
-          {loading && (
-            <Stack direction="row" spacing={1.25} sx={{ py: 4, alignItems: "center", justifyContent: "center" }}>
-              <CircularProgress size={22} />
-              <Typography color="text.secondary">Cargando...</Typography>
-            </Stack>
-          )}
-
           {error && <Alert severity="error">{error}</Alert>}
 
-          {!loading && !error && isFlowsView && (
-            <>
-              {filteredFlows.length === 0 ? (
-                <Alert severity="info">{emptyFlowMessage}</Alert>
-              ) : (
-                <Paper sx={{ overflow: "hidden" }}>
-                  <Box
-                    sx={{
-                      px: 1.6,
-                      py: 1,
-                      display: { xs: "none", md: "grid" },
-                      gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1.35fr) minmax(0, 1fr) auto",
-                      gap: 1,
-                      borderBottom: "1px solid",
-                      borderColor: "divider",
-                      bgcolor: "background.default",
-                    }}
-                  >
-                    <Typography variant="caption" color="text.secondary">Flow / Tarea</Typography>
-                    <Typography variant="caption" color="text.secondary">Último registro</Typography>
-                    <Typography variant="caption" color="text.secondary">Movimiento</Typography>
-                    <Typography variant="caption" color="text.secondary">Acciones</Typography>
-                  </Box>
+          <Paper sx={{ overflow: "hidden" }}>
+            {loading ? (
+              <Stack direction="row" spacing={1.25} sx={{ py: 5, alignItems: "center", justifyContent: "center" }}>
+                <CircularProgress size={22} />
+                <Typography color="text.secondary">Cargando...</Typography>
+              </Stack>
+            ) : isFlowsView ? (
+              <DataGrid
+                rows={flowRows}
+                columns={flowColumns}
+                disableRowSelectionOnClick
+                autoHeight
+                showToolbar
+                onRowClick={(params: GridRowParams<FlowGridRow>) => {
+                  navigate(`/workflows/${params.row.id}`);
+                }}
+                slots={{
+                  toolbar: () => <GridToolbar quickFilterPlaceholder="Buscar flow, tarea o requerimiento vinculado..." />,
+                }}
+                initialState={{
+                  sorting: {
+                    sortModel: [{ field: "movementAt", sort: "desc" }],
+                  },
+                  columns: {
+                    columnVisibilityModel: {
+                      createdAt: false,
+                    },
+                  },
+                }}
+                pageSizeOptions={[10, 25, 50]}
+                sx={{ border: 0 }}
+              />
+            ) : (
+              <DataGrid
+                rows={requirementRows}
+                columns={requirementColumns}
+                disableRowSelectionOnClick
+                autoHeight
+                showToolbar
+                onRowClick={(params: GridRowParams<RequirementGridRow>) => {
+                  navigate(`/requirements/${params.row.id}`);
+                }}
+                slots={{
+                  toolbar: () => <GridToolbar quickFilterPlaceholder="Buscar requerimiento o contexto..." />,
+                }}
+                initialState={{
+                  sorting: {
+                    sortModel: [{ field: "description", sort: "asc" }],
+                  },
+                }}
+                pageSizeOptions={[10, 25, 50]}
+                sx={{ border: 0 }}
+              />
+            )}
+          </Paper>
 
-                  {filteredFlows.map((item, index) => {
-                    const step = item.relevantStep;
-                    const stepLabel =
-                      step && ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado)
-                        ? "Tarea actual"
-                        : "Última tarea";
-                    const movement = formatElapsedTime(item.latestMovementAt);
-                    const canShowActions = canCancelWorkflow(item.workflow) || canDeleteWorkflow(item.workflow);
-
-                    return (
-                      <Box
-                        key={item.workflow.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => navigate(`/workflows/${item.workflow.id}`)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            navigate(`/workflows/${item.workflow.id}`);
-                          }
-                        }}
-                        sx={{
-                          px: 1.6,
-                          py: 1.2,
-                          display: "grid",
-                          gridTemplateColumns: { xs: "1fr", md: "minmax(0, 2fr) minmax(0, 1.35fr) minmax(0, 1fr) auto" },
-                          gap: 1.1,
-                          cursor: "pointer",
-                          transition: "background-color 120ms ease",
-                          borderBottom: index < filteredFlows.length - 1 ? "1px solid" : "none",
-                          borderColor: "divider",
-                          "&:hover": { bgcolor: (theme) => alpha(theme.palette.action.hover, 0.45) },
-                        }}
-                      >
-                        <Stack spacing={0.55} sx={{ minWidth: 0 }}>
-                          <Stack direction="row" spacing={0.65} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 0.4 }}>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                              sx={{ display: "inline-flex", alignItems: "center", gap: 0.35 }}
-                            >
-                              <AssignmentOutlinedIcon sx={{ fontSize: 13 }} />
-                              {item.workflow.id.slice(0, 8)}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {stepLabel}
-                            </Typography>
-                            <StatusBadge value={item.displayStatus} />
-                          </Stack>
-                          <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
-                            {step?.nombre ?? "Sin tarea registrada"}
-                          </Typography>
-                        </Stack>
-
-                        <Stack spacing={0.45} sx={{ minWidth: 0 }}>
-                          <Typography variant="caption" color="text.secondary" sx={{ display: { md: "none" } }}>
-                            Último registro
-                          </Typography>
-                          <Stack direction="row" spacing={0.6} sx={{ alignItems: "center", minWidth: 0 }}>
-                            <NotesRoundedIcon sx={{ fontSize: 15, color: "text.secondary" }} />
-                            <Typography variant="body2" color="text.secondary" noWrap>
-                              {getStepRecord(step)}
-                            </Typography>
-                          </Stack>
-                        </Stack>
-
-                        <Stack spacing={0.45} sx={{ minWidth: 0 }}>
-                          <Typography variant="caption" color="text.secondary" sx={{ display: { md: "none" } }}>
-                            Movimiento
-                          </Typography>
-                          <Stack direction="row" spacing={0.6} sx={{ alignItems: "center", minWidth: 0 }}>
-                            <AccessTimeRoundedIcon sx={{ fontSize: 15, color: "text.secondary" }} />
-                            <Typography variant="caption" color="text.secondary">
-                              {movement ?? "Sin movimiento reciente"}
-                            </Typography>
-                          </Stack>
-                          {item.linkedRequirements.length > 0 && (
-                            <Stack direction="row" spacing={0.4} sx={{ flexWrap: "wrap", gap: 0.4 }}>
-                              {item.linkedRequirements.slice(0, 1).map((requirement) => (
-                                <Chip
-                                  key={`${item.workflow.id}-${requirement.id}`}
-                                  size="small"
-                                  variant="outlined"
-                                  label={requirement.descripcion?.trim() || `Req ${requirement.id.slice(0, 8)}`}
-                                  onClick={(event) => {
-                                    event.preventDefault();
-                                    event.stopPropagation();
-                                    navigate(`/requirements/${requirement.id}`);
-                                  }}
-                                  sx={{ maxWidth: 220 }}
-                                />
-                              ))}
-                              {item.linkedRequirements.length > 1 && (
-                                <Chip size="small" variant="outlined" label={`+${item.linkedRequirements.length - 1}`} />
-                              )}
-                            </Stack>
-                          )}
-                        </Stack>
-
-                        <Stack direction="row" spacing={0.65} sx={{ alignItems: "center", justifyContent: { md: "flex-end" } }}>
-                          <Button
-                            variant="outlined"
-                            size="small"
-                            color="inherit"
-                            endIcon={<LaunchRoundedIcon fontSize="small" />}
-                            onClick={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              navigate(`/workflows/${item.workflow.id}`);
-                            }}
-                          >
-                            Abrir
-                          </Button>
-                          {canShowActions && (
-                            <IconButton
-                              size="small"
-                              aria-label="Acciones del flow"
-                              onClick={(event) => handleOpenFlowActions(event, item.workflow.id)}
-                            >
-                              <MoreHorizRoundedIcon fontSize="small" />
-                            </IconButton>
-                          )}
-                        </Stack>
-                      </Box>
-                    );
-                  })}
-                </Paper>
-              )}
-            </>
-          )}
-
-          {!loading && !error && !isFlowsView && (
-            <>
-              {filteredRequirements.length === 0 ? (
-                <EmptyTriggerList
-                  filtered={Boolean(query.trim()) || stateFilter !== "all"}
-                  onCreateNew={() => {
-                    setCreateRequirementOpen(true);
-                    setCreateRequirementError(null);
-                  }}
-                />
-              ) : (
-                <Paper sx={{ overflow: "hidden" }}>
-                  <Box
-                    sx={{
-                      px: 1.6,
-                      py: 1,
-                      display: { xs: "none", md: "grid" },
-                      gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1.2fr) auto",
-                      gap: 1,
-                      borderBottom: "1px solid",
-                      borderColor: "divider",
-                      bgcolor: "background.default",
-                    }}
-                  >
-                    <Typography variant="caption" color="text.secondary">Requerimiento</Typography>
-                    <Typography variant="caption" color="text.secondary">Estado y flows</Typography>
-                    <Typography variant="caption" color="text.secondary">Acciones</Typography>
-                  </Box>
-
-                  {filteredRequirements.map((trigger, index) => {
-                    const linkedWorkflows = trigger.workflow_ids
-                      .map((workflowId) => workflowsById[workflowId])
-                      .filter((workflow): workflow is WorkflowDetail => Boolean(workflow));
-
-                    const openCount = linkedWorkflows.filter((workflow) => {
-                      const filter = getFlowFilterFromStatus(getWorkflowDisplayStatus(workflow));
-                      return filter === "active" || filter === "waiting";
-                    }).length;
-                    const waitingCount = linkedWorkflows.filter(
-                      (workflow) => getFlowFilterFromStatus(getWorkflowDisplayStatus(workflow)) === "waiting"
-                    ).length;
-
-                    return (
-                      <Box
-                        key={trigger.id}
-                        className="hover-entity-parent"
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => navigate(`/requirements/${trigger.id}`)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            navigate(`/requirements/${trigger.id}`);
-                          }
-                        }}
-                        sx={{
-                          position: "relative",
-                          px: 1.6,
-                          py: 1.2,
-                          display: "grid",
-                          gridTemplateColumns: { xs: "1fr", md: "minmax(0, 2fr) minmax(0, 1.2fr) auto" },
-                          gap: 1,
-                          cursor: "pointer",
-                          borderBottom: index < filteredRequirements.length - 1 ? "1px solid" : "none",
-                          borderColor: "divider",
-                          "&:hover": { bgcolor: (theme) => alpha(theme.palette.action.hover, 0.45) },
-                        }}
-                      >
-                        <HoverEntityActions
-                          onDelete={
-                            deletingTriggerId || trigger.workflow_ids.length > 0
-                              ? undefined
-                              : () => void handleDeleteTrigger(trigger)
-                          }
-                        />
-
-                        <Stack spacing={0.45} sx={{ minWidth: 0 }}>
-                          <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
-                            {trigger.descripcion?.trim() || "Requerimiento sin detalle"}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary" noWrap>
-                            Contexto: {trigger.solicitante?.trim() || "Sin contexto"}
-                          </Typography>
-                        </Stack>
-
-                        <Stack spacing={0.55}>
-                          <StatusBadge value={trigger.estado_general} />
-                          <Stack direction="row" spacing={0.6} sx={{ flexWrap: "wrap", gap: 0.6 }}>
-                            {linkedWorkflows.length === 0 ? (
-                              <Chip size="small" variant="outlined" label="Sin flows" />
-                            ) : (
-                              <Chip
-                                size="small"
-                                variant="outlined"
-                                label={openCount > 0 ? `${linkedWorkflows.length} flows · ${openCount} abiertos` : `${linkedWorkflows.length} flows`}
-                              />
-                            )}
-                            {waitingCount > 0 && <Chip size="small" variant="outlined" label={`Esperando: ${waitingCount}`} />}
-                          </Stack>
-                        </Stack>
-
-                        <Box sx={{ display: "flex", alignItems: "center", justifyContent: { md: "flex-end" } }}>
-                          <Button
-                            variant="outlined"
-                            size="small"
-                            color="inherit"
-                            endIcon={<LaunchRoundedIcon fontSize="small" />}
-                            onClick={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              navigate(`/requirements/${trigger.id}`);
-                            }}
-                          >
-                            Abrir
-                          </Button>
-                        </Box>
-                      </Box>
-                    );
-                  })}
-                </Paper>
-              )}
-            </>
+          {!loading && isFlowsView && flowRows.length === 0 && <Alert severity="info">No hay flows para este filtro.</Alert>}
+          {!loading && !isFlowsView && requirementRows.length === 0 && (
+            <Alert severity="info">No hay requerimientos para este filtro.</Alert>
           )}
         </Stack>
       </PageContainer>
-
-      <Menu anchorEl={flowActionsAnchor} open={Boolean(flowActionsAnchor)} onClose={handleCloseFlowActions}>
-        {selectedWorkflowForActions && canCancelWorkflow(selectedWorkflowForActions) && (
-          <MenuItem
-            onClick={(event) => void handleCancelFlowAction(event, selectedWorkflowForActions.id)}
-            disabled={cancellingFlowId === selectedWorkflowForActions.id}
-          >
-            <ListItemIcon sx={{ minWidth: 30 }}>
-              <CancelOutlinedIcon fontSize="small" />
-            </ListItemIcon>
-            {cancellingFlowId === selectedWorkflowForActions.id ? "Cancelando..." : "Cancelar flow"}
-          </MenuItem>
-        )}
-        {selectedWorkflowForActions && canDeleteWorkflow(selectedWorkflowForActions) && (
-          <MenuItem
-            onClick={(event) => void handleDeleteFlowAction(event, selectedWorkflowForActions.id)}
-            disabled={deletingFlowId === selectedWorkflowForActions.id}
-          >
-            <ListItemIcon sx={{ minWidth: 30 }}>
-              <DeleteOutlineRoundedIcon fontSize="small" />
-            </ListItemIcon>
-            {deletingFlowId === selectedWorkflowForActions.id ? "Eliminando..." : "Eliminar flow"}
-          </MenuItem>
-        )}
-      </Menu>
     </Stack>
   );
 }

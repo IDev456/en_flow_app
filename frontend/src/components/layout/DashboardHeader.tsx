@@ -93,11 +93,6 @@ export function DashboardHeader({
             sx={{
               borderRadius: 2,
               px: 1.5,
-              bgcolor: theme.palette.mode === "dark" ? "#f3f4f6" : "#111827",
-              color: theme.palette.mode === "dark" ? "#111827" : "#f9fafb",
-              "&:hover": {
-                bgcolor: theme.palette.mode === "dark" ? "#ffffff" : "#0b1220",
-              },
             }}
           >
             <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
