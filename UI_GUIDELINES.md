@@ -50,6 +50,7 @@ Se puede mejorar:
 - Espaciados internos
 - Jerarquía visual
 - Consistencia entre pantallas
+- Distribución visual general para alinearla al CRUD Dashboard (sidebar, header, contenedores de página, toolbar y listados)
 
 ## 5. Qué no está permitido salvo pedido explícito
 No se debe:
@@ -133,7 +134,7 @@ Reglas:
 - No usar rojo salvo problema real.
 
 ## 11. Filtros
-Los filtros deben mantener la estructura actual de cada pantalla.
+Los filtros deben alinearse al patrón de toolbar integrada del CRUD Dashboard.
 
 Para Flows, el orden debe ser:
 1. Activos
@@ -145,13 +146,13 @@ Reglas:
 - Todos debe ir al final.
 - No mostrar filtros sin uso real.
 - No usar Pausado o Problema si no son estados funcionales reales.
-- No cambiar lógica del filtro salvo pedido explícito.
+- Se puede compactar UI de filtros (search, estado, orden, acciones) sin cambiar su lógica funcional.
 
 ## 12. Tablas y listados
 Reglas:
-- Mantener estructura actual.
+- Priorizar estructura visual tipo CRUD Dashboard (toolbar + filas compactas + acciones por fila).
 - Mejorar legibilidad, encabezados, chips de estado, acciones por fila y espaciado.
-- No reemplazar una tabla completa por otra solución sin autorización.
+- Se permite migrar hacia DataGrid o estructura equivalente si preserva funcionalidad existente.
 
 ## 13. Tipografía
 Usar variantes de Material UI:
@@ -181,10 +182,10 @@ Pasos obligatorios:
 - Identificar pantalla o componente a modificar.
 - Usar CRUD Dashboard como referencia principal de layout, navegación y estilo visual.
 - Alinear toolbar, filtros, iconografía y densidad visual con CRUD Dashboard.
-- Aplicar el cambio mínimo necesario.
+- Aplicar el cambio mínimo necesario para cumplir la alineación visual solicitada.
 - No hacer refactors generales.
 - No romper rutas existentes ni reglas de negocio.
-- No introducir nuevas dependencias visuales sin autorización.
+- No introducir nuevas dependencias visuales sin justificación explícita en el resumen final.
 
 ## 17. Checklist de revisión
 Antes de cerrar un cambio de UI:

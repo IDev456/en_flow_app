@@ -14,7 +14,7 @@ export function EmptyTriggerList({ filtered, onCreateNew }: EmptyTriggerListProp
       sx={{
         p: { xs: 2, md: 2.25 },
         borderRadius: 2.2,
-        border: "1px dashed",
+        border: "1px solid",
         borderColor: "divider",
         backgroundColor: (theme) =>
           theme.palette.mode === "dark"
