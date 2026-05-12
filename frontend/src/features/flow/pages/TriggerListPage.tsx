@@ -264,7 +264,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [deletingFlowId, setDeletingFlowId] = useState<string | null>(null);
   const [flowActionsMenu, setFlowActionsMenu] = useState<{ rowId: string; anchorEl: HTMLElement } | null>(null);
   const [pendingDates, setPendingDates] = useState<Map<string, string>>(new Map());
-  const [futuresOpen, setFuturesOpen] = useState(false);
+  const [futuresOpen, setFuturesOpen] = useState(true);
   const [flowSearchOpen, setFlowSearchOpen] = useState(false);
   const [flowSearchValue, setFlowSearchValue] = useState("");
   const [requirementSearchOpen, setRequirementSearchOpen] = useState(false);
@@ -427,6 +427,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     () => flowRows.filter((row) => row.executionDateInput && row.executionDateInput > today),
     [flowRows, today]
   );
+
+  useEffect(() => {
+    if (futureRows.length > 0) {
+      setFuturesOpen(true);
+    }
+  }, [futureRows.length]);
 
   async function handleDateBlur(event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>, row: FlowGridRow) {
     event.stopPropagation();
