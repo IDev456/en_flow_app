@@ -494,6 +494,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
             fecha_creacion=now,
             fecha_inicio=now,
             fecha_vencimiento=first_step_override.fecha_vencimiento if first_step_override else None,
+            fecha_ejecucion_estimada=first_step_override.fecha_ejecucion_estimada if first_step_override else None,
             fecha_cierre=None,
             resultado=None,
             observaciones=None,
@@ -591,6 +592,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
             fecha_creacion=now,
             fecha_inicio=now if estado == StepStatus.ACTIVO else None,
             fecha_vencimiento=payload.fecha_vencimiento,
+            fecha_ejecucion_estimada=payload.fecha_ejecucion_estimada,
             fecha_cierre=None,
             resultado=None,
             observaciones=None,
@@ -934,6 +936,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
                 fecha_creacion=now,
                 fecha_inicio=now,
                 fecha_vencimiento=first_step_override.fecha_vencimiento if first_step_override else None,
+                fecha_ejecucion_estimada=first_step_override.fecha_ejecucion_estimada if first_step_override else None,
                 fecha_cierre=None,
                 resultado=None,
                 observaciones=None,
@@ -1084,6 +1087,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             fecha_creacion=now,
             fecha_inicio=now if estado == StepStatus.ACTIVO else None,
             fecha_vencimiento=payload.fecha_vencimiento,
+            fecha_ejecucion_estimada=payload.fecha_ejecucion_estimada,
             fecha_cierre=None,
             resultado=None,
             observaciones=None,
@@ -1127,6 +1131,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             existing.fecha_creacion = step.fecha_creacion
             existing.fecha_inicio = step.fecha_inicio
             existing.fecha_vencimiento = step.fecha_vencimiento
+            existing.fecha_ejecucion_estimada = step.fecha_ejecucion_estimada
             existing.fecha_cierre = step.fecha_cierre
             existing.resultado = step.resultado
             existing.observaciones = step.observaciones
@@ -1409,6 +1414,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             fecha_creacion=step.fecha_creacion,
             fecha_inicio=step.fecha_inicio,
             fecha_vencimiento=step.fecha_vencimiento,
+            fecha_ejecucion_estimada=step.fecha_ejecucion_estimada,
             fecha_cierre=step.fecha_cierre,
             resultado=step.resultado,
             observaciones=step.observaciones,

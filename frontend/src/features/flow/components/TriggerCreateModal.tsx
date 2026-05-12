@@ -29,7 +29,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
   const [title, setTitle] = useState("");
   const [detail, setDetail] = useState("");
   const [assignee, setAssignee] = useState("");
-  const [dueDate, setDueDate] = useState("");
+  const [executionDate, setExecutionDate] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showOptional, setShowOptional] = useState(false);
@@ -38,7 +38,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
   const canSubmit = title.trim().length >= 3;
 
   function handleClose() {
-    if (title.trim() || detail.trim() || assignee.trim() || dueDate) {
+    if (title.trim() || detail.trim() || assignee.trim() || executionDate) {
       if (!window.confirm("¿Cerrar sin guardar? Se perderán los datos ingresados.")) {
         return;
       }
@@ -59,7 +59,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
         titulo: title.trim(),
         detalle: detail.trim() || null,
         asignado_a: assignee.trim() || DEFAULT_ACTOR,
-        fecha_vencimiento: dueDate || null,
+        fecha_ejecucion_estimada: executionDate ? `${executionDate}T00:00:00Z` : null,
         creado_por: DEFAULT_ACTOR,
       });
       showToast("Tarea capturada.", "success");
@@ -125,9 +125,10 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
                 <TextField label="Asignado a" value={assignee} onChange={(event) => setAssignee(event.target.value)} />
                 <TextField
                   label="Fecha"
-                  type="datetime-local"
-                  value={dueDate}
-                  onChange={(event) => setDueDate(event.target.value)}
+                  type="date"
+                  value={executionDate}
+                  onChange={(event) => setExecutionDate(event.target.value)}
+                  helperText="Posible fecha de ejecución"
                   slotProps={{ inputLabel: { shrink: true } }}
                 />
               </Stack>

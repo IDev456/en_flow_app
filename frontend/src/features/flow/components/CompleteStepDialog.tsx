@@ -26,6 +26,7 @@ type CompleteStepDialogProps = {
 export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteStepDialogProps) {
   const [transition, setTransition] = useState<StepTransitionType>("next_task");
   const [nextTaskName, setNextTaskName] = useState("");
+  const [nextTaskExecutionDate, setNextTaskExecutionDate] = useState("");
   const [comment, setComment] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -36,6 +37,7 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
     if (open) {
       setTransition("next_task");
       setNextTaskName("");
+      setNextTaskExecutionDate("");
       setComment("");
       setError(null);
       setSubmitting(false);
@@ -60,7 +62,13 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
         observaciones: null,
         transition_type: transition,
         attachments: [],
-        next_task: transition === "next_task" ? { nombre: nextTaskName.trim() } : null,
+        next_task:
+          transition === "next_task"
+            ? {
+                nombre: nextTaskName.trim(),
+                fecha_ejecucion_estimada: nextTaskExecutionDate ? `${nextTaskExecutionDate}T00:00:00Z` : null,
+              }
+            : null,
         external_wait: transition === "wait_external" ? { que_se_espera: "Esperando respuesta externa" } : null,
         finish_data: transition === "finish_flow" ? { resultado_final: "Flow finalizado" } : null,
       });
@@ -97,13 +105,24 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
           </Typography>
 
           {transition === "next_task" && (
-            <TextField
-              label="Nombre de la próxima tarea *"
-              value={nextTaskName}
-              onChange={(e) => setNextTaskName(e.target.value)}
-              disabled={submitting}
-              autoFocus
-            />
+            <Stack spacing={1.5}>
+              <TextField
+                label="Nombre de la próxima tarea *"
+                value={nextTaskName}
+                onChange={(e) => setNextTaskName(e.target.value)}
+                disabled={submitting}
+                autoFocus
+              />
+              <TextField
+                label="Fecha"
+                type="date"
+                value={nextTaskExecutionDate}
+                onChange={(event) => setNextTaskExecutionDate(event.target.value)}
+                helperText="Posible fecha de ejecución"
+                slotProps={{ inputLabel: { shrink: true } }}
+                disabled={submitting}
+              />
+            </Stack>
           )}
 
           <TextField

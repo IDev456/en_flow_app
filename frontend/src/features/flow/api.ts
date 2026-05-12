@@ -106,7 +106,10 @@ export function getStep(stepId: string) {
   return apiGet<Step>(`/steps/${stepId}`);
 }
 
-export function updateStep(stepId: string, input: { nombre?: string; descripcion?: string | null }) {
+export function updateStep(
+  stepId: string,
+  input: { nombre?: string; descripcion?: string | null; fecha_ejecucion_estimada?: string | null }
+) {
   return apiPatch<Step>(`/steps/${stepId}`, input);
 }
 

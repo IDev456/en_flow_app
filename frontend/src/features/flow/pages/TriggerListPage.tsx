@@ -47,7 +47,7 @@ import { PageContainer } from "../../../components/layout/PageContainer";
 import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, getWorkflow, listTriggers, listWorkflows, reactivateWorkflow } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Step, TriggerDetail, WorkflowDetail } from "../types";
-import { formatElapsedTime, getStatusTone } from "../utils";
+import { formatDateOnly, formatElapsedTime, getStatusTone } from "../utils";
 
 type ViewMode = "requirements" | "flows";
 type FlowFilter = "all" | "active" | "waiting" | "finalized" | "cancelled";
@@ -71,6 +71,8 @@ type FlowGridRow = {
   status: string;
   taskName: string;
   stepLabel: string;
+  executionDateLabel: string;
+  executionAt: number;
   lastRecord: string;
   movementLabel: string;
   movementAt: number;
@@ -363,6 +365,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         status: item.displayStatus,
         taskName: step?.nombre ?? "Sin tarea registrada",
         stepLabel,
+        executionDateLabel: step?.fecha_ejecucion_estimada ? formatDateOnly(step.fecha_ejecucion_estimada) : "Sin fecha",
+        executionAt: getDateValue(step?.fecha_ejecucion_estimada) ?? Number.MAX_SAFE_INTEGER,
         lastRecord: getStepRecord(step),
         movementLabel: formatElapsedTime(item.latestMovementAt) ?? "Sin movimiento reciente",
         movementAt: movementAt || Number.MAX_SAFE_INTEGER,
@@ -609,6 +613,19 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             }}
           >
             {params.value}
+          </Typography>
+        ),
+      },
+      {
+        field: "executionAt",
+        headerName: "Fecha",
+        width: 130,
+        minWidth: 120,
+        type: "number",
+        valueGetter: (_, row) => row.executionAt,
+        renderCell: (params) => (
+          <Typography variant="body2" color={params.row.executionDateLabel === "Sin fecha" ? "text.secondary" : "text.primary"}>
+            {params.row.executionDateLabel}
           </Typography>
         ),
       },

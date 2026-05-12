@@ -39,6 +39,7 @@ export function TriggerDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [newWorkflowFirstDescription, setNewWorkflowFirstDescription] = useState("");
   const [newWorkflowFirstName, setNewWorkflowFirstName] = useState("");
+  const [newWorkflowExecutionDate, setNewWorkflowExecutionDate] = useState("");
   const [newWorkflowError, setNewWorkflowError] = useState<string | null>(null);
   const [newWorkflowSuccess, setNewWorkflowSuccess] = useState<string | null>(null);
   const [creatingWorkflow, setCreatingWorkflow] = useState(false);
@@ -238,11 +239,13 @@ export function TriggerDetailPage() {
           descripcion: newWorkflowFirstDescription.trim(),
           asignado_a: DEFAULT_ACTOR,
           fecha_vencimiento: null,
+          fecha_ejecucion_estimada: newWorkflowExecutionDate ? `${newWorkflowExecutionDate}T00:00:00Z` : null,
         },
       });
       setNewWorkflowSuccess("Nuevo flow asociado creado.");
       setNewWorkflowFirstDescription("");
       setNewWorkflowFirstName("");
+      setNewWorkflowExecutionDate("");
       await loadTrigger();
       navigate(`/workflows/${newWorkflow.id}`);
     } catch (err) {
@@ -517,6 +520,15 @@ export function TriggerDetailPage() {
                   value={newWorkflowFirstDescription}
                   onChange={(event) => setNewWorkflowFirstDescription(event.target.value)}
                   disabled={creatingWorkflow}
+                />
+                <TextField
+                  label="Fecha"
+                  type="date"
+                  value={newWorkflowExecutionDate}
+                  onChange={(event) => setNewWorkflowExecutionDate(event.target.value)}
+                  helperText="Posible fecha de ejecución"
+                  disabled={creatingWorkflow}
+                  slotProps={{ inputLabel: { shrink: true } }}
                 />
                 <Button
                   variant="outlined"

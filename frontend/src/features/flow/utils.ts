@@ -50,6 +50,18 @@ export function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
+export function formatDateOnly(value: string | null) {
+  if (!value) {
+    return "Sin fecha";
+  }
+
+  return new Intl.DateTimeFormat("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
 export function formatElapsedTime(value: string | null) {
   if (!value) {
     return null;

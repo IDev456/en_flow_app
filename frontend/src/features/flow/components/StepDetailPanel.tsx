@@ -37,7 +37,7 @@ import type {
   StepJournalEntryInput,
   StepTransitionType,
 } from "../types";
-import { buildJournalItems, DEFAULT_ACTOR } from "../utils";
+import { buildJournalItems, DEFAULT_ACTOR, formatDateOnly } from "../utils";
 import { Journal } from "./Journal";
 import { StatusBadge } from "./StatusBadge";
 
@@ -91,6 +91,7 @@ export function StepDetailPanel({
   const [resolveNextTaskDescription, setResolveNextTaskDescription] = useState("");
   const [resolveNextTaskAssignee, setResolveNextTaskAssignee] = useState("");
   const [resolveNextTaskDueDate, setResolveNextTaskDueDate] = useState("");
+  const [resolveNextTaskExecutionDate, setResolveNextTaskExecutionDate] = useState("");
   const [resolveFinishReason, setResolveFinishReason] = useState("");
   const [resolveAttachments, setResolveAttachments] = useState<AttachmentInput[]>([]);
   const [resolving, setResolving] = useState(false);
@@ -99,6 +100,7 @@ export function StepDetailPanel({
   const [editingStep, setEditingStep] = useState(false);
   const [stepDraftName, setStepDraftName] = useState("");
   const [stepDraftDescription, setStepDraftDescription] = useState("");
+  const [stepDraftExecutionDate, setStepDraftExecutionDate] = useState("");
   const [stepEditError, setStepEditError] = useState<string | null>(null);
   const [savingStep, setSavingStep] = useState(false);
   const [stepToastOpen, setStepToastOpen] = useState(false);
@@ -125,6 +127,7 @@ export function StepDetailPanel({
     setResolveNextTaskDescription("");
     setResolveNextTaskAssignee("");
     setResolveNextTaskDueDate("");
+    setResolveNextTaskExecutionDate("");
     setResolveFinishReason("");
     setResolveAttachments([]);
     setResolveError(null);
@@ -132,6 +135,7 @@ export function StepDetailPanel({
     setEditingStep(false);
     setStepDraftName(step.nombre);
     setStepDraftDescription(step.descripcion ?? "");
+    setStepDraftExecutionDate(step.fecha_ejecucion_estimada ? step.fecha_ejecucion_estimada.slice(0, 10) : "");
     setStepEditError(null);
     setStepToastOpen(false);
   }, [step?.id, step?.estado, step?.expected_external_event, step?.external_reference, step?.external_wait_reason]);
@@ -274,6 +278,7 @@ export function StepDetailPanel({
                 descripcion: resolveNextTaskDescription.trim() || null,
                 asignado_a: resolveNextTaskAssignee.trim() || null,
                 fecha_vencimiento: resolveNextTaskDueDate || null,
+                fecha_ejecucion_estimada: resolveNextTaskExecutionDate ? `${resolveNextTaskExecutionDate}T00:00:00Z` : null,
               }
             : null,
         finish_data:
@@ -298,6 +303,7 @@ export function StepDetailPanel({
     if (!step) return;
     setStepDraftName(step.nombre);
     setStepDraftDescription(step.descripcion ?? "");
+    setStepDraftExecutionDate(step.fecha_ejecucion_estimada ? step.fecha_ejecucion_estimada.slice(0, 10) : "");
     setStepEditError(null);
     setEditingStep(true);
   }
@@ -306,6 +312,7 @@ export function StepDetailPanel({
     if (!step) return;
     setStepDraftName(step.nombre);
     setStepDraftDescription(step.descripcion ?? "");
+    setStepDraftExecutionDate(step.fecha_ejecucion_estimada ? step.fecha_ejecucion_estimada.slice(0, 10) : "");
     setStepEditError(null);
     setEditingStep(false);
   }
@@ -315,13 +322,18 @@ export function StepDetailPanel({
 
     const nextName = stepDraftName.trim();
     const nextDescription = stepDraftDescription.trim();
+    const nextExecutionDate = stepDraftExecutionDate ? `${stepDraftExecutionDate}T00:00:00Z` : null;
 
     if (!nextName) {
       setStepEditError("Debes indicar el nombre de la tarea.");
       return;
     }
 
-    if (nextName === step.nombre && nextDescription === (step.descripcion ?? "")) {
+    if (
+      nextName === step.nombre &&
+      nextDescription === (step.descripcion ?? "") &&
+      nextExecutionDate === step.fecha_ejecucion_estimada
+    ) {
       setEditingStep(false);
       setStepEditError(null);
       return;
@@ -333,9 +345,11 @@ export function StepDetailPanel({
       const updatedStep = await updateStep(step.id, {
         nombre: nextName,
         descripcion: nextDescription || null,
+        fecha_ejecucion_estimada: nextExecutionDate,
       });
       setStepDraftName(updatedStep.nombre);
       setStepDraftDescription(updatedStep.descripcion ?? "");
+      setStepDraftExecutionDate(updatedStep.fecha_ejecucion_estimada ? updatedStep.fecha_ejecucion_estimada.slice(0, 10) : "");
       await onStepUpdated?.(updatedStep);
       setEditingStep(false);
       setStepToastOpen(true);
@@ -394,6 +408,15 @@ export function StepDetailPanel({
                         minRows={2}
                         value={stepDraftDescription}
                         onChange={(event) => setStepDraftDescription(event.target.value)}
+                        disabled={savingStep}
+                      />
+                      <TextField
+                        label="Fecha"
+                        type="date"
+                        value={stepDraftExecutionDate}
+                        onChange={(event) => setStepDraftExecutionDate(event.target.value)}
+                        helperText="Posible fecha de ejecución"
+                        slotProps={{ inputLabel: { shrink: true } }}
                         disabled={savingStep}
                       />
                     </Stack>
@@ -460,6 +483,14 @@ export function StepDetailPanel({
                       </Typography>
                       <Typography variant="body2" color={latestMessage === "Sin registros todavía" ? "text.secondary" : "text.primary"}>
                         {latestMessage}
+                      </Typography>
+                    </Stack>
+                    <Stack spacing={0.5}>
+                      <Typography variant="body2" color="text.secondary">
+                        Fecha
+                      </Typography>
+                      <Typography variant="body2" color={step.fecha_ejecucion_estimada ? "text.primary" : "text.secondary"}>
+                        {step.fecha_ejecucion_estimada ? formatDateOnly(step.fecha_ejecucion_estimada) : "Sin fecha definida"}
                       </Typography>
                     </Stack>
                   </Stack>
@@ -635,6 +666,14 @@ export function StepDetailPanel({
                   <>
                     <TextField label="Detalle / contexto" multiline minRows={2} value={resolveNextTaskDescription} onChange={(event) => setResolveNextTaskDescription(event.target.value)} />
                     <TextField label="Asignado a" value={resolveNextTaskAssignee} onChange={(event) => setResolveNextTaskAssignee(event.target.value)} />
+                    <TextField
+                      label="Fecha"
+                      type="date"
+                      value={resolveNextTaskExecutionDate}
+                      onChange={(event) => setResolveNextTaskExecutionDate(event.target.value)}
+                      helperText="Posible fecha de ejecución"
+                      slotProps={{ inputLabel: { shrink: true } }}
+                    />
                     <TextField
                       label="Fecha de vencimiento"
                       type="datetime-local"

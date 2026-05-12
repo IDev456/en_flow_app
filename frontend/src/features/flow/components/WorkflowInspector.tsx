@@ -13,7 +13,7 @@ import {
 import { Link as RouterLink } from "react-router-dom";
 
 import type { Step } from "../types";
-import { DEFAULT_ACTOR, formatDate } from "../utils";
+import { DEFAULT_ACTOR, formatDate, formatDateOnly } from "../utils";
 import { StatusBadge } from "./StatusBadge";
 
 type WorkflowInspectorProps = {
@@ -110,6 +110,9 @@ export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInsp
           </Typography>
           <Typography variant="body2" color="text.secondary">
             Inicio: {formatDate(step.fecha_inicio)}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Fecha: {formatDateOnly(step.fecha_ejecucion_estimada)}
           </Typography>
           <Typography variant="body2" color="text.secondary">
             Vencimiento: {formatDate(step.fecha_vencimiento)}

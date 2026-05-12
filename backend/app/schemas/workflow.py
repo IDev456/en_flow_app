@@ -111,6 +111,7 @@ class InitialStepOverride(BaseModel):
     descripcion: str | None = Field(default=None, max_length=1000)
     asignado_a: str | None = Field(default=None, max_length=120)
     fecha_vencimiento: datetime | None = None
+    fecha_ejecucion_estimada: datetime | None = None
 
 
 class WorkflowStartRequest(WorkflowInstanceBase):
@@ -164,6 +165,7 @@ class StepInstancePublic(StepInstanceBase):
     fecha_creacion: datetime
     fecha_inicio: datetime | None = None
     fecha_vencimiento: datetime | None = None
+    fecha_ejecucion_estimada: datetime | None = None
     fecha_cierre: datetime | None = None
     resultado: str | None = None
     observaciones: str | None = None
@@ -186,6 +188,7 @@ class StepCreate(BaseModel):
     puede_tener_comentarios: bool = True
     asignado_a: str | None = None
     fecha_vencimiento: datetime | None = None
+    fecha_ejecucion_estimada: datetime | None = None
     action_type: str = Field(default="continue", min_length=1, max_length=80)
     action_config: dict[str, Any] | None = None
     action_label: str | None = Field(default=None, max_length=160)
@@ -198,6 +201,7 @@ class StepCreate(BaseModel):
 class StepUpdate(BaseModel):
     nombre: str | None = Field(default=None, min_length=1, max_length=120)
     descripcion: str | None = Field(default=None, max_length=1000)
+    fecha_ejecucion_estimada: datetime | None = None
 
 
 class AttachmentBase(BaseModel):
@@ -223,6 +227,7 @@ class NextTaskInput(BaseModel):
     descripcion: str | None = Field(default=None, max_length=1000)
     asignado_a: str | None = Field(default=None, max_length=120)
     fecha_vencimiento: datetime | None = None
+    fecha_ejecucion_estimada: datetime | None = None
 
 
 class ExternalWaitInput(BaseModel):
@@ -293,6 +298,7 @@ class QuickCaptureRequest(BaseModel):
     detalle: str | None = Field(default=None, max_length=1000)
     asignado_a: str | None = Field(default=None, max_length=120)
     fecha_vencimiento: datetime | None = None
+    fecha_ejecucion_estimada: datetime | None = None
     creado_por: str = Field(default="sistema", min_length=1, max_length=120)
 
 

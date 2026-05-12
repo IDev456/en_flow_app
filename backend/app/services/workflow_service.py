@@ -164,6 +164,7 @@ class WorkflowService:
                     "descripcion": payload.detalle,
                     "asignado_a": payload.asignado_a,
                     "fecha_vencimiento": payload.fecha_vencimiento,
+                    "fecha_ejecucion_estimada": payload.fecha_ejecucion_estimada,
                 },
             ),
         )
@@ -361,6 +362,8 @@ class WorkflowService:
         if "descripcion" in patch_data:
             next_description = patch_data["descripcion"]
             update_data["descripcion"] = next_description.strip() if isinstance(next_description, str) else None
+        if "fecha_ejecucion_estimada" in patch_data:
+            update_data["fecha_ejecucion_estimada"] = patch_data["fecha_ejecucion_estimada"]
 
         if not update_data:
             raise BusinessRuleError("No hay cambios para guardar")
@@ -524,6 +527,7 @@ class WorkflowService:
                     puede_tener_comentarios=True,
                     asignado_a=payload.next_task.asignado_a,
                     fecha_vencimiento=payload.next_task.fecha_vencimiento,
+                    fecha_ejecucion_estimada=payload.next_task.fecha_ejecucion_estimada,
                     action_type="continue",
                     action_config=None,
                     action_label="Continuar flow",

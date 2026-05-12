@@ -76,6 +76,7 @@ export type Step = {
   fecha_creacion: string;
   fecha_inicio: string | null;
   fecha_vencimiento: string | null;
+  fecha_ejecucion_estimada: string | null;
   fecha_cierre: string | null;
   resultado: string | null;
   observaciones: string | null;
@@ -157,6 +158,7 @@ export type WorkflowStartInput = {
     descripcion?: string | null;
     asignado_a?: string | null;
     fecha_vencimiento?: string | null;
+    fecha_ejecucion_estimada?: string | null;
   };
 };
 
@@ -177,6 +179,7 @@ export type NextTaskInput = {
   descripcion?: string | null;
   asignado_a?: string | null;
   fecha_vencimiento?: string | null;
+  fecha_ejecucion_estimada?: string | null;
 };
 
 export type ExternalWaitInput = {
@@ -236,6 +239,7 @@ export type QuickCaptureInput = {
   detalle?: string | null;
   asignado_a?: string | null;
   fecha_vencimiento?: string | null;
+  fecha_ejecucion_estimada?: string | null;
   creado_por?: string;
 };
 
