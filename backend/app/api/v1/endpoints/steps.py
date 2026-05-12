@@ -8,6 +8,7 @@ from app.schemas.workflow import (
     ExternalResponseDecisionPayload,
     ExternalEventCreate,
     ExternalEventPublic,
+    StepDateUpdate,
     StepCompletePayload,
     StepHistoryPublic,
     StepInstancePublic,
@@ -39,6 +40,18 @@ def update_step(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except BusinessRuleError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.patch("/{step_id}/date", response_model=StepInstancePublic)
+def update_step_date(
+    step_id: str,
+    payload: StepDateUpdate,
+    service: WorkflowService = Depends(get_workflow_service),
+) -> StepInstancePublic:
+    try:
+        return service.update_step_date(step_id, payload)
+    except EntityNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.patch("/{step_id}/status", response_model=StepInstancePublic)

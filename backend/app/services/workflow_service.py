@@ -13,6 +13,7 @@ from app.schemas.workflow import (
     ExternalEventPublic,
     QuickCaptureRequest,
     RequirementCreateFromFlowPayload,
+    StepDateUpdate,
     StepCompletePayload,
     StepCreate,
     StepHistoryPublic,
@@ -377,6 +378,11 @@ class WorkflowService:
             self._record_history(updated_step.id, "descripcion", step.descripcion, updated_step.descripcion, "sistema")
 
         return self.get_step(step_id)
+
+    def update_step_date(self, step_id: str, payload: StepDateUpdate) -> StepInstancePublic:
+        step = self.get_step(step_id)
+        updated = step.model_copy(update={"fecha_vencimiento": payload.fecha_vencimiento})
+        return self.repository.save_step(updated)
 
     def update_step_status(self, step_id: str, payload: StepStatusUpdate) -> StepInstancePublic:
         step = self.get_step(step_id)

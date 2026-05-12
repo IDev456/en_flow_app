@@ -11,6 +11,7 @@ import type {
   ExternalEvent,
   ExternalEventCreateInput,
   StepHistoryEntry,
+  StepDateUpdateInput,
   QuickCaptureInput,
   StepStatusUpdateInput,
   Trigger,
@@ -111,6 +112,10 @@ export function updateStep(
   input: { nombre?: string; descripcion?: string | null; fecha_ejecucion_estimada?: string | null }
 ) {
   return apiPatch<Step>(`/steps/${stepId}`, input);
+}
+
+export function updateStepDate(stepId: string, input: StepDateUpdateInput) {
+  return apiPatch<Step>(`/steps/${stepId}/date`, input);
 }
 
 export function updateStepStatus(stepId: string, input: StepStatusUpdateInput) {

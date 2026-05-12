@@ -204,6 +204,10 @@ class StepUpdate(BaseModel):
     fecha_ejecucion_estimada: datetime | None = None
 
 
+class StepDateUpdate(BaseModel):
+    fecha_vencimiento: datetime | None = None
+
+
 class AttachmentBase(BaseModel):
     nombre: str = Field(min_length=1, max_length=200)
     content_type: str = Field(min_length=1, max_length=120)

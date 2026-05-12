@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FocusEvent } from "react";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import BoltRoundedIcon from "@mui/icons-material/BoltRounded";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import FilterListRoundedIcon from "@mui/icons-material/FilterListRounded";
 import HourglassTopRoundedIcon from "@mui/icons-material/HourglassTopRounded";
 import InboxRoundedIcon from "@mui/icons-material/InboxRounded";
@@ -19,6 +20,7 @@ import {
   Box,
   Button,
   Chip,
+  Collapse,
   CircularProgress,
   IconButton,
   Menu,
@@ -47,7 +49,8 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { PageContainer } from "../../../components/layout/PageContainer";
-import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, getWorkflow, listTriggers, listWorkflows, reactivateWorkflow, updateStep } from "../api";
+import { useToastContext } from "../../../components/Toast";
+import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, getWorkflow, listTriggers, listWorkflows, reactivateWorkflow, updateStepDate } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Step, TriggerDetail, WorkflowDetail } from "../types";
 import { formatDateOnly, formatElapsedTime, getStatusTone } from "../utils";
@@ -239,6 +242,7 @@ type GridToolbarProps = {
 };
 
 export function TriggerListPage({ defaultView = "requirements", lockView = false, title = "Requerimientos" }: TriggerListPageProps) {
+  const { showToast } = useToastContext();
   const [triggers, setTriggers] = useState<TriggerDetail[]>([]);
   const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
   const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
@@ -259,8 +263,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [reactivatingFlowId, setReactivatingFlowId] = useState<string | null>(null);
   const [deletingFlowId, setDeletingFlowId] = useState<string | null>(null);
   const [flowActionsMenu, setFlowActionsMenu] = useState<{ rowId: string; anchorEl: HTMLElement } | null>(null);
-  const [dateDraftByStepId, setDateDraftByStepId] = useState<Record<string, string>>({});
-  const [updatingDateByStepId, setUpdatingDateByStepId] = useState<Record<string, boolean>>({});
+  const [pendingDates, setPendingDates] = useState<Map<string, string>>(new Map());
+  const [futuresOpen, setFuturesOpen] = useState(false);
   const [flowSearchOpen, setFlowSearchOpen] = useState(false);
   const [flowSearchValue, setFlowSearchValue] = useState("");
   const [requirementSearchOpen, setRequirementSearchOpen] = useState(false);
@@ -384,7 +388,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const flowRows = useMemo<FlowGridRow[]>(() => {
     return flowCards.map((item) => {
       const step = item.relevantStep;
-      const executionDateInput = toDateInputValue(step?.fecha_ejecucion_estimada);
+      const executionDateInput = toDateInputValue(step?.fecha_vencimiento);
       const stepLabel =
         step && ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado)
           ? "Tarea actual"
@@ -397,7 +401,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         taskName: step?.nombre ?? "Sin tarea registrada",
         stepLabel,
         executionDateInput,
-        executionDateLabel: step?.fecha_ejecucion_estimada ? formatDateOnly(step.fecha_ejecucion_estimada) : "Sin fecha",
+        executionDateLabel: step?.fecha_vencimiento ? formatDateOnly(step.fecha_vencimiento) : "Sin fecha",
         executionAt: executionDateInput ? toDateSortValue(executionDateInput) : Number.MAX_SAFE_INTEGER,
         lastRecord: getStepRecord(step),
         movementLabel: formatElapsedTime(item.latestMovementAt) ?? "Sin movimiento reciente",
@@ -414,37 +418,61 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     });
   }, [flowCards]);
 
-  async function persistFlowStepDate(stepId: string, currentInputValue: string, nextInputValue: string) {
-    if (updatingDateByStepId[stepId]) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const mainRows = useMemo(
+    () => flowRows.filter((row) => !row.executionDateInput || row.executionDateInput <= today),
+    [flowRows, today]
+  );
+  const futureRows = useMemo(
+    () => flowRows.filter((row) => row.executionDateInput && row.executionDateInput > today),
+    [flowRows, today]
+  );
 
-    const normalizedCurrent = currentInputValue.trim();
-    const normalizedNext = nextInputValue.trim();
+  async function handleDateBlur(event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>, row: FlowGridRow) {
+    event.stopPropagation();
+    if (!row.stepId) return;
 
-    if (normalizedCurrent === normalizedNext) {
-      setDateDraftByStepId((previous) => {
-        if (!(stepId in previous)) return previous;
-        const next = { ...previous };
-        delete next[stepId];
+    const originalValue = row.executionDateInput || "";
+    const nextValue = (pendingDates.get(row.id) ?? originalValue).trim();
+
+    if (nextValue === originalValue) {
+      setPendingDates((previous) => {
+        if (!previous.has(row.id)) return previous;
+        const next = new Map(previous);
+        next.delete(row.id);
         return next;
       });
       return;
     }
 
+    const isoValue = nextValue ? new Date(nextValue).toISOString() : null;
+
     try {
-      setUpdatingDateByStepId((previous) => ({ ...previous, [stepId]: true }));
-      setError(null);
-      await updateStep(stepId, { fecha_ejecucion_estimada: fromDateInputValue(normalizedNext) });
-      await loadData();
-      setFlowToastMessage(normalizedNext ? "Fecha actualizada." : "Fecha eliminada.");
-      setFlowToastOpen(true);
+      await updateStepDate(row.stepId, { fecha_vencimiento: isoValue });
+      setWorkflowsById((previous) => {
+        const workflow = previous[row.id];
+        if (!workflow) return previous;
+        return {
+          ...previous,
+          [row.id]: {
+            ...workflow,
+            steps: workflow.steps.map((step) => (step.id === row.stepId ? { ...step, fecha_vencimiento: isoValue } : step)),
+          },
+        };
+      });
+      setPendingDates((previous) => {
+        if (!previous.has(row.id)) return previous;
+        const next = new Map(previous);
+        next.delete(row.id);
+        return next;
+      });
+      showToast("Fecha actualizada", "success");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo actualizar la fecha.");
-    } finally {
-      setUpdatingDateByStepId((previous) => ({ ...previous, [stepId]: false }));
-      setDateDraftByStepId((previous) => {
-        if (!(stepId in previous)) return previous;
-        const next = { ...previous };
-        delete next[stepId];
+      const message = err instanceof Error ? err.message : "No se pudo actualizar la fecha";
+      showToast(message, "error");
+      setPendingDates((previous) => {
+        const next = new Map(previous);
+        next.set(row.id, originalValue);
         return next;
       });
     }
@@ -639,9 +667,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
           const row = params.row;
           return (
             <Stack spacing={0.35} sx={{ minWidth: 0, py: 0.15 }}>
-              <Typography variant="caption" color="text.secondary">
-                {row.stepLabel}
-              </Typography>
               <Typography
                 variant="body2"
                 sx={{
@@ -693,12 +718,40 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         valueGetter: (_, row) => row.executionAt,
         renderCell: (params) => {
           const row = params.row;
-          const formattedDate = row.executionDateInput ? formatDateOnly(`${row.executionDateInput}T12:00:00`) : "—";
+          const originalValue = row.executionDateInput ? row.executionDateInput.slice(0, 10) : "";
+          const value = pendingDates.get(row.id) ?? originalValue;
 
           return (
-            <Typography variant="body2" color={formattedDate === "—" ? "text.secondary" : "text.primary"}>
-              {formattedDate}
-            </Typography>
+            <TextField
+              type="date"
+              size="small"
+              variant="outlined"
+              value={value}
+              disabled={!row.stepId}
+              onClick={(event) => event.stopPropagation()}
+              onChange={(event) => {
+                event.stopPropagation();
+                setPendingDates((previous) => {
+                  const next = new Map(previous);
+                  next.set(row.id, event.target.value);
+                  return next;
+                });
+              }}
+              onBlur={(event) => {
+                void handleDateBlur(event, row);
+              }}
+              onKeyDown={(event) => {
+                event.stopPropagation();
+                if (event.key === "Escape") {
+                  setPendingDates((previous) => {
+                    const next = new Map(previous);
+                    next.set(row.id, originalValue);
+                    return next;
+                  });
+                }
+              }}
+              sx={{ minWidth: 150, "& input": { fontSize: "0.82rem", padding: "4px 8px" } }}
+            />
           );
         },
       },
@@ -832,7 +885,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         },
       },
     ],
-    [cancellingFlowId, dateDraftByStepId, deletingFlowId, flowActionsMenu, navigate, reactivatingFlowId, updatingDateByStepId]
+    [cancellingFlowId, deletingFlowId, flowActionsMenu, navigate, pendingDates, reactivatingFlowId]
   );
 
   const requirementColumns = useMemo<GridColDef<RequirementGridRow>[]>(
@@ -1170,7 +1223,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 }}
               >
                 <DataGrid
-                  rows={flowRows}
+                  rows={mainRows}
                   columns={flowColumns}
                   rowHeight={68}
                   filterModel={flowFilterModel}
@@ -1225,6 +1278,48 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   pageSizeOptions={[10, 15, 20, 50]}
                   sx={{ border: 0, height: "100%" }}
                 />
+                {futureRows.length > 0 ? (
+                  <Box sx={{ mt: 2, borderTop: 1, borderColor: "divider" }}>
+                    <Button
+                      variant="text"
+                      color="inherit"
+                      onClick={() => setFuturesOpen((value) => !value)}
+                      sx={{ color: "text.secondary", py: 1.5, width: "100%", justifyContent: "flex-start", gap: 1 }}
+                      startIcon={
+                        <ExpandMoreIcon
+                          sx={{ transform: futuresOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}
+                        />
+                      }
+                    >
+                      {`Próximos (${futureRows.length})`}
+                    </Button>
+                    <Collapse in={futuresOpen}>
+                      <DataGrid
+                        rows={futureRows}
+                        columns={flowColumns}
+                        rowHeight={68}
+                        filterModel={flowFilterModel}
+                        onFilterModelChange={setFlowFilterModel}
+                        disableRowSelectionOnClick
+                        onRowClick={(params: GridRowParams<FlowGridRow>) => {
+                          navigate(`/workflows/${params.row.id}`);
+                        }}
+                        autoHeight
+                        hideFooter={futureRows.length <= 10}
+                        initialState={{
+                          sorting: {
+                            sortModel: [{ field: "movementAt", sort: "asc" }],
+                          },
+                          pagination: {
+                            paginationModel: { pageSize: 20, page: 0 },
+                          },
+                        }}
+                        pageSizeOptions={[10, 15, 20, 50]}
+                        sx={{ border: 0 }}
+                      />
+                    </Collapse>
+                  </Box>
+                ) : null}
               </Box>
             ) : (
               <Box

@@ -203,6 +203,10 @@ export type StepStatusUpdateInput = {
   attachments?: AttachmentInput[];
 };
 
+export type StepDateUpdateInput = {
+  fecha_vencimiento: string | null;
+};
+
 export type StepCommentInput = {
   autor: string;
   comentario: string | null;
