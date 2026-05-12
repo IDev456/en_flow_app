@@ -41,7 +41,7 @@ function App() {
           <Route path="/flows" element={<TriggerListPage defaultView="flows" lockView title="Flows" />} />
           <Route
             path="/requirements"
-            element={<TriggerListPage defaultView="requirements" lockView title="Requerimientos" />}
+            element={<TriggerListPage defaultView="requirements" lockView title="Proyectos" />}
           />
           <Route path="/triggers" element={<Navigate to="/requirements" replace />} />
           <Route path="/triggers/new" element={<TriggerCreatePage />} />

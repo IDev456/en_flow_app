@@ -95,7 +95,7 @@ type FlowGridRow = {
 type RequirementGridRow = {
   id: string;
   description: string;
-  context: string;
+  requester: string;
   status: string;
   flowsLabel: string;
   waitingLabel: string;
@@ -244,6 +244,14 @@ function formatNearestFuture(executionAtMs: number): string {
   return `el ${new Date(executionAtMs).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })}`;
 }
 
+function formatFutureGroupLabel(dateInput: string, todayInput: string) {
+  const diffDays = Math.round((toDateSortValue(dateInput) - toDateSortValue(todayInput)) / 86400000);
+  const formattedDate = formatDateOnly(`${dateInput}T00:00:00Z`);
+  if (diffDays === 1) return `Mañana · ${formattedDate}`;
+  if (diffDays === 2) return `Pasado mañana · ${formattedDate}`;
+  return formattedDate;
+}
+
 function toQuickFilterValues(search: string) {
   const normalized = search.trim();
   if (!normalized) return [];
@@ -259,7 +267,7 @@ type GridToolbarProps = {
   onSearchClearOrClose: () => void;
 };
 
-export function TriggerListPage({ defaultView = "requirements", lockView = false, title = "Requerimientos" }: TriggerListPageProps) {
+export function TriggerListPage({ defaultView = "requirements", lockView = false, title = "Proyectos" }: TriggerListPageProps) {
   const { showToast } = useToastContext();
   const [triggers, setTriggers] = useState<TriggerDetail[]>([]);
   const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
@@ -409,7 +417,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       const executionDateInput = toDateInputValue(step?.fecha_vencimiento);
       const stepLabel =
         step && ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado)
-          ? "Tarea actual"
+          ? "Disparador"
           : "Última tarea";
       const movementAt = getDateValue(item.latestMovementAt) ?? 0;
       return {
@@ -425,8 +433,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         movementAt: movementAt || Number.MAX_SAFE_INTEGER,
         requirementsLabel:
           item.linkedRequirements.length === 0
-            ? "Sin requerimientos"
-            : item.linkedRequirements.map((requirement) => requirement.descripcion?.trim() || `Req ${requirement.id.slice(0, 8)}`).join(" · "),
+            ? "Sin proyectos"
+            : item.linkedRequirements.map((requirement) => requirement.descripcion?.trim() || `Proyecto ${requirement.id.slice(0, 8)}`).join(" · "),
         requirementsCount: item.linkedRequirements.length,
         canCancel: canCancelWorkflow(item.workflow),
         canReactivate: canReactivateWorkflow(item.workflow),
@@ -449,6 +457,23 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     () => (futureRows.length > 0 ? Math.min(...futureRows.map((r) => r.executionAt)) : null),
     [futureRows]
   );
+  const futureGroups = useMemo(() => {
+    const byDate = new Map<string, FlowGridRow[]>();
+    for (const row of futureRows) {
+      if (!row.executionDateInput) continue;
+      const current = byDate.get(row.executionDateInput) ?? [];
+      current.push(row);
+      byDate.set(row.executionDateInput, current);
+    }
+
+    return Array.from(byDate.entries())
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([dateInput, rows]) => ({
+        dateInput,
+        label: formatFutureGroupLabel(dateInput, today),
+        rows,
+      }));
+  }, [futureRows, today]);
 
   async function handleDateBlur(event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>, row: FlowGridRow) {
     event.stopPropagation();
@@ -517,8 +542,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
       return {
         id: trigger.id,
-        description: trigger.descripcion?.trim() || "Requerimiento sin detalle",
-        context: trigger.solicitante?.trim() || "Sin contexto",
+        description: trigger.descripcion?.trim() || "Proyecto sin detalle",
+        requester: trigger.solicitante?.trim() || "Sin solicitante",
         status: trigger.estado_general,
         flowsLabel:
           linkedWorkflows.length === 0
@@ -536,14 +561,14 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   }, [filteredRequirements, workflowsById]);
 
   async function handleDeleteTrigger(trigger: TriggerDetail) {
-    const detail = trigger.descripcion?.trim() || "Requerimiento sin detalle";
+    const detail = trigger.descripcion?.trim() || "Proyecto sin detalle";
     if (trigger.workflow_ids.length > 0) {
-      setError("No se puede eliminar este requerimiento porque tiene flows vinculados. Primero desvinculá los flows que quieras conservar, o cancelá/finalizá y eliminá los flows que ya no correspondan.");
+      setError("No se puede eliminar este proyecto porque tiene flows vinculados. Primero desvinculá los flows que quieras conservar, o cancelá/finalizá y eliminá los flows que ya no correspondan.");
       return;
     }
 
     const confirmed = window.confirm(
-      `¿Eliminar este requerimiento?\n\n${detail}\n\nEsta acción no se puede deshacer.\nSolo se eliminará si no tiene flows vinculados.`
+      `¿Eliminar este proyecto?\n\n${detail}\n\nEsta acción no se puede deshacer.\nSolo se eliminará si no tiene flows vinculados.`
     );
     if (!confirmed) return;
 
@@ -552,10 +577,10 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       setError(null);
       await deleteTrigger(trigger.id);
       await loadData();
-      setRequirementToastMessage("Requerimiento eliminado.");
+      setRequirementToastMessage("Proyecto eliminado.");
       setRequirementToastOpen(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo eliminar el requerimiento");
+      setError(err instanceof Error ? err.message : "No se pudo eliminar el proyecto");
     } finally {
       setDeletingTriggerId(null);
     }
@@ -563,7 +588,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
   async function handleCreateRequirement() {
     if (newRequirementDescription.trim().length < 3) {
-      setCreateRequirementError("Debes indicar el requerimiento.");
+      setCreateRequirementError("Debes indicar el proyecto.");
       return;
     }
 
@@ -580,10 +605,10 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       setNewRequirementDescription("");
       setNewRequirementContext("");
       await loadData();
-      setRequirementToastMessage("Requerimiento creado.");
+      setRequirementToastMessage("Proyecto creado.");
       setRequirementToastOpen(true);
     } catch (err) {
-      setCreateRequirementError(err instanceof Error ? err.message : "No se pudo guardar el requerimiento");
+      setCreateRequirementError(err instanceof Error ? err.message : "No se pudo guardar el proyecto");
     } finally {
       setCreatingRequirement(false);
     }
@@ -595,7 +620,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     const currentTask = pickRelevantStep(workflow)?.nombre?.trim() || workflow.objetivo_final?.trim() || "Flow sin tarea actual";
 
     const confirmed = window.confirm(
-      `¿Cancelar este flow?\n\n${currentTask}\n\nEl flow saldrá de la operación activa y pasará a Cancelados.\nNo se eliminarán tareas, comentarios ni requerimientos vinculados.\nSi fue un error, luego podrás reactivarlo.`
+      `¿Cancelar este flow?\n\n${currentTask}\n\nEl flow saldrá de la operación activa y pasará a Cancelados.\nNo se eliminarán tareas, comentarios ni proyectos vinculados.\nSi fue un error, luego podrás reactivarlo.`
     );
     if (!confirmed) return;
 
@@ -619,7 +644,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     const currentTask = pickRelevantStep(workflow)?.nombre?.trim() || workflow.objetivo_final?.trim() || "Flow sin tarea actual";
 
     const confirmed = window.confirm(
-      `¿Reactivar este flow?\n\n${currentTask}\n\nEl flow volverá a la operación y saldrá de Cancelados.\nNo se eliminarán tareas, comentarios ni requerimientos vinculados.`
+      `¿Reactivar este flow?\n\n${currentTask}\n\nEl flow volverá a la operación y saldrá de Cancelados.\nNo se eliminarán tareas, comentarios ni proyectos vinculados.`
     );
     if (!confirmed) return;
 
@@ -642,7 +667,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     if (!workflow || !canDeleteWorkflow(workflow)) return;
 
     const confirmed = window.confirm(
-      "¿Eliminar este flow?\n\nEsta acción eliminará el flow, sus tareas, comentarios, historial, eventos externos y vínculos con requerimientos.\n\nEsta acción no se puede deshacer."
+      "¿Eliminar este flow?\n\nEsta acción eliminará el flow, sus tareas, comentarios, historial, eventos externos y vínculos con proyectos.\n\nEsta acción no se puede deshacer."
     );
     if (!confirmed) return;
 
@@ -667,7 +692,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   }
 
   const isFlowsView = viewMode === "flows";
-  const pageTitle = title || (isFlowsView ? "Flows" : "Requerimientos");
+  const pageTitle = title || (isFlowsView ? "Flows" : "Proyectos");
   const currentCounts = isFlowsView ? flowCounts : requirementCounts;
 
   const flowColumns = useMemo<GridColDef<FlowGridRow>[]>(
@@ -677,14 +702,22 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         headerName: "Estado",
         width: 160,
         minWidth: 160,
+        align: "left",
+        headerAlign: "left",
         sortable: false,
-        renderCell: (params) => <StatusBadge value={params.value} />,
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%", width: "100%" }}>
+            <StatusBadge value={params.value} />
+          </Box>
+        ),
       },
       {
         field: "taskName",
-        headerName: "Tarea actual",
+        headerName: "Tarea inicial / disparador",
         flex: 1.45,
-        minWidth: 280,
+        minWidth: 300,
+        align: "left",
+        headerAlign: "left",
         valueGetter: (_, row) => `${row.stepLabel} ${row.taskName}`,
         renderCell: (params) => {
           const row = params.row;
@@ -712,6 +745,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         headerName: "Registro",
         flex: 1.35,
         minWidth: 300,
+        align: "left",
+        headerAlign: "left",
         renderCell: (params) => (
           <Typography
             variant="body2"
@@ -735,7 +770,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         headerName: "Fecha",
         width: 172,
         minWidth: 160,
-        type: "number",
+        align: "center",
+        headerAlign: "center",
         valueGetter: (_, row) => row.executionAt,
         renderCell: (params) => {
           const row = params.row;
@@ -804,7 +840,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         headerName: "Movimiento",
         width: 126,
         minWidth: 120,
-        type: "number",
+        align: "center",
+        headerAlign: "center",
         renderCell: (params) => (
           <Typography variant="caption" color="text.secondary">
             {params.row.movementLabel}
@@ -816,6 +853,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         headerName: "Proyecto",
         flex: 1.2,
         minWidth: 260,
+        align: "left",
+        headerAlign: "left",
         sortable: false,
         renderCell: (params) => (
           <Typography
@@ -839,6 +878,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         field: "actions",
         headerName: "Acciones",
         width: 172,
+        align: "center",
+        headerAlign: "center",
         sortable: false,
         filterable: false,
         disableColumnMenu: true,
@@ -936,9 +977,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     () => [
       {
         field: "description",
-        headerName: "Requerimiento",
+        headerName: "Proyecto",
         flex: 1.5,
         minWidth: 280,
+        align: "left",
+        headerAlign: "left",
         renderCell: (params) => (
           <Typography
             variant="body2"
@@ -958,10 +1001,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         ),
       },
       {
-        field: "context",
-        headerName: "Contexto",
+        field: "requester",
+        headerName: "Solicitante",
         flex: 1.1,
         minWidth: 220,
+        align: "left",
+        headerAlign: "left",
         renderCell: (params) => (
           <Typography
             variant="body2"
@@ -985,14 +1030,22 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         headerName: "Estado",
         width: 150,
         minWidth: 140,
+        align: "left",
+        headerAlign: "left",
         sortable: false,
-        renderCell: (params) => <StatusBadge value={params.value} />,
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%", width: "100%" }}>
+            <StatusBadge value={params.value} />
+          </Box>
+        ),
       },
       {
         field: "flowsLabel",
         headerName: "Flows",
         flex: 1,
         minWidth: 220,
+        align: "left",
+        headerAlign: "left",
         renderCell: (params) => {
           const row = params.row;
           const activeCount = row.openCount - row.waitingCount;
@@ -1020,13 +1073,15 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         type: "actions",
         headerName: "Acciones",
         width: 116,
+        align: "center",
+        headerAlign: "center",
         getActions: (params) => {
           const row = params.row;
           return [
             <GridActionsCellItem
               key="open"
               icon={<LaunchRoundedIcon fontSize="small" />}
-              label="Abrir requerimiento"
+              label="Abrir proyecto"
               onClick={(event) => {
                 event.stopPropagation();
                 navigate(`/requirements/${row.id}`);
@@ -1036,7 +1091,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             <GridActionsCellItem
               key="delete"
               icon={<DeleteOutlineRoundedIcon fontSize="small" />}
-              label={deletingTriggerId === row.id ? "Eliminando..." : "Eliminar requerimiento"}
+              label={deletingTriggerId === row.id ? "Eliminando..." : "Eliminar proyecto"}
               disabled={!row.canDelete || Boolean(deletingTriggerId)}
               onClick={(event) => {
                 event.stopPropagation();
@@ -1152,7 +1207,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   setCreateRequirementError(null);
                 }}
               >
-                {createRequirementOpen ? "Cerrar formulario" : "Nuevo requerimiento"}
+                {createRequirementOpen ? "Cerrar formulario" : "Nuevo proyecto"}
               </Button>
             )}
           </>
@@ -1174,7 +1229,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
               sx={{ alignSelf: "flex-start" }}
             >
               <ToggleButton value="flows">Flows</ToggleButton>
-              <ToggleButton value="requirements">Requerimientos</ToggleButton>
+              <ToggleButton value="requirements">Proyectos</ToggleButton>
             </ToggleButtonGroup>
           )}
 
@@ -1182,10 +1237,10 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             <Paper sx={{ p: { xs: 1.5, md: 1.8 } }}>
               <Stack spacing={1.25}>
                 <Typography variant="subtitle2" color="text.secondary">
-                  Crear requerimiento
+                  Crear proyecto
                 </Typography>
                 <TextField
-                  label="Requerimiento"
+                  label="Proyecto"
                   multiline
                   minRows={2}
                   value={newRequirementDescription}
@@ -1193,7 +1248,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   disabled={creatingRequirement}
                 />
                 <TextField
-                  label="Contexto"
+                  label="Solicitante"
                   value={newRequirementContext}
                   onChange={(event) => setNewRequirementContext(event.target.value)}
                   disabled={creatingRequirement}
@@ -1201,7 +1256,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 {createRequirementError && <Alert severity="error">{createRequirementError}</Alert>}
                 <Stack direction="row" spacing={1}>
                   <Button variant="contained" onClick={() => void handleCreateRequirement()} disabled={creatingRequirement}>
-                    {creatingRequirement ? "Creando..." : "Guardar requerimiento"}
+                    {creatingRequirement ? "Creando..." : "Guardar proyecto"}
                   </Button>
                   <Button
                     variant="text"
@@ -1259,29 +1314,38 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 {`Programados para más adelante (${futureRows.length})${nearestFutureMs ? ` · próximo ${formatNearestFuture(nearestFutureMs)}` : ""}`}
               </Button>
               <Collapse in={futuresOpen}>
-                <DataGrid
-                  rows={futureRows}
-                  columns={flowColumns}
-                  rowHeight={62}
-                  filterModel={flowFilterModel}
-                  onFilterModelChange={setFlowFilterModel}
-                  disableRowSelectionOnClick
-                  onRowClick={(params: GridRowParams<FlowGridRow>) => {
-                    navigate(`/workflows/${params.row.id}`);
-                  }}
-                  autoHeight
-                  hideFooter={futureRows.length <= 10}
-                  initialState={{
-                    sorting: {
-                      sortModel: [{ field: "executionAt", sort: "asc" }],
-                    },
-                    pagination: {
-                      paginationModel: { pageSize: 20, page: 0 },
-                    },
-                  }}
-                  pageSizeOptions={[10, 15, 20, 50]}
-                  sx={{ border: 0 }}
-                />
+                <Stack spacing={0} sx={{ px: 1.25, pb: 1.25 }}>
+                  {futureGroups.map((group) => (
+                    <Box key={group.dateInput} sx={{ borderTop: "1px solid", borderColor: "divider", pt: 1.1 }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ px: 1 }}>
+                        {`${group.label} (${group.rows.length})`}
+                      </Typography>
+                      <DataGrid
+                        rows={group.rows}
+                        columns={flowColumns}
+                        rowHeight={62}
+                        filterModel={flowFilterModel}
+                        onFilterModelChange={setFlowFilterModel}
+                        disableRowSelectionOnClick
+                        onRowClick={(params: GridRowParams<FlowGridRow>) => {
+                          navigate(`/workflows/${params.row.id}`);
+                        }}
+                        autoHeight
+                        hideFooter={group.rows.length <= 10}
+                        initialState={{
+                          sorting: {
+                            sortModel: [{ field: "movementAt", sort: "asc" }],
+                          },
+                          pagination: {
+                            paginationModel: { pageSize: 20, page: 0 },
+                          },
+                        }}
+                        pageSizeOptions={[10, 15, 20, 50]}
+                        sx={{ border: 0 }}
+                      />
+                    </Box>
+                  ))}
+                </Stack>
               </Collapse>
             </Paper>
           )}
@@ -1314,7 +1378,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   slots={{
                     toolbar: () => (
                       <GridToolbar
-                        quickFilterPlaceholder="Buscar flow, tarea o requerimiento vinculado..."
+                        quickFilterPlaceholder="Buscar flow, tarea o proyecto vinculado..."
                         searchOpen={flowSearchOpen}
                         searchValue={flowSearchValue}
                         onSearchToggle={() => {
@@ -1382,7 +1446,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   slots={{
                     toolbar: () => (
                       <GridToolbar
-                        quickFilterPlaceholder="Buscar requerimiento o contexto..."
+                        quickFilterPlaceholder="Buscar proyecto o solicitante..."
                         searchOpen={requirementSearchOpen}
                         searchValue={requirementSearchValue}
                         onSearchToggle={() => {
@@ -1430,7 +1494,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
           {!loading && isFlowsView && flowRows.length === 0 && <Alert severity="info">No hay flows para este filtro.</Alert>}
           {!loading && !isFlowsView && requirementRows.length === 0 && (
-            <Alert severity="info">No hay requerimientos para este filtro.</Alert>
+            <Alert severity="info">No hay proyectos para este filtro.</Alert>
           )}
         </Stack>
       </PageContainer>

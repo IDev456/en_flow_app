@@ -36,14 +36,14 @@ export function EmptyTriggerList({ filtered, onCreateNew }: EmptyTriggerListProp
         <Stack spacing={0.8} sx={{ alignItems: "center" }}>
           <InboxRoundedIcon sx={{ color: "text.secondary", fontSize: 20 }} />
           <Typography variant="subtitle2" color="text.secondary">
-            No hay requerimientos
+            No hay proyectos
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Creá el primer requerimiento para agrupar y dar seguimiento al trabajo.
+            Creá el primer proyecto para agrupar y dar seguimiento al trabajo.
           </Typography>
           {onCreateNew && (
             <Button variant="outlined" color="inherit" size="small" onClick={onCreateNew}>
-              Nuevo requerimiento
+              Nuevo proyecto
             </Button>
           )}
         </Stack>

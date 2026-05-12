@@ -16,7 +16,7 @@ const triggerOptions = [
   {
     value: "solicitud",
     label: "Solicitud interna",
-    description: "Pedido de negocio o requerimiento que dispara varias tareas.",
+    description: "Pedido de negocio o proyecto que dispara varias tareas.",
   },
   {
     value: "mejora",

@@ -87,7 +87,7 @@ export function WorkflowDetailPage() {
   const [toastMessage, setToastMessage] = useState<string | null>(initialToastMessage);
 
   function getPrimaryRequirementLabel() {
-    return trigger?.descripcion?.trim() || workflow?.objetivo_final?.trim() || "Flow sin requerimiento";
+    return trigger?.descripcion?.trim() || workflow?.objetivo_final?.trim() || "Flow sin proyecto";
   }
 
   function pickRelevantStep(workflowData: WorkflowDetail) {
@@ -351,7 +351,7 @@ export function WorkflowDetailPage() {
 
   async function handleLinkRequirement() {
     if (!workflow || !linkRequirementId) {
-      setLinkRequirementError("Selecciona un requerimiento para vincular.");
+      setLinkRequirementError("Selecciona un proyecto para vincular.");
       return;
     }
 
@@ -360,11 +360,11 @@ export function WorkflowDetailPage() {
       setLinkRequirementError(null);
       await linkWorkflowRequirement(workflow.id, { requirement_id: linkRequirementId });
       await loadWorkflow(selectedStepId ?? undefined);
-      setToastMessage("Requerimiento asociado.");
+      setToastMessage("Proyecto asociado.");
       setToastOpen(true);
       handleCloseLinkRequirement();
     } catch (err) {
-      setLinkRequirementError(err instanceof Error ? err.message : "No se pudo asociar el requerimiento");
+      setLinkRequirementError(err instanceof Error ? err.message : "No se pudo asociar el proyecto");
     } finally {
       setLinkingRequirement(false);
     }
@@ -375,7 +375,7 @@ export function WorkflowDetailPage() {
 
     const description = newRequirementDescription.trim();
     if (!description) {
-      setLinkRequirementError("Ingresá una descripción para el requerimiento.");
+      setLinkRequirementError("Ingresá una descripción para el proyecto.");
       return;
     }
 
@@ -388,11 +388,11 @@ export function WorkflowDetailPage() {
         creado_por: DEFAULT_ACTOR,
       });
       await loadWorkflow(selectedStepId ?? undefined);
-      setToastMessage("Requerimiento creado y asociado.");
+      setToastMessage("Proyecto creado y asociado.");
       setToastOpen(true);
       handleCloseLinkRequirement();
     } catch (err) {
-      setLinkRequirementError(err instanceof Error ? err.message : "No se pudo crear y asociar el requerimiento");
+      setLinkRequirementError(err instanceof Error ? err.message : "No se pudo crear y asociar el proyecto");
     } finally {
       setCreatingRequirement(false);
     }
@@ -402,7 +402,7 @@ export function WorkflowDetailPage() {
     if (!workflow) return;
 
     const confirmed = window.confirm(
-      `¿Desvincular este requerimiento del flow?\n\n${requirementLabel}\n\nEl requerimiento y el flow seguirán existiendo. Solo se quitará la asociación.`
+      `¿Desvincular este proyecto del flow?\n\n${requirementLabel}\n\nEl proyecto y el flow seguirán existiendo. Solo se quitará la asociación.`
     );
     if (!confirmed) return;
 
@@ -411,11 +411,11 @@ export function WorkflowDetailPage() {
       setLinkRequirementError(null);
       await unlinkWorkflowRequirement(workflow.id, requirementId);
       await loadWorkflow(selectedStepId ?? undefined);
-      setToastMessage("Requerimiento desvinculado.");
+      setToastMessage("Proyecto desvinculado.");
       setToastOpen(true);
       handleCloseLinkRequirement();
     } catch (err) {
-      setLinkRequirementError(err instanceof Error ? err.message : "No se pudo desvincular el requerimiento");
+      setLinkRequirementError(err instanceof Error ? err.message : "No se pudo desvincular el proyecto");
     } finally {
       setUnlinkingRequirementId(null);
     }
@@ -449,7 +449,7 @@ export function WorkflowDetailPage() {
     (item) => linkedRequirementIds.has(item.id) || item.workflow_ids.includes(workflow.id)
   );
   const availableRequirements = requirements.filter((item) => !linkedRequirements.some((linked) => linked.id === item.id));
-  const linkedRequirementLabel = linkedRequirements.length === 1 ? "Requerimiento asociado" : "Requerimientos asociados";
+  const linkedRequirementLabel = linkedRequirements.length === 1 ? "Proyecto asociado" : "Proyectos asociados";
   const managingRequirementsBusy = linkingRequirement || creatingRequirement || unlinkingRequirementId !== null;
 
   return (
@@ -503,7 +503,7 @@ export function WorkflowDetailPage() {
                   }}
                 >
                   <Typography variant="caption" color="text.secondary">
-                    {linkedRequirements.length > 0 ? linkedRequirementLabel : "Sin requerimientos asociados"}
+                    {linkedRequirements.length > 0 ? linkedRequirementLabel : "Sin proyectos asociados"}
                   </Typography>
                   <Stack
                     direction={{ xs: "column", md: "row" }}
@@ -521,7 +521,7 @@ export function WorkflowDetailPage() {
                         key={item.id}
                         size="small"
                         variant="outlined"
-                        label={item.descripcion?.trim() || `Req ${item.id.slice(0, 8)}`}
+                        label={item.descripcion?.trim() || `Proyecto ${item.id.slice(0, 8)}`}
                         sx={{
                           maxWidth: { xs: "100%", md: 260 },
                           "& .MuiChip-label": {
@@ -589,13 +589,13 @@ export function WorkflowDetailPage() {
       />
 
       <Dialog open={linkRequirementOpen} onClose={managingRequirementsBusy ? undefined : handleCloseLinkRequirement} fullWidth maxWidth="sm">
-        <DialogTitle>Asociar requerimiento</DialogTitle>
+        <DialogTitle>Asociar proyecto</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
             {linkedRequirements.length > 0 && (
               <Stack spacing={0.9}>
                 <Typography variant="subtitle2" color="text.secondary">
-                  Requerimientos vinculados
+                  Proyectos vinculados
                 </Typography>
                 <Stack spacing={0.9}>
                   {linkedRequirements.map((item) => (
@@ -608,7 +608,7 @@ export function WorkflowDetailPage() {
                       <Chip
                         size="small"
                         variant="outlined"
-                        label={item.descripcion?.trim() || `Req ${item.id.slice(0, 8)}`}
+                        label={item.descripcion?.trim() || `Proyecto ${item.id.slice(0, 8)}`}
                       />
                       <Button
                         size="small"
@@ -616,7 +616,7 @@ export function WorkflowDetailPage() {
                         onClick={() =>
                           void handleUnlinkRequirement(
                             item.id,
-                            item.descripcion?.trim() || `Req ${item.id.slice(0, 8)}`
+                            item.descripcion?.trim() || `Proyecto ${item.id.slice(0, 8)}`
                           )
                         }
                         disabled={managingRequirementsBusy}
@@ -654,23 +654,23 @@ export function WorkflowDetailPage() {
               {linkRequirementMode === "existing" ? (
                 <>
                   <Typography variant="subtitle2" color="text.secondary">
-                    Asociar requerimiento existente
+                    Asociar proyecto existente
                   </Typography>
                   {availableRequirements.length === 0 ? (
                     <Alert severity="info">
-                      No hay requerimientos disponibles para asociar. Podés crear uno nuevo.
+                      No hay proyectos disponibles para asociar. Podés crear uno nuevo.
                     </Alert>
                   ) : (
                     <TextField
                       select
                       fullWidth
-                      label="Requerimiento"
+                      label="Proyecto"
                       value={linkRequirementId}
                       onChange={(event) => setLinkRequirementId(event.target.value)}
                     >
                       {availableRequirements.map((item) => (
                         <MenuItem key={item.id} value={item.id}>
-                          {item.descripcion?.trim() || `Req ${item.id.slice(0, 8)}`}
+                          {item.descripcion?.trim() || `Proyecto ${item.id.slice(0, 8)}`}
                         </MenuItem>
                       ))}
                     </TextField>
@@ -679,12 +679,12 @@ export function WorkflowDetailPage() {
               ) : (
                 <>
                   <Typography variant="subtitle2" color="text.secondary">
-                    Crear requerimiento nuevo
+                    Crear proyecto nuevo
                   </Typography>
                   <TextField
                     fullWidth
                     required
-                    label="Descripción del requerimiento *"
+                    label="Descripción del proyecto *"
                     value={newRequirementDescription}
                     onChange={(event) => setNewRequirementDescription(event.target.value)}
                   />

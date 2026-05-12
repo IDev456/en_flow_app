@@ -60,7 +60,7 @@ export function TriggerDetailPage() {
   }
 
   function getSecondaryRequester(currentTrigger: TriggerDetail) {
-    return currentTrigger.solicitante?.trim() || "Sin contexto";
+    return currentTrigger.solicitante?.trim() || "Sin solicitante";
   }
 
   useEffect(() => {
@@ -158,7 +158,7 @@ export function TriggerDetailPage() {
     if (!trigger) return;
 
     if (editSolicitante.trim().length > SOLICITANTE_MAX) {
-      setRequirementError(`Contexto supera ${SOLICITANTE_MAX} caracteres`);
+      setRequirementError(`Solicitante supera ${SOLICITANTE_MAX} caracteres`);
       return;
     }
     if (editDescripcion.trim().length > TRIGGER_DESCRIPTION_MAX) {
@@ -365,7 +365,7 @@ export function TriggerDetailPage() {
                         disabled={savingRequirement}
                       />
                       <TextField
-                        label="Contexto"
+                        label="Solicitante"
                         value={editSolicitante}
                         onChange={(event) => setEditSolicitante(event.target.value.slice(0, SOLICITANTE_MAX))}
                         disabled={savingRequirement}
@@ -375,7 +375,7 @@ export function TriggerDetailPage() {
                     <>
                       <Typography variant="h3">{getPrimaryDetail(trigger)}</Typography>
                       <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
-                        Contexto: {getSecondaryRequester(trigger)}
+                        Solicitante: {getSecondaryRequester(trigger)}
                       </Typography>
                     </>
                   )}
@@ -443,7 +443,7 @@ export function TriggerDetailPage() {
 
               {trigger.workflow_activo_id ? (
                 <Stack spacing={2}>
-                  <Alert severity="info">Hay al menos un flow activo asociado a este requerimiento.</Alert>
+                  <Alert severity="info">Hay al menos un flow activo asociado a este proyecto.</Alert>
                 </Stack>
               ) : (
                 <Stack spacing={2}>

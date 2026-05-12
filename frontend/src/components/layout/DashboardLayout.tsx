@@ -28,7 +28,7 @@ const navItems: DashboardNavItem[] = [
     group: "main",
   },
   {
-    label: "Requerimientos",
+    label: "Proyectos",
     description: "Entradas y seguimiento",
     path: "/requirements",
     icon: <FormatListBulletedRoundedIcon fontSize="small" />,
