@@ -83,7 +83,14 @@ export function StatusBadge({ value }: StatusBadgeProps) {
       color={color}
       size="small"
       variant={color === "default" ? "outlined" : "filled"}
-      sx={{ borderRadius: 1.2, fontWeight: 700, borderWidth: 1, ...sx }}
+      sx={{
+        borderRadius: 1.2,
+        fontWeight: 700,
+        borderWidth: 1,
+        maxWidth: "100%",
+        "& .MuiChip-label": { overflow: "hidden", textOverflow: "ellipsis" },
+        ...sx,
+      }}
     />
   );
 }

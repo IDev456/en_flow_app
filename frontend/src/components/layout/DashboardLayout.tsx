@@ -126,7 +126,7 @@ export function DashboardLayout({ mode, onToggleMode, children }: DashboardLayou
           overflow: "auto",
         }}
       >
-        <Box sx={{ px: { xs: 1.5, sm: 2.25, md: 3 }, py: { xs: 2, md: 2.5 }, maxWidth: 1480, mx: "auto" }}>{children}</Box>
+        <Box sx={{ px: { xs: 1.5, sm: 2.25, md: 3 }, py: { xs: 2, md: 2.5 }, maxWidth: 1680, mx: "auto" }}>{children}</Box>
       </Box>
     </Box>
   );

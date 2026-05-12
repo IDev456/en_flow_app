@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
 import PlayCircleOutlineRoundedIcon from "@mui/icons-material/PlayCircleOutlineRounded";
 import SchemaRoundedIcon from "@mui/icons-material/SchemaRounded";
 import { alpha } from "@mui/material/styles";
@@ -11,12 +10,8 @@ import {
   Card,
   CardContent,
   Chip,
-  Collapse,
   CircularProgress,
-  IconButton,
   Link,
-  Menu,
-  MenuItem,
   Snackbar,
   Stack,
   TextField,
@@ -27,7 +22,7 @@ import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { deleteTrigger, getStepComments, getTrigger, getWorkflow, startWorkflow, updateTrigger } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
 import type { TriggerDetail, WorkflowDetail } from "../types";
-import { DEFAULT_ACTOR, formatDate, formatElapsedTime } from "../utils";
+import { DEFAULT_ACTOR, formatElapsedTime } from "../utils";
 
 const SOLICITANTE_MAX = 150;
 const TRIGGER_DESCRIPTION_MAX = 1000;
@@ -38,7 +33,6 @@ export function TriggerDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newWorkflowFirstDescription, setNewWorkflowFirstDescription] = useState("");
-  const [newWorkflowFirstName, setNewWorkflowFirstName] = useState("");
   const [newWorkflowExecutionDate, setNewWorkflowExecutionDate] = useState("");
   const [newWorkflowError, setNewWorkflowError] = useState<string | null>(null);
   const [newWorkflowSuccess, setNewWorkflowSuccess] = useState<string | null>(null);
@@ -53,12 +47,10 @@ export function TriggerDetailPage() {
   const [editDescripcion, setEditDescripcion] = useState("");
   const [requirementError, setRequirementError] = useState<string | null>(null);
   const [requirementToastOpen, setRequirementToastOpen] = useState(false);
-  const [actionsAnchor, setActionsAnchor] = useState<HTMLElement | null>(null);
-  const [adminDetailsOpen, setAdminDetailsOpen] = useState(false);
   const navigate = useNavigate();
 
   function getPrimaryDetail(currentTrigger: TriggerDetail) {
-    return currentTrigger.descripcion?.trim() || "Requerimiento sin detalle";
+    return currentTrigger.descripcion?.trim() || "Proyecto sin detalle";
   }
 
   function getSecondaryRequester(currentTrigger: TriggerDetail) {
@@ -134,7 +126,7 @@ export function TriggerDetailPage() {
         setWorkflowsError("No se pudo cargar el detalle de algunos flows.");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo cargar el requerimiento");
+      setError(err instanceof Error ? err.message : "No se pudo cargar el proyecto");
     } finally {
       setLoading(false);
     }
@@ -179,7 +171,7 @@ export function TriggerDetailPage() {
       setEditingRequirement(false);
       setRequirementToastOpen(true);
     } catch (err) {
-      setRequirementError(err instanceof Error ? err.message : "No se pudo actualizar el requerimiento");
+      setRequirementError(err instanceof Error ? err.message : "No se pudo actualizar el proyecto");
     } finally {
       setSavingRequirement(false);
     }
@@ -189,24 +181,23 @@ export function TriggerDetailPage() {
     if (!trigger) return;
 
     if (trigger.workflow_ids.length > 0) {
-      setRequirementError("No se puede eliminar este requerimiento porque tiene flows vinculados. Primero desvincula los flows o déjalo como agrupador.");
+      setRequirementError("No se puede eliminar este proyecto porque tiene flows vinculados. Primero desvincula los flows o déjalo como agrupador.");
       return;
     }
 
-    const detail = trigger.descripcion?.trim() || "Requerimiento sin detalle";
+    const detail = trigger.descripcion?.trim() || "Proyecto sin detalle";
     const confirmed = window.confirm(
-      `¿Eliminar este requerimiento?\n\n${detail}\n\nEsta acción no se puede deshacer.\nSolo se eliminará si no tiene flows vinculados.`
+      `¿Eliminar este proyecto?\n\n${detail}\n\nEsta acción no se puede deshacer.\nSolo se eliminará si no tiene flows vinculados.`
     );
     if (!confirmed) return;
 
     try {
       setDeletingRequirement(true);
       setRequirementError(null);
-      setActionsAnchor(null);
       await deleteTrigger(trigger.id);
-      navigate("/requirements", { state: { toast: "Requerimiento eliminado." } });
+      navigate("/requirements", { state: { toast: "Proyecto eliminado." } });
     } catch (err) {
-      setRequirementError(err instanceof Error ? err.message : "No se pudo eliminar el requerimiento");
+      setRequirementError(err instanceof Error ? err.message : "No se pudo eliminar el proyecto");
     } finally {
       setDeletingRequirement(false);
     }
@@ -225,11 +216,7 @@ export function TriggerDetailPage() {
       setNewWorkflowError(null);
       setNewWorkflowSuccess(null);
       const flowTitle = trigger.descripcion?.trim() || "";
-      const firstStepNameInput = newWorkflowFirstName.trim();
-      const firstStepName =
-        firstStepNameInput ||
-        flowTitle ||
-        "Tarea inicial";
+      const firstStepName = flowTitle || "Tarea inicial";
 
       const newWorkflow = await startWorkflow(trigger.id, {
         objetivo_final: flowTitle || null,
@@ -244,7 +231,6 @@ export function TriggerDetailPage() {
       });
       setNewWorkflowSuccess("Nuevo flow asociado creado.");
       setNewWorkflowFirstDescription("");
-      setNewWorkflowFirstName("");
       setNewWorkflowExecutionDate("");
       await loadTrigger();
       navigate(`/workflows/${newWorkflow.id}`);
@@ -253,6 +239,14 @@ export function TriggerDetailPage() {
     } finally {
       setCreatingWorkflow(false);
     }
+  }
+
+  function getWorkflowActiveStep(workflow: WorkflowDetail) {
+    if (workflow.paso_actual !== null) {
+      const byOrder = workflow.steps.find((s) => s.orden === workflow.paso_actual);
+      if (byOrder) return byOrder;
+    }
+    return workflow.steps.find((s) => !["completado", "cancelada"].includes(s.estado)) ?? null;
   }
 
   function getLatestWorkflowMovementAt(workflow: WorkflowDetail) {
@@ -301,7 +295,7 @@ export function TriggerDetailPage() {
     return (
       <Stack direction="row" spacing={1.5} sx={{ py: 8, alignItems: "center", justifyContent: "center" }}>
         <CircularProgress size={24} />
-        <Typography color="text.secondary">Cargando requerimiento...</Typography>
+        <Typography color="text.secondary">Cargando proyecto...</Typography>
       </Stack>
     );
   }
@@ -311,22 +305,22 @@ export function TriggerDetailPage() {
   }
 
   if (!trigger) {
-    return <Alert severity="info">Requerimiento no encontrado.</Alert>;
+    return <Alert severity="info">Proyecto no encontrado.</Alert>;
   }
 
   return (
-    <Stack spacing={3}>
+    <Stack spacing={2}>
       <Snackbar
         open={requirementToastOpen}
         autoHideDuration={2600}
         onClose={() => setRequirementToastOpen(false)}
-        message="Requerimiento actualizado."
+        message="Proyecto actualizado."
       />
-      <Breadcrumbs>
-        <Link component={RouterLink} underline="hover" color="inherit" to="/requirements">
-          Requerimientos
+      <Breadcrumbs separator="›" aria-label="breadcrumb" sx={{ "& .MuiBreadcrumbs-separator": { mx: 0.75 } }}>
+        <Link component={RouterLink} underline="hover" color="text.secondary" to="/requirements" sx={{ typography: "caption" }}>
+          Proyectos
         </Link>
-        <Typography color="text.primary">Detalle</Typography>
+        <Typography color="text.primary" variant="caption">Detalle</Typography>
       </Breadcrumbs>
 
       <Box
@@ -347,11 +341,11 @@ export function TriggerDetailPage() {
           }}
         >
           <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
-            <Stack spacing={2.5}>
+            <Stack spacing={2}>
               <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ justifyContent: "space-between" }}>
                 <Box>
                   <Typography variant="subtitle2" color="primary.light" sx={{ letterSpacing: 1, textTransform: "uppercase" }}>
-                    Requerimiento
+                    Proyecto
                   </Typography>
                   {editingRequirement ? (
                     <Stack spacing={1.25} sx={{ mt: 1 }}>
@@ -393,20 +387,16 @@ export function TriggerDetailPage() {
                   ) : (
                     <>
                       <Button variant="outlined" color="inherit" onClick={handleStartEditRequirement} disabled={deletingRequirement}>
-                        Editar requerimiento
+                        Editar proyecto
                       </Button>
-                      <IconButton
-                        onClick={(event) => setActionsAnchor(event.currentTarget)}
-                        disabled={deletingRequirement}
-                        aria-label="Más acciones"
+                      <Button
+                        variant="outlined"
+                        color="inherit"
+                        onClick={() => void handleDeleteRequirement()}
+                        disabled={deletingRequirement || !canDeleteRequirement}
                       >
-                        <MoreHorizRoundedIcon />
-                      </IconButton>
-                      <Menu anchorEl={actionsAnchor} open={Boolean(actionsAnchor)} onClose={() => setActionsAnchor(null)}>
-                        <MenuItem onClick={() => void handleDeleteRequirement()} disabled={deletingRequirement || !canDeleteRequirement}>
-                          {deletingRequirement ? "Eliminando..." : "Eliminar requerimiento"}
-                        </MenuItem>
-                      </Menu>
+                        {deletingRequirement ? "Eliminando..." : "Eliminar proyecto"}
+                      </Button>
                     </>
                   )}
                 </Stack>
@@ -418,74 +408,29 @@ export function TriggerDetailPage() {
                 </Typography>
               )}
 
-              <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", gap: 0.75 }}>
-                <Chip size="small" variant="outlined" label={`${linkedWorkflows.length} flows asociados`} />
-                <Chip size="small" variant="outlined" label={`Abiertos: ${requirementStats.abiertos}`} />
+              <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", gap: 0.5 }}>
+                <Chip size="small" variant="outlined" label={`${linkedWorkflows.length} flows`} />
+                {requirementStats.abiertos > 0 && (
+                  <Chip size="small" variant="filled" color="info" label={`${requirementStats.abiertos} activos`} />
+                )}
                 {requirementStats.esperando > 0 && (
-                  <Chip size="small" variant="outlined" label={`Esperando: ${requirementStats.esperando}`} />
+                  <Chip size="small" variant="filled" color="warning" label={`${requirementStats.esperando} esperando`} />
+                )}
+                {requirementStats.finalizados > 0 && (
+                  <Chip size="small" variant="filled" color="success" label={`${requirementStats.finalizados} cerrados`} />
                 )}
               </Stack>
-
-              <Box>
-                <Button
-                  variant="text"
-                  color="inherit"
-                  size="small"
-                  onClick={() => setAdminDetailsOpen((value) => !value)}
-                  sx={{ px: 0.5 }}
-                >
-                  {adminDetailsOpen ? "Ocultar detalles administrativos" : "Ver detalles administrativos"}
-                </Button>
-
-                <Collapse in={adminDetailsOpen}>
-                  <Stack spacing={2} sx={{ pt: 1.5 }}>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Detalles administrativos
-                    </Typography>
-                    <Box
-                      sx={{
-                        display: "grid",
-                        gap: 2,
-                        gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" },
-                      }}
-                    >
-                      <InfoItem label="ID" value={trigger.id.slice(0, 8)} />
-                      <InfoItem label="Registrado por" value={trigger.creado_por} />
-                      <InfoItem label="Creado" value={formatDate(trigger.fecha_creacion)} />
-                      <InfoItem label="Actualizado" value={formatDate(trigger.fecha_actualizacion)} />
-                    </Box>
-
-                    {trigger.metadata && (
-                      <Box
-                        component="pre"
-                        sx={{
-                          m: 0,
-                          p: 2,
-                          overflow: "auto",
-                          borderRadius: 3,
-                          backgroundColor: (theme) => alpha(theme.palette.background.default, theme.palette.mode === "dark" ? 0.7 : 0.5),
-                          border: "1px solid",
-                          borderColor: "divider",
-                          fontSize: 13,
-                        }}
-                      >
-                        {JSON.stringify(trigger.metadata, null, 2)}
-                      </Box>
-                    )}
-                  </Stack>
-                </Collapse>
-              </Box>
             </Stack>
           </CardContent>
         </Card>
 
         <Card>
           <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
-            <Stack spacing={2.5}>
+            <Stack spacing={2}>
               <Stack spacing={0.75}>
                 <Typography variant="h5">Flows asociados</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Crea y consulta flows vinculados a este requerimiento.
+                <Typography variant="caption" color="text.secondary">
+                  Crea y consulta flows vinculados a este proyecto.
                 </Typography>
               </Stack>
 
@@ -503,16 +448,6 @@ export function TriggerDetailPage() {
                 <Typography variant="subtitle2" color="text.secondary">
                   Crear nuevo flow asociado
                 </Typography>
-                <TextField
-                  label="Nombre de la primera tarea (opcional)"
-                  value={newWorkflowFirstName}
-                  onChange={(event) => setNewWorkflowFirstName(event.target.value)}
-                  disabled={creatingWorkflow}
-                  placeholder={trigger.descripcion?.trim() || "Se usará la descripción del requerimiento"}
-                  helperText="Si no se indica, se usará el nombre del requerimiento"
-                  fullWidth
-                  slotProps={{ htmlInput: { maxLength: 120 } }}
-                />
                 <TextField
                   label="Descripción de la tarea inicial *"
                   multiline
@@ -545,72 +480,77 @@ export function TriggerDetailPage() {
 
               {trigger.workflow_ids.length > 0 && (
                 <Stack spacing={1.25}>
-                  <Typography variant="h6">Flows del requerimiento</Typography>
+                  <Typography variant="h6">Flows del proyecto</Typography>
                   {workflowsError && <Alert severity="warning">{workflowsError}</Alert>}
                   <Stack spacing={1}>
-                    {trigger.workflow_ids.map((workflowId, index) => {
-                    const commentElapsed = formatElapsedTime(workflowLatestCommentById[workflowId] ?? null);
-                    return (
-                      <Button
-                        key={workflowId}
-                        component={RouterLink}
-                        to={`/workflows/${workflowId}`}
-                        variant="outlined"
-                        color="inherit"
-                        sx={{
-                          justifyContent: "flex-start",
-                          alignItems: "stretch",
-                          textTransform: "none",
-                          borderRadius: 2,
-                          py: 1.6,
-                          px: 1.8,
-                          borderColor: (theme) => alpha(theme.palette.primary.main, 0.25),
-                          backgroundColor: (theme) =>
-                            alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.22 : 0.7),
-                        }}
-                      >
-                        <Stack direction="row" spacing={1.4} sx={{ alignItems: "flex-start", minWidth: 0, width: "100%" }}>
-                          <SchemaRoundedIcon sx={{ mt: 0.15, color: "primary.light" }} />
-                          <Stack spacing={0.5} sx={{ minWidth: 0, textAlign: "left", width: "100%" }}>
-                            <Stack
-                              direction="row"
-                              spacing={1}
-                              sx={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 1 }}
-                            >
-                              <Typography sx={{ fontWeight: 700 }}>
-                                Flow {index + 1}
-                              </Typography>
-                              {workflowsById[workflowId] && <StatusBadge value={getWorkflowDisplayStatus(workflowsById[workflowId])} />}
-                            </Stack>
-                            {workflowsById[workflowId] ? (
-                              <>
-                                <Typography variant="caption" color="text.secondary">
-                                  Tareas: {workflowsById[workflowId].steps.length}
+                    {trigger.workflow_ids.map((workflowId) => {
+                      const workflow = workflowsById[workflowId];
+                      const currentStep = workflow ? getWorkflowActiveStep(workflow) : null;
+                      const totalSteps = workflow?.steps.length ?? 0;
+                      const commentElapsed = formatElapsedTime(workflowLatestCommentById[workflowId] ?? null);
+                      return (
+                        <Button
+                          key={workflowId}
+                          component={RouterLink}
+                          to={`/workflows/${workflowId}`}
+                          variant="outlined"
+                          color="inherit"
+                          sx={{
+                            justifyContent: "flex-start",
+                            alignItems: "stretch",
+                            textTransform: "none",
+                            borderRadius: 2,
+                            py: 1.6,
+                            px: 1.8,
+                            borderColor: (theme) => alpha(theme.palette.primary.main, 0.25),
+                            backgroundColor: (theme) =>
+                              alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.22 : 0.7),
+                          }}
+                        >
+                          <Stack direction="row" spacing={1.4} sx={{ alignItems: "flex-start", minWidth: 0, width: "100%" }}>
+                            <SchemaRoundedIcon sx={{ mt: 0.15, color: "primary.light" }} />
+                            <Stack spacing={0.5} sx={{ minWidth: 0, textAlign: "left", width: "100%" }}>
+                              <Stack
+                                direction="row"
+                                spacing={1}
+                                sx={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 1 }}
+                              >
+                                <Typography sx={{ fontWeight: 700, fontSize: "0.875rem" }}>
+                                  {currentStep?.nombre ??
+                                    (workflow?.estado === "finalizado" ? "Completado" :
+                                     workflow?.estado === "cancelado" ? "Cancelado" : "Sin tarea activa")}
                                 </Typography>
-                                {countExternalWaitingSteps(workflowsById[workflowId]) > 0 && (
-                                  <Typography variant="caption" color="info.light">
-                                    Esperando respuesta externa: {countExternalWaitingSteps(workflowsById[workflowId])}
-                                  </Typography>
-                                )}
-                                <Typography variant="caption" color="text.secondary">
-                                  Último registro: {commentElapsed ?? "sin registros"}
-                                </Typography>
-                                {!commentElapsed && (
+                                {workflow && <StatusBadge value={getWorkflowDisplayStatus(workflow)} />}
+                              </Stack>
+                              {workflow ? (
+                                <>
                                   <Typography variant="caption" color="text.secondary">
-                                    Último movimiento: {formatElapsedTime(getLatestWorkflowMovementAt(workflowsById[workflowId])) ?? "sin actividad"}
+                                    {currentStep ? `Paso ${currentStep.orden} de ${totalSteps}` : `${totalSteps} tareas`}
                                   </Typography>
-                                )}
-                              </>
-                            ) : (
-                              <Typography variant="caption" color="text.secondary">
-                                {workflowsError ? "Detalle no disponible" : "Cargando detalle..."}
-                              </Typography>
-                            )}
+                                  {countExternalWaitingSteps(workflow) > 0 && (
+                                    <Typography variant="caption" color="info.light">
+                                      Esperando respuesta externa: {countExternalWaitingSteps(workflow)}
+                                    </Typography>
+                                  )}
+                                  <Typography variant="caption" color="text.secondary">
+                                    Último registro: {commentElapsed ?? "sin registros"}
+                                  </Typography>
+                                  {!commentElapsed && (
+                                    <Typography variant="caption" color="text.secondary">
+                                      Último movimiento: {formatElapsedTime(getLatestWorkflowMovementAt(workflow)) ?? "sin actividad"}
+                                    </Typography>
+                                  )}
+                                </>
+                              ) : (
+                                <Typography variant="caption" color="text.secondary">
+                                  {workflowsError ? "Detalle no disponible" : "Cargando detalle..."}
+                                </Typography>
+                              )}
+                            </Stack>
                           </Stack>
-                        </Stack>
-                      </Button>
-                    );
-                  })}
+                        </Button>
+                      );
+                    })}
                   </Stack>
                 </Stack>
               )}
@@ -619,31 +559,5 @@ export function TriggerDetailPage() {
         </Card>
       </Box>
     </Stack>
-  );
-}
-
-type InfoItemProps = {
-  label: string;
-  value: string;
-};
-
-function InfoItem({ label, value }: InfoItemProps) {
-  return (
-    <Box
-      sx={{
-        p: 2.25,
-        borderRadius: 4,
-        border: "1px solid",
-        borderColor: (theme) => alpha(theme.palette.primary.main, 0.16),
-        backgroundColor: (theme) => alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.2 : 0.75),
-      }}
-    >
-      <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: 1.1, textTransform: "uppercase" }}>
-        {label}
-      </Typography>
-      <Typography variant="h6" sx={{ mt: 0.55 }}>
-        {value}
-      </Typography>
-    </Box>
   );
 }

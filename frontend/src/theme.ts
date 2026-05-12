@@ -273,9 +273,13 @@ export function createAppTheme(mode: AppThemeMode) {
                 : alpha(theme.palette.background.default, 0.72),
             borderBottom: `1px solid ${alpha(theme.palette.divider, 0.95)}`,
           }),
-          columnHeaderTitle: {
+          columnHeaderTitle: ({ theme }) => ({
             fontWeight: 700,
-          },
+            fontSize: "0.72rem",
+            letterSpacing: "0.07em",
+            textTransform: "uppercase" as const,
+            color: theme.palette.text.secondary,
+          }),
           toolbarContainer: ({ theme }) => ({
             padding: theme.spacing(1, 1.25),
             borderBottom: `1px solid ${alpha(theme.palette.divider, 0.9)}`,
@@ -305,6 +309,7 @@ export function createAppTheme(mode: AppThemeMode) {
                 : alpha(theme.palette.background.default, 0.55),
           }),
           row: ({ theme }) => ({
+            cursor: "pointer",
             "&:hover": {
               backgroundColor: alpha(theme.palette.action.hover, 0.42),
             },

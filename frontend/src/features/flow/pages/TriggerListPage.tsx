@@ -5,6 +5,7 @@ import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
+import EditCalendarRoundedIcon from "@mui/icons-material/EditCalendarRounded";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import FilterListRoundedIcon from "@mui/icons-material/FilterListRounded";
 import HourglassTopRoundedIcon from "@mui/icons-material/HourglassTopRounded";
@@ -12,7 +13,7 @@ import InboxRoundedIcon from "@mui/icons-material/InboxRounded";
 import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
 import MoreVertRoundedIcon from "@mui/icons-material/MoreVertRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
-import RestartAltRoundedIcon from "@mui/icons-material/RestartAltRounded";
+import ScheduleRoundedIcon from "@mui/icons-material/ScheduleRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import ViewColumnRoundedIcon from "@mui/icons-material/ViewColumnRounded";
 import {
@@ -20,6 +21,7 @@ import {
   Box,
   Button,
   Chip,
+  type ChipProps,
   Collapse,
   CircularProgress,
   IconButton,
@@ -79,7 +81,6 @@ type FlowGridRow = {
   taskName: string;
   stepLabel: string;
   executionDateInput: string;
-  executionDateLabel: string;
   executionAt: number;
   lastRecord: string;
   movementLabel: string;
@@ -98,6 +99,7 @@ type RequirementGridRow = {
   status: string;
   flowsLabel: string;
   waitingLabel: string;
+  flowCount: number;
   openCount: number;
   waitingCount: number;
   canDelete: boolean;
@@ -117,6 +119,13 @@ function getFilterIcon(filter: FlowFilter) {
   if (filter === "finalized") return <CheckCircleRoundedIcon sx={{ fontSize: 14 }} />;
   if (filter === "cancelled") return <CancelOutlinedIcon sx={{ fontSize: 14 }} />;
   return <InboxRoundedIcon sx={{ fontSize: 14 }} />;
+}
+
+function getFilterChipColor(filter: FlowFilter): ChipProps["color"] {
+  if (filter === "active") return "info";
+  if (filter === "waiting") return "warning";
+  if (filter === "finalized") return "success";
+  return "default";
 }
 
 function getWorkflowDisplayStatus(workflow: WorkflowDetail) {
@@ -226,6 +235,15 @@ function fromDateInputValue(dateInput: string) {
   return `${trimmed}T00:00:00Z`;
 }
 
+function formatNearestFuture(executionAtMs: number): string {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((executionAtMs - today.getTime()) / 86400000);
+  if (diffDays === 1) return "mañana";
+  if (diffDays <= 6) return `en ${diffDays} días`;
+  return `el ${new Date(executionAtMs).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })}`;
+}
+
 function toQuickFilterValues(search: string) {
   const normalized = search.trim();
   if (!normalized) return [];
@@ -264,7 +282,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [deletingFlowId, setDeletingFlowId] = useState<string | null>(null);
   const [flowActionsMenu, setFlowActionsMenu] = useState<{ rowId: string; anchorEl: HTMLElement } | null>(null);
   const [pendingDates, setPendingDates] = useState<Map<string, string>>(new Map());
-  const [futuresOpen, setFuturesOpen] = useState(true);
+  const [futuresOpen, setFuturesOpen] = useState(false);
   const [flowSearchOpen, setFlowSearchOpen] = useState(false);
   const [flowSearchValue, setFlowSearchValue] = useState("");
   const [requirementSearchOpen, setRequirementSearchOpen] = useState(false);
@@ -401,7 +419,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         taskName: step?.nombre ?? "Sin tarea registrada",
         stepLabel,
         executionDateInput,
-        executionDateLabel: step?.fecha_vencimiento ? formatDateOnly(step.fecha_vencimiento) : "Sin fecha",
         executionAt: executionDateInput ? toDateSortValue(executionDateInput) : Number.MAX_SAFE_INTEGER,
         lastRecord: getStepRecord(step),
         movementLabel: formatElapsedTime(item.latestMovementAt) ?? "Sin movimiento reciente",
@@ -428,11 +445,10 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     [flowRows, today]
   );
 
-  useEffect(() => {
-    if (futureRows.length > 0) {
-      setFuturesOpen(true);
-    }
-  }, [futureRows.length]);
+  const nearestFutureMs = useMemo(
+    () => (futureRows.length > 0 ? Math.min(...futureRows.map((r) => r.executionAt)) : null),
+    [futureRows]
+  );
 
   async function handleDateBlur(event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>, row: FlowGridRow) {
     event.stopPropagation();
@@ -511,6 +527,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
               ? `${linkedWorkflows.length} flows · ${openCount} abiertos`
               : `${linkedWorkflows.length} flows`,
         waitingLabel: waitingCount > 0 ? `Esperando: ${waitingCount}` : "",
+        flowCount: linkedWorkflows.length,
         openCount,
         waitingCount,
         canDelete: trigger.workflow_ids.length === 0,
@@ -658,8 +675,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       {
         field: "status",
         headerName: "Estado",
-        width: 130,
-        minWidth: 130,
+        width: 160,
+        minWidth: 160,
         sortable: false,
         renderCell: (params) => <StatusBadge value={params.value} />,
       },
@@ -672,29 +689,27 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         renderCell: (params) => {
           const row = params.row;
           return (
-            <Stack spacing={0.35} sx={{ minWidth: 0, py: 0.15 }}>
-              <Typography
-                variant="body2"
-                sx={{
-                  fontWeight: 700,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  display: "-webkit-box",
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: "vertical",
-                  whiteSpace: "normal",
-                  lineHeight: 1.25,
-                }}
-              >
-                {row.taskName}
-              </Typography>
-            </Stack>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: 700,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+                whiteSpace: "normal",
+                lineHeight: 1.25,
+              }}
+            >
+              {row.taskName}
+            </Typography>
           );
         },
       },
       {
         field: "lastRecord",
-        headerName: "Último registro",
+        headerName: "Registro",
         flex: 1.35,
         minWidth: 300,
         renderCell: (params) => (
@@ -725,14 +740,37 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         renderCell: (params) => {
           const row = params.row;
           const originalValue = row.executionDateInput ? row.executionDateInput.slice(0, 10) : "";
-          const value = pendingDates.get(row.id) ?? originalValue;
+          const isEditing = pendingDates.has(row.id);
+          const showInput = Boolean(originalValue) || isEditing;
 
+          if (!showInput) {
+            return (
+              <IconButton
+                size="small"
+                disabled={!row.stepId}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setPendingDates((previous) => {
+                    const next = new Map(previous);
+                    next.set(row.id, "");
+                    return next;
+                  });
+                }}
+                sx={{ opacity: 0.38, "&:hover": { opacity: 0.9 } }}
+              >
+                <EditCalendarRoundedIcon fontSize="small" />
+              </IconButton>
+            );
+          }
+
+          const value = pendingDates.get(row.id) ?? originalValue;
           return (
             <TextField
               type="date"
               size="small"
               variant="outlined"
               value={value}
+              autoFocus={isEditing && !originalValue}
               disabled={!row.stepId}
               onClick={(event) => event.stopPropagation()}
               onChange={(event) => {
@@ -775,7 +813,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       },
       {
         field: "requirementsLabel",
-        headerName: "Requerimientos",
+        headerName: "Proyecto",
         flex: 1.2,
         minWidth: 260,
         sortable: false,
@@ -952,15 +990,27 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       },
       {
         field: "flowsLabel",
-        headerName: "Flows vinculados",
+        headerName: "Flows",
         flex: 1,
         minWidth: 220,
         renderCell: (params) => {
           const row = params.row;
+          const activeCount = row.openCount - row.waitingCount;
           return (
-            <Stack direction="row" spacing={0.6} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 0.4 }}>
-              <Chip size="small" variant="outlined" label={row.flowsLabel} />
-              {row.waitingLabel ? <Chip size="small" variant="outlined" label={row.waitingLabel} /> : null}
+            <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 0.4 }}>
+              {row.flowCount === 0 ? (
+                <Chip size="small" variant="outlined" label="Sin flows" />
+              ) : (
+                <>
+                  <Chip size="small" variant="outlined" label={`${row.flowCount} flows`} />
+                  {activeCount > 0 && (
+                    <Chip size="small" variant="filled" color="info" label={`${activeCount} activos`} />
+                  )}
+                  {row.waitingCount > 0 && (
+                    <Chip size="small" variant="filled" color="warning" label={`${row.waitingCount} esperando`} />
+                  )}
+                </>
+              )}
             </Stack>
           );
         },
@@ -1064,7 +1114,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   }
 
   return (
-    <Stack spacing={2.1}>
+    <Stack spacing={2}>
       <Snackbar
         open={requirementToastOpen}
         autoHideDuration={2600}
@@ -1079,7 +1129,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       />
 
       <PageContainer
-        breadcrumbs={[{ label: pageTitle }]}
+        breadcrumbs={[]}
         title={pageTitle}
         actions={
           <>
@@ -1108,7 +1158,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
           </>
         }
       >
-        <Stack spacing={1.2}>
+        <Stack spacing={1.5}>
           {!lockView && (
             <ToggleButtonGroup
               exclusive
@@ -1173,43 +1223,68 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
           {error && <Alert severity="error">{error}</Alert>}
 
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: { xs: "flex-start", md: "center" },
-              gap: 0.85,
-              flexWrap: "wrap",
-            }}
-          >
-            <Typography variant="caption" color="text.secondary">
-              Estado
-            </Typography>
-            <ToggleButtonGroup
-              exclusive
-              size="small"
-              value={stateFilter}
-              onChange={(_, value: FlowFilter | null) => {
-                if (value) setStateFilter(value);
-              }}
-              sx={{ flexWrap: "wrap", rowGap: 0.55 }}
-            >
-              {flowFilterOptions.map((option) => {
-                const countLabel = option.value === "all" ? "" : ` (${currentCounts[option.value] ?? 0})`;
-                return (
-                  <ToggleButton key={option.value} value={option.value}>
-                    <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
-                      {getFilterIcon(option.value)}
-                      <Box component="span">
-                        {option.label}
-                        {countLabel}
-                      </Box>
-                    </Stack>
-                  </ToggleButton>
-                );
-              })}
-            </ToggleButtonGroup>
-          </Box>
+          <Stack direction="row" spacing={0.65} sx={{ flexWrap: "wrap", rowGap: 0.55 }}>
+            {flowFilterOptions.map((option) => {
+              const selected = stateFilter === option.value;
+              const count = option.value !== "all" ? (currentCounts[option.value] ?? 0) : null;
+              return (
+                <Chip
+                  key={option.value}
+                  icon={getFilterIcon(option.value)}
+                  label={count !== null ? `${option.label} (${count})` : option.label}
+                  size="small"
+                  color={selected ? getFilterChipColor(option.value) : "default"}
+                  variant={selected ? "filled" : "outlined"}
+                  onClick={() => setStateFilter(option.value)}
+                  sx={{ cursor: "pointer", fontWeight: selected ? 600 : 400 }}
+                />
+              );
+            })}
+          </Stack>
+
+          {isFlowsView && !loading && futureRows.length > 0 && (
+            <Paper variant="outlined" sx={{ overflow: "hidden" }}>
+              <Button
+                variant="text"
+                color="inherit"
+                onClick={() => setFuturesOpen((value) => !value)}
+                sx={{ color: "text.secondary", py: 1.25, px: 2, width: "100%", justifyContent: "flex-start", gap: 1 }}
+                startIcon={<ScheduleRoundedIcon fontSize="small" />}
+                endIcon={
+                  <ExpandMoreIcon
+                    sx={{ ml: "auto", transform: futuresOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}
+                  />
+                }
+              >
+                {`Programados para más adelante (${futureRows.length})${nearestFutureMs ? ` · próximo ${formatNearestFuture(nearestFutureMs)}` : ""}`}
+              </Button>
+              <Collapse in={futuresOpen}>
+                <DataGrid
+                  rows={futureRows}
+                  columns={flowColumns}
+                  rowHeight={62}
+                  filterModel={flowFilterModel}
+                  onFilterModelChange={setFlowFilterModel}
+                  disableRowSelectionOnClick
+                  onRowClick={(params: GridRowParams<FlowGridRow>) => {
+                    navigate(`/workflows/${params.row.id}`);
+                  }}
+                  autoHeight
+                  hideFooter={futureRows.length <= 10}
+                  initialState={{
+                    sorting: {
+                      sortModel: [{ field: "executionAt", sort: "asc" }],
+                    },
+                    pagination: {
+                      paginationModel: { pageSize: 20, page: 0 },
+                    },
+                  }}
+                  pageSizeOptions={[10, 15, 20, 50]}
+                  sx={{ border: 0 }}
+                />
+              </Collapse>
+            </Paper>
+          )}
 
           <Paper sx={{ overflow: "hidden" }}>
             {loading ? (
@@ -1231,7 +1306,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 <DataGrid
                   rows={mainRows}
                   columns={flowColumns}
-                  rowHeight={68}
+                  rowHeight={62}
                   filterModel={flowFilterModel}
                   onFilterModelChange={setFlowFilterModel}
                   disableRowSelectionOnClick
@@ -1284,48 +1359,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   pageSizeOptions={[10, 15, 20, 50]}
                   sx={{ border: 0, height: "100%" }}
                 />
-                {futureRows.length > 0 ? (
-                  <Box sx={{ mt: 2, borderTop: 1, borderColor: "divider" }}>
-                    <Button
-                      variant="text"
-                      color="inherit"
-                      onClick={() => setFuturesOpen((value) => !value)}
-                      sx={{ color: "text.secondary", py: 1.5, width: "100%", justifyContent: "flex-start", gap: 1 }}
-                      startIcon={
-                        <ExpandMoreIcon
-                          sx={{ transform: futuresOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}
-                        />
-                      }
-                    >
-                      {`Próximos (${futureRows.length})`}
-                    </Button>
-                    <Collapse in={futuresOpen}>
-                      <DataGrid
-                        rows={futureRows}
-                        columns={flowColumns}
-                        rowHeight={68}
-                        filterModel={flowFilterModel}
-                        onFilterModelChange={setFlowFilterModel}
-                        disableRowSelectionOnClick
-                        onRowClick={(params: GridRowParams<FlowGridRow>) => {
-                          navigate(`/workflows/${params.row.id}`);
-                        }}
-                        autoHeight
-                        hideFooter={futureRows.length <= 10}
-                        initialState={{
-                          sorting: {
-                            sortModel: [{ field: "movementAt", sort: "asc" }],
-                          },
-                          pagination: {
-                            paginationModel: { pageSize: 20, page: 0 },
-                          },
-                        }}
-                        pageSizeOptions={[10, 15, 20, 50]}
-                        sx={{ border: 0 }}
-                      />
-                    </Collapse>
-                  </Box>
-                ) : null}
               </Box>
             ) : (
               <Box
@@ -1341,7 +1374,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 <DataGrid
                   rows={requirementRows}
                   columns={requirementColumns}
-                  rowHeight={64}
+                  rowHeight={58}
                   filterModel={requirementFilterModel}
                   onFilterModelChange={setRequirementFilterModel}
                   disableRowSelectionOnClick
