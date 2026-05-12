@@ -44,7 +44,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { PageContainer } from "../../../components/layout/PageContainer";
-import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, getWorkflow, listTriggers, listWorkflows, reactivateWorkflow } from "../api";
+import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, getWorkflow, listTriggers, listWorkflows, reactivateWorkflow, updateStep } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Step, TriggerDetail, WorkflowDetail } from "../types";
 import { formatDateOnly, formatElapsedTime, getStatusTone } from "../utils";
@@ -68,9 +68,11 @@ type FlowCardData = {
 
 type FlowGridRow = {
   id: string;
+  stepId: string | null;
   status: string;
   taskName: string;
   stepLabel: string;
+  executionDateInput: string;
   executionDateLabel: string;
   executionAt: number;
   lastRecord: string;
@@ -197,6 +199,27 @@ function getDateValue(value: string | null | undefined) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function toDateInputValue(value: string | null | undefined) {
+  if (!value) return "";
+  const shortValue = value.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(shortValue)) return shortValue;
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime())) return "";
+  return parsed.toISOString().slice(0, 10);
+}
+
+function toDateSortValue(dateInput: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) return Number.MAX_SAFE_INTEGER;
+  const [year, month, day] = dateInput.split("-").map((value) => Number(value));
+  return Date.UTC(year, month - 1, day);
+}
+
+function fromDateInputValue(dateInput: string) {
+  const trimmed = dateInput.trim();
+  if (!trimmed) return null;
+  return `${trimmed}T00:00:00Z`;
+}
+
 function toQuickFilterValues(search: string) {
   const normalized = search.trim();
   if (!normalized) return [];
@@ -232,6 +255,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [cancellingFlowId, setCancellingFlowId] = useState<string | null>(null);
   const [reactivatingFlowId, setReactivatingFlowId] = useState<string | null>(null);
   const [deletingFlowId, setDeletingFlowId] = useState<string | null>(null);
+  const [dateDraftByStepId, setDateDraftByStepId] = useState<Record<string, string>>({});
+  const [updatingDateByStepId, setUpdatingDateByStepId] = useState<Record<string, boolean>>({});
   const [flowSearchOpen, setFlowSearchOpen] = useState(false);
   const [flowSearchValue, setFlowSearchValue] = useState("");
   const [requirementSearchOpen, setRequirementSearchOpen] = useState(false);
@@ -355,6 +380,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const flowRows = useMemo<FlowGridRow[]>(() => {
     return flowCards.map((item) => {
       const step = item.relevantStep;
+      const executionDateInput = toDateInputValue(step?.fecha_ejecucion_estimada);
       const stepLabel =
         step && ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado)
           ? "Tarea actual"
@@ -362,11 +388,13 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       const movementAt = getDateValue(item.latestMovementAt) ?? 0;
       return {
         id: item.workflow.id,
+        stepId: step?.id ?? null,
         status: item.displayStatus,
         taskName: step?.nombre ?? "Sin tarea registrada",
         stepLabel,
+        executionDateInput,
         executionDateLabel: step?.fecha_ejecucion_estimada ? formatDateOnly(step.fecha_ejecucion_estimada) : "Sin fecha",
-        executionAt: getDateValue(step?.fecha_ejecucion_estimada) ?? Number.MAX_SAFE_INTEGER,
+        executionAt: executionDateInput ? toDateSortValue(executionDateInput) : Number.MAX_SAFE_INTEGER,
         lastRecord: getStepRecord(step),
         movementLabel: formatElapsedTime(item.latestMovementAt) ?? "Sin movimiento reciente",
         movementAt: movementAt || Number.MAX_SAFE_INTEGER,
@@ -381,6 +409,42 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       };
     });
   }, [flowCards]);
+
+  async function persistFlowStepDate(stepId: string, currentInputValue: string, nextInputValue: string) {
+    if (updatingDateByStepId[stepId]) return;
+
+    const normalizedCurrent = currentInputValue.trim();
+    const normalizedNext = nextInputValue.trim();
+
+    if (normalizedCurrent === normalizedNext) {
+      setDateDraftByStepId((previous) => {
+        if (!(stepId in previous)) return previous;
+        const next = { ...previous };
+        delete next[stepId];
+        return next;
+      });
+      return;
+    }
+
+    try {
+      setUpdatingDateByStepId((previous) => ({ ...previous, [stepId]: true }));
+      setError(null);
+      await updateStep(stepId, { fecha_ejecucion_estimada: fromDateInputValue(normalizedNext) });
+      await loadData();
+      setFlowToastMessage(normalizedNext ? "Fecha actualizada." : "Fecha eliminada.");
+      setFlowToastOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo actualizar la fecha.");
+    } finally {
+      setUpdatingDateByStepId((previous) => ({ ...previous, [stepId]: false }));
+      setDateDraftByStepId((previous) => {
+        if (!(stepId in previous)) return previous;
+        const next = { ...previous };
+        delete next[stepId];
+        return next;
+      });
+    }
+  }
 
   const requirementRows = useMemo<RequirementGridRow[]>(() => {
     return filteredRequirements.map((trigger) => {
@@ -619,15 +683,86 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       {
         field: "executionAt",
         headerName: "Fecha",
-        width: 130,
-        minWidth: 120,
+        width: 172,
+        minWidth: 160,
         type: "number",
         valueGetter: (_, row) => row.executionAt,
-        renderCell: (params) => (
-          <Typography variant="body2" color={params.row.executionDateLabel === "Sin fecha" ? "text.secondary" : "text.primary"}>
-            {params.row.executionDateLabel}
-          </Typography>
-        ),
+        renderCell: (params) => {
+          const row = params.row;
+          const stepId = row.stepId;
+          if (!stepId) {
+            return (
+              <Typography variant="body2" color="text.secondary">
+                Sin tarea
+              </Typography>
+            );
+          }
+
+          const draftValue = dateDraftByStepId[stepId] ?? row.executionDateInput;
+          const isSaving = Boolean(updatingDateByStepId[stepId]);
+
+          return (
+            <Stack
+              direction="row"
+              spacing={0.4}
+              sx={{ alignItems: "center", width: "100%", maxWidth: 162 }}
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <TextField
+                type="date"
+                size="small"
+                value={draftValue}
+                disabled={isSaving}
+                onChange={(event) => {
+                  setDateDraftByStepId((previous) => ({ ...previous, [stepId]: event.target.value }));
+                }}
+                onBlur={(event) => {
+                  void persistFlowStepDate(stepId, row.executionDateInput, event.target.value);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    (event.target as HTMLInputElement).blur();
+                  }
+                  if (event.key === "Escape") {
+                    setDateDraftByStepId((previous) => {
+                      if (!(stepId in previous)) return previous;
+                      const next = { ...previous };
+                      delete next[stepId];
+                      return next;
+                    });
+                    (event.target as HTMLInputElement).blur();
+                  }
+                }}
+                placeholder={row.executionDateLabel}
+                sx={{ width: 145 }}
+                slotProps={{
+                  htmlInput: {
+                    "aria-label": "Fecha posible de ejecución",
+                  },
+                }}
+              />
+              <IconButton
+                size="small"
+                aria-label="Limpiar fecha"
+                disabled={isSaving || draftValue.length === 0}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setDateDraftByStepId((previous) => ({ ...previous, [stepId]: "" }));
+                  void persistFlowStepDate(stepId, row.executionDateInput, "");
+                }}
+              >
+                <CancelOutlinedIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Stack>
+          );
+        },
       },
       {
         field: "movementAt",
@@ -732,7 +867,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         },
       },
     ],
-    [cancellingFlowId, deletingFlowId, navigate, reactivatingFlowId]
+    [cancellingFlowId, dateDraftByStepId, deletingFlowId, navigate, reactivatingFlowId, updatingDateByStepId]
   );
 
   const requirementColumns = useMemo<GridColDef<RequirementGridRow>[]>(
