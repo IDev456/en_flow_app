@@ -169,7 +169,7 @@ function getStepRecord(step: Step | null) {
 }
 
 function canCancelWorkflow(workflow: WorkflowDetail) {
-  return ["en_proceso", "esperando_respuesta", "en_espera", "con_problema"].includes(workflow.estado);
+  return ["pendiente", "en_proceso", "esperando_respuesta", "en_espera", "con_problema"].includes(workflow.estado);
 }
 
 function canDeleteWorkflow(workflow: WorkflowDetail) {
@@ -512,25 +512,37 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       {
         field: "status",
         headerName: "Estado",
-        width: 150,
-        minWidth: 140,
+        width: 140,
+        minWidth: 135,
         sortable: false,
         renderCell: (params) => <StatusBadge value={params.value} />,
       },
       {
         field: "taskName",
         headerName: "Tarea actual",
-        flex: 1.2,
-        minWidth: 240,
+        flex: 1.45,
+        minWidth: 280,
         valueGetter: (_, row) => `${row.stepLabel} ${row.taskName}`,
         renderCell: (params) => {
           const row = params.row;
           return (
-            <Stack spacing={0.25} sx={{ minWidth: 0 }}>
+            <Stack spacing={0.35} sx={{ minWidth: 0, py: 0.15 }}>
               <Typography variant="caption" color="text.secondary">
                 {row.stepLabel}
               </Typography>
-              <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: 700,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                  whiteSpace: "normal",
+                  lineHeight: 1.25,
+                }}
+              >
                 {row.taskName}
               </Typography>
             </Stack>
@@ -541,9 +553,21 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         field: "lastRecord",
         headerName: "Último registro",
         flex: 1.35,
-        minWidth: 260,
+        minWidth: 300,
         renderCell: (params) => (
-          <Typography variant="body2" color="text.secondary" noWrap>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              whiteSpace: "normal",
+              lineHeight: 1.3,
+            }}
+          >
             {params.value}
           </Typography>
         ),
@@ -551,8 +575,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       {
         field: "movementAt",
         headerName: "Movimiento",
-        width: 160,
-        minWidth: 150,
+        width: 126,
+        minWidth: 120,
         type: "number",
         renderCell: (params) => (
           <Typography variant="caption" color="text.secondary">
@@ -563,11 +587,23 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       {
         field: "requirementsLabel",
         headerName: "Requerimientos",
-        flex: 1.1,
-        minWidth: 220,
+        flex: 1.2,
+        minWidth: 260,
         sortable: false,
         renderCell: (params) => (
-          <Typography variant="body2" color="text.secondary" noWrap>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              whiteSpace: "normal",
+              lineHeight: 1.3,
+            }}
+          >
             {params.value}
           </Typography>
         ),
@@ -576,7 +612,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         field: "actions",
         type: "actions",
         headerName: "Acciones",
-        width: 116,
+        width: 110,
         getActions: (params) => {
           const row = params.row;
           return [
@@ -635,7 +671,19 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         flex: 1.5,
         minWidth: 280,
         renderCell: (params) => (
-          <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
+          <Typography
+            variant="body2"
+            sx={{
+              fontWeight: 700,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              whiteSpace: "normal",
+              lineHeight: 1.3,
+            }}
+          >
             {params.value}
           </Typography>
         ),
@@ -646,7 +694,19 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         flex: 1.1,
         minWidth: 220,
         renderCell: (params) => (
-          <Typography variant="body2" color="text.secondary" noWrap>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              whiteSpace: "normal",
+              lineHeight: 1.3,
+            }}
+          >
             {params.value}
           </Typography>
         ),
@@ -927,10 +987,20 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 <Typography color="text.secondary">Cargando...</Typography>
               </Stack>
             ) : isFlowsView ? (
-              <Box sx={{ height: { xs: 560, md: 640 }, width: "100%" }}>
+              <Box
+                sx={{
+                  height: {
+                    xs: "calc(100dvh - 320px)",
+                    md: "calc(100dvh - 300px)",
+                  },
+                  minHeight: { xs: 520, md: 720 },
+                  width: "100%",
+                }}
+              >
                 <DataGrid
                   rows={flowRows}
                   columns={flowColumns}
+                  rowHeight={68}
                   filterModel={flowFilterModel}
                   onFilterModelChange={setFlowFilterModel}
                   disableRowSelectionOnClick
@@ -976,16 +1046,29 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                     sorting: {
                       sortModel: [{ field: "movementAt", sort: "asc" }],
                     },
+                    pagination: {
+                      paginationModel: { pageSize: 20, page: 0 },
+                    },
                   }}
-                  pageSizeOptions={[10, 25, 50]}
+                  pageSizeOptions={[10, 15, 20, 50]}
                   sx={{ border: 0, height: "100%" }}
                 />
               </Box>
             ) : (
-              <Box sx={{ height: { xs: 560, md: 640 }, width: "100%" }}>
+              <Box
+                sx={{
+                  height: {
+                    xs: "calc(100dvh - 320px)",
+                    md: "calc(100dvh - 300px)",
+                  },
+                  minHeight: { xs: 520, md: 680 },
+                  width: "100%",
+                }}
+              >
                 <DataGrid
                   rows={requirementRows}
                   columns={requirementColumns}
+                  rowHeight={64}
                   filterModel={requirementFilterModel}
                   onFilterModelChange={setRequirementFilterModel}
                   disableRowSelectionOnClick
@@ -1031,8 +1114,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                     sorting: {
                       sortModel: [{ field: "description", sort: "asc" }],
                     },
+                    pagination: {
+                      paginationModel: { pageSize: 20, page: 0 },
+                    },
                   }}
-                  pageSizeOptions={[10, 25, 50]}
+                  pageSizeOptions={[10, 15, 20, 50]}
                   sx={{ border: 0, height: "100%" }}
                 />
               </Box>
