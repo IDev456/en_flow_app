@@ -23,7 +23,7 @@ import {
   Chip,
   type ChipProps,
   Collapse,
-  CircularProgress,
+  LinearProgress,
   IconButton,
   Menu,
   MenuItem,
@@ -1288,10 +1288,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
           <Paper sx={{ overflow: "hidden" }}>
             {loading ? (
-              <Stack direction="row" spacing={1.25} sx={{ py: 5, alignItems: "center", justifyContent: "center" }}>
-                <CircularProgress size={22} />
-                <Typography color="text.secondary">Cargando...</Typography>
-              </Stack>
+              <LinearProgress />
             ) : isFlowsView ? (
               <Box
                 sx={{

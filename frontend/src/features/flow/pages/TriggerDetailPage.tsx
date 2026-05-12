@@ -12,6 +12,8 @@ import {
   Chip,
   CircularProgress,
   Link,
+  Slide,
+  type SlideProps,
   Snackbar,
   Stack,
   TextField,
@@ -26,6 +28,10 @@ import { DEFAULT_ACTOR, formatElapsedTime } from "../utils";
 
 const SOLICITANTE_MAX = 150;
 const TRIGGER_DESCRIPTION_MAX = 1000;
+
+function SlideUp(props: SlideProps) {
+  return <Slide {...props} direction="up" />;
+}
 
 export function TriggerDetailPage() {
   const { triggerId = "" } = useParams();
@@ -315,6 +321,7 @@ export function TriggerDetailPage() {
         autoHideDuration={2600}
         onClose={() => setRequirementToastOpen(false)}
         message="Proyecto actualizado."
+        slots={{ transition: SlideUp }}
       />
       <Breadcrumbs separator="›" aria-label="breadcrumb" sx={{ "& .MuiBreadcrumbs-separator": { mx: 0.75 } }}>
         <Link component={RouterLink} underline="hover" color="text.secondary" to="/requirements" sx={{ typography: "caption" }}>

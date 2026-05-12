@@ -1,4 +1,4 @@
-import { CssBaseline, ThemeProvider } from "@mui/material";
+import { Box, CssBaseline, Fade, ThemeProvider } from "@mui/material";
 import { useMemo, useState } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
@@ -77,7 +77,11 @@ function AppShell({ mode, onToggleMode }: AppShellProps) {
 
   return (
     <DashboardLayout mode={mode} onToggleMode={onToggleMode}>
-      <Outlet />
+      <Fade key={location.pathname} timeout={200} in>
+        <Box>
+          <Outlet />
+        </Box>
+      </Fade>
       {isCreateModalOpen && <TriggerCreateModal onClose={closeCreateModal} />}
     </DashboardLayout>
   );
