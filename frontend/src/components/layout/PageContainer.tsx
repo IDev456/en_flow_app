@@ -17,7 +17,7 @@ type PageContainerProps = {
 
 export function PageContainer({ breadcrumbs = [], title, subtitle, actions, children }: PageContainerProps) {
   return (
-    <Stack spacing={1.75}>
+    <Stack spacing={1.75} className="animate-fade-up">
       {breadcrumbs.length > 0 && (
         <Breadcrumbs separator="›" aria-label="breadcrumb" sx={{ "& .MuiBreadcrumbs-separator": { mx: 0.75 } }}>
           {breadcrumbs.map((item, index) => {

@@ -22,6 +22,16 @@ export function StatusBadge({ value }: StatusBadgeProps) {
       color: isDark ? theme.palette.info.light : theme.palette.info.dark,
       bgcolor: alpha(theme.palette.info.main, isDark ? 0.18 : 0.12),
       borderColor: alpha(theme.palette.info.main, isDark ? 0.42 : 0.32),
+      "&::before": {
+        content: '""',
+        display: "inline-block",
+        width: 6,
+        height: 6,
+        borderRadius: "50%",
+        backgroundColor: "currentColor",
+        marginRight: 4,
+        animation: "pulse 1.8s ease-in-out infinite",
+      },
     };
   } else if (tone === "espera_externa") {
     color = "warning";

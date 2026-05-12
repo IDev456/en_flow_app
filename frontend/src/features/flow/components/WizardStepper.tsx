@@ -25,6 +25,7 @@ export function WizardStepper({ current, items }: WizardStepperProps) {
                 borderColor: state === "active" ? "primary.main" : state === "done" ? "success.main" : "divider",
                 backgroundColor: state === "active" ? "primary.main" : state === "done" ? "success.main" : "transparent",
                 color: state === "idle" ? "text.secondary" : "common.white",
+                transition: "background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease",
                 flexShrink: 0,
               }}
             >

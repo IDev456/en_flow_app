@@ -76,6 +76,7 @@ function SidebarBody({
           if (mobile) onCloseMobile();
         }}
         sx={{
+          position: "relative",
           borderRadius: 2,
           py: 0.95,
           px: compact ? 1 : 1.25,
@@ -89,6 +90,16 @@ function SidebarBody({
             bgcolor: active
               ? alpha(theme.palette.action.selected, theme.palette.mode === "dark" ? 0.62 : 1)
               : alpha(theme.palette.action.hover, theme.palette.mode === "dark" ? 0.4 : 0.78),
+          },
+          "&.Mui-selected::before": {
+            content: '""',
+            position: "absolute",
+            left: 0,
+            top: "20%",
+            height: "60%",
+            width: 3,
+            borderRadius: "0 2px 2px 0",
+            backgroundColor: theme.palette.primary.main,
           },
         }}
       >

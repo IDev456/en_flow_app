@@ -109,6 +109,16 @@ export function createAppTheme(mode: AppThemeMode) {
             border: `1px solid ${alpha(theme.palette.divider, 0.92)}`,
             boxShadow: "none",
             backgroundImage: "none",
+            transition: theme.transitions.create(["box-shadow", "border-color"], {
+              duration: theme.transitions.duration.shorter,
+            }),
+            "&:hover": {
+              borderColor: alpha(theme.palette.text.primary, 0.18),
+              boxShadow:
+                theme.palette.mode === "dark"
+                  ? "0 8px 24px rgba(0,0,0,0.4)"
+                  : "0 8px 24px rgba(0,0,0,0.08)",
+            },
           }),
         },
       },
@@ -230,11 +240,14 @@ export function createAppTheme(mode: AppThemeMode) {
       },
       MuiListItemButton: {
         styleOverrides: {
-          root: {
+          root: ({ theme }) => ({
+            transition: theme.transitions.create(["background-color", "border-color"], {
+              duration: theme.transitions.duration.shortest,
+            }),
             "&.Mui-selected": {
               backgroundColor: "transparent",
             },
-          },
+          }),
         },
       },
       MuiMenu: {

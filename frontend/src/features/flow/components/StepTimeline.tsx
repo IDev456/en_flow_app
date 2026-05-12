@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Card, CardContent, Link, Stack, Typography } from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
 import { Link as RouterLink } from "react-router-dom";
 
 import type { Step } from "../types";
@@ -11,10 +12,21 @@ type StepTimelineProps = {
 };
 
 export function StepTimeline({ steps }: StepTimelineProps) {
+  const theme = useTheme();
+
   return (
     <Stack spacing={1.5}>
       {steps.map((step) => (
-        <Card key={step.id} variant="outlined" sx={{ borderColor: step.estado === "activo" ? "primary.main" : "divider" }}>
+        <Card
+          key={step.id}
+          variant="outlined"
+          sx={{
+            borderColor: step.estado === "activo" ? "primary.main" : "divider",
+            borderLeftWidth: step.estado === "activo" ? 3 : 1,
+            transition: "border-color 0.2s ease, background-color 0.2s ease",
+            bgcolor: step.estado === "activo" ? alpha(theme.palette.primary.main, 0.04) : "background.paper",
+          }}
+        >
           <CardContent sx={{ display: "grid", gap: 1.25 }}>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between" }}>
               <BoxBlock>
