@@ -9,6 +9,7 @@ import FilterListRoundedIcon from "@mui/icons-material/FilterListRounded";
 import HourglassTopRoundedIcon from "@mui/icons-material/HourglassTopRounded";
 import InboxRoundedIcon from "@mui/icons-material/InboxRounded";
 import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
+import MoreVertRoundedIcon from "@mui/icons-material/MoreVertRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import RestartAltRoundedIcon from "@mui/icons-material/RestartAltRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
@@ -20,6 +21,8 @@ import {
   Chip,
   CircularProgress,
   IconButton,
+  Menu,
+  MenuItem,
   Paper,
   Snackbar,
   Stack,
@@ -255,6 +258,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [cancellingFlowId, setCancellingFlowId] = useState<string | null>(null);
   const [reactivatingFlowId, setReactivatingFlowId] = useState<string | null>(null);
   const [deletingFlowId, setDeletingFlowId] = useState<string | null>(null);
+  const [flowActionsMenu, setFlowActionsMenu] = useState<{ rowId: string; anchorEl: HTMLElement } | null>(null);
   const [dateDraftByStepId, setDateDraftByStepId] = useState<Record<string, string>>({});
   const [updatingDateByStepId, setUpdatingDateByStepId] = useState<Record<string, boolean>>({});
   const [flowSearchOpen, setFlowSearchOpen] = useState(false);
@@ -620,8 +624,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       {
         field: "status",
         headerName: "Estado",
-        width: 140,
-        minWidth: 135,
+        width: 130,
+        minWidth: 130,
         sortable: false,
         renderCell: (params) => <StatusBadge value={params.value} />,
       },
@@ -689,78 +693,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         valueGetter: (_, row) => row.executionAt,
         renderCell: (params) => {
           const row = params.row;
-          const stepId = row.stepId;
-          if (!stepId) {
-            return (
-              <Typography variant="body2" color="text.secondary">
-                Sin tarea
-              </Typography>
-            );
-          }
-
-          const draftValue = dateDraftByStepId[stepId] ?? row.executionDateInput;
-          const isSaving = Boolean(updatingDateByStepId[stepId]);
+          const formattedDate = row.executionDateInput ? formatDateOnly(`${row.executionDateInput}T12:00:00`) : "—";
 
           return (
-            <Stack
-              direction="row"
-              spacing={0.4}
-              sx={{ alignItems: "center", width: "100%", maxWidth: 162 }}
-              onClick={(event) => event.stopPropagation()}
-              onPointerDown={(event) => event.stopPropagation()}
-            >
-              <TextField
-                type="date"
-                size="small"
-                value={draftValue}
-                disabled={isSaving}
-                onChange={(event) => {
-                  setDateDraftByStepId((previous) => ({ ...previous, [stepId]: event.target.value }));
-                }}
-                onBlur={(event) => {
-                  void persistFlowStepDate(stepId, row.executionDateInput, event.target.value);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    (event.target as HTMLInputElement).blur();
-                  }
-                  if (event.key === "Escape") {
-                    setDateDraftByStepId((previous) => {
-                      if (!(stepId in previous)) return previous;
-                      const next = { ...previous };
-                      delete next[stepId];
-                      return next;
-                    });
-                    (event.target as HTMLInputElement).blur();
-                  }
-                }}
-                placeholder={row.executionDateLabel}
-                sx={{ width: 145 }}
-                slotProps={{
-                  htmlInput: {
-                    "aria-label": "Fecha posible de ejecución",
-                  },
-                }}
-              />
-              <IconButton
-                size="small"
-                aria-label="Limpiar fecha"
-                disabled={isSaving || draftValue.length === 0}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setDateDraftByStepId((previous) => ({ ...previous, [stepId]: "" }));
-                  void persistFlowStepDate(stepId, row.executionDateInput, "");
-                }}
-              >
-                <CancelOutlinedIcon sx={{ fontSize: 16 }} />
-              </IconButton>
-            </Stack>
+            <Typography variant="body2" color={formattedDate === "—" ? "text.secondary" : "text.primary"}>
+              {formattedDate}
+            </Typography>
           );
         },
       },
@@ -802,72 +740,99 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       },
       {
         field: "actions",
-        type: "actions",
         headerName: "Acciones",
-        width: 110,
-        getActions: (params) => {
+        width: 172,
+        sortable: false,
+        filterable: false,
+        disableColumnMenu: true,
+        renderCell: (params) => {
           const row = params.row;
-          return [
-            <GridActionsCellItem
-              key="open"
-              icon={<LaunchRoundedIcon fontSize="small" />}
-              label="Abrir flow"
-              onClick={(event) => {
-                event.stopPropagation();
-                navigate(`/workflows/${row.id}`);
-              }}
-              showInMenu={false}
-            />,
-            ...(row.canCancel
-              ? [
-                  <GridActionsCellItem
-                    key="cancel"
-                    icon={<CancelOutlinedIcon fontSize="small" />}
-                    label={cancellingFlowId === row.id ? "Cancelando..." : "Cancelar flow"}
+          const menuOpen = flowActionsMenu?.rowId === row.id;
+          const hasMenuOptions = row.canCancel || row.canReactivate || row.canDelete;
+
+          return (
+            <Stack
+              key={`actions-${row.id}`}
+              direction="row"
+              spacing={0.3}
+              sx={{ alignItems: "center" }}
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <Button
+                variant="text"
+                size="small"
+                startIcon={<LaunchRoundedIcon fontSize="small" />}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  navigate(`/workflows/${row.id}`);
+                }}
+              >
+                Abrir
+              </Button>
+              <IconButton
+                size="small"
+                color="inherit"
+                disabled={!hasMenuOptions}
+                sx={{ opacity: 0.6, "&:hover": { opacity: 1 } }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setFlowActionsMenu({ rowId: row.id, anchorEl: event.currentTarget });
+                }}
+              >
+                <MoreVertRoundedIcon fontSize="small" />
+              </IconButton>
+              <Menu
+                anchorEl={menuOpen ? flowActionsMenu.anchorEl : null}
+                open={menuOpen}
+                onClose={() => setFlowActionsMenu(null)}
+                onClick={(event) => event.stopPropagation()}
+              >
+                {row.canCancel ? (
+                  <MenuItem
                     disabled={Boolean(cancellingFlowId || deletingFlowId || reactivatingFlowId)}
                     onClick={(event) => {
                       event.stopPropagation();
+                      setFlowActionsMenu(null);
                       void handleCancelFlowAction(row.id);
                     }}
-                    showInMenu
-                  />,
-                ]
-              : []),
-            ...(row.canReactivate
-              ? [
-                  <GridActionsCellItem
-                    key="reactivate"
-                    icon={<RestartAltRoundedIcon fontSize="small" />}
-                    label={reactivatingFlowId === row.id ? "Reactivando..." : "Reactivar flow"}
+                  >
+                    {cancellingFlowId === row.id ? "Cancelando..." : "Cancelar flow"}
+                  </MenuItem>
+                ) : null}
+
+                {row.canReactivate ? (
+                  <MenuItem
                     disabled={Boolean(reactivatingFlowId || cancellingFlowId || deletingFlowId)}
                     onClick={(event) => {
                       event.stopPropagation();
+                      setFlowActionsMenu(null);
                       void handleReactivateFlowAction(row.id);
                     }}
-                    showInMenu
-                  />,
-                ]
-              : []),
-            ...(row.canDelete
-              ? [
-                  <GridActionsCellItem
-                    key="delete"
-                    icon={<DeleteOutlineRoundedIcon fontSize="small" />}
-                    label={deletingFlowId === row.id ? "Eliminando..." : "Eliminar flow"}
+                  >
+                    {reactivatingFlowId === row.id ? "Reactivando..." : "Reactivar flow"}
+                  </MenuItem>
+                ) : null}
+
+                {row.canDelete ? (
+                  <MenuItem
                     disabled={Boolean(deletingFlowId || cancellingFlowId || reactivatingFlowId)}
                     onClick={(event) => {
                       event.stopPropagation();
+                      setFlowActionsMenu(null);
                       void handleDeleteFlowAction(row.id);
                     }}
-                    showInMenu
-                  />,
-                ]
-              : []),
-          ];
+                  >
+                    {deletingFlowId === row.id ? "Eliminando..." : "Eliminar flow"}
+                  </MenuItem>
+                ) : null}
+              </Menu>
+            </Stack>
+          );
         },
       },
     ],
-    [cancellingFlowId, dateDraftByStepId, deletingFlowId, navigate, reactivatingFlowId, updatingDateByStepId]
+    [cancellingFlowId, dateDraftByStepId, deletingFlowId, flowActionsMenu, navigate, reactivatingFlowId, updatingDateByStepId]
   );
 
   const requirementColumns = useMemo<GridColDef<RequirementGridRow>[]>(
