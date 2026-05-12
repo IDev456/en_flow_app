@@ -10,6 +10,7 @@ import HourglassTopRoundedIcon from "@mui/icons-material/HourglassTopRounded";
 import InboxRoundedIcon from "@mui/icons-material/InboxRounded";
 import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
+import RestartAltRoundedIcon from "@mui/icons-material/RestartAltRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import ViewColumnRoundedIcon from "@mui/icons-material/ViewColumnRounded";
 import {
@@ -43,7 +44,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { PageContainer } from "../../../components/layout/PageContainer";
-import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, getWorkflow, listTriggers, listWorkflows } from "../api";
+import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, getWorkflow, listTriggers, listWorkflows, reactivateWorkflow } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Step, TriggerDetail, WorkflowDetail } from "../types";
 import { formatElapsedTime, getStatusTone } from "../utils";
@@ -76,6 +77,7 @@ type FlowGridRow = {
   requirementsLabel: string;
   requirementsCount: number;
   canCancel: boolean;
+  canReactivate: boolean;
   canDelete: boolean;
 };
 
@@ -169,7 +171,18 @@ function getStepRecord(step: Step | null) {
 }
 
 function canCancelWorkflow(workflow: WorkflowDetail) {
-  return ["pendiente", "en_proceso", "esperando_respuesta", "en_espera", "con_problema"].includes(workflow.estado);
+  const hasOperationalStep = workflow.steps.some((step) =>
+    ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado)
+  );
+
+  if (!workflow.steps.length) return false;
+  if (["en_proceso", "esperando_respuesta", "en_espera", "con_problema"].includes(workflow.estado)) return true;
+  if (workflow.estado === "pendiente") return hasOperationalStep;
+  return false;
+}
+
+function canReactivateWorkflow(workflow: WorkflowDetail) {
+  return workflow.estado === "cancelado";
 }
 
 function canDeleteWorkflow(workflow: WorkflowDetail) {
@@ -215,6 +228,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [flowToastOpen, setFlowToastOpen] = useState(false);
   const [flowToastMessage, setFlowToastMessage] = useState<string | null>(null);
   const [cancellingFlowId, setCancellingFlowId] = useState<string | null>(null);
+  const [reactivatingFlowId, setReactivatingFlowId] = useState<string | null>(null);
   const [deletingFlowId, setDeletingFlowId] = useState<string | null>(null);
   const [flowSearchOpen, setFlowSearchOpen] = useState(false);
   const [flowSearchValue, setFlowSearchValue] = useState("");
@@ -358,6 +372,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             : item.linkedRequirements.map((requirement) => requirement.descripcion?.trim() || `Req ${requirement.id.slice(0, 8)}`).join(" · "),
         requirementsCount: item.linkedRequirements.length,
         canCancel: canCancelWorkflow(item.workflow),
+        canReactivate: canReactivateWorkflow(item.workflow),
         canDelete: canDeleteWorkflow(item.workflow),
       };
     });
@@ -454,9 +469,10 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   async function handleCancelFlowAction(workflowId: string) {
     const workflow = workflowsById[workflowId];
     if (!workflow || !canCancelWorkflow(workflow)) return;
+    const currentTask = pickRelevantStep(workflow)?.nombre?.trim() || workflow.objetivo_final?.trim() || "Flow sin tarea actual";
 
     const confirmed = window.confirm(
-      "¿Cancelar este flow?\n\nNo se eliminarán tareas, registros ni requerimientos vinculados.\nEl flow quedará fuera de la operación activa."
+      `¿Cancelar este flow?\n\n${currentTask}\n\nEl flow saldrá de la operación activa y pasará a Cancelados.\nNo se eliminarán tareas, comentarios ni requerimientos vinculados.\nSi fue un error, luego podrás reactivarlo.`
     );
     if (!confirmed) return;
 
@@ -471,6 +487,30 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       setError(err instanceof Error ? err.message : "No se pudo cancelar el flow.");
     } finally {
       setCancellingFlowId(null);
+    }
+  }
+
+  async function handleReactivateFlowAction(workflowId: string) {
+    const workflow = workflowsById[workflowId];
+    if (!workflow || !canReactivateWorkflow(workflow)) return;
+    const currentTask = pickRelevantStep(workflow)?.nombre?.trim() || workflow.objetivo_final?.trim() || "Flow sin tarea actual";
+
+    const confirmed = window.confirm(
+      `¿Reactivar este flow?\n\n${currentTask}\n\nEl flow volverá a la operación y saldrá de Cancelados.\nNo se eliminarán tareas, comentarios ni requerimientos vinculados.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setReactivatingFlowId(workflowId);
+      setError(null);
+      await reactivateWorkflow(workflowId);
+      await loadData();
+      setFlowToastMessage("Flow reactivado.");
+      setFlowToastOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo reactivar el flow.");
+    } finally {
+      setReactivatingFlowId(null);
     }
   }
 
@@ -632,10 +672,25 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                     key="cancel"
                     icon={<CancelOutlinedIcon fontSize="small" />}
                     label={cancellingFlowId === row.id ? "Cancelando..." : "Cancelar flow"}
-                    disabled={Boolean(cancellingFlowId || deletingFlowId)}
+                    disabled={Boolean(cancellingFlowId || deletingFlowId || reactivatingFlowId)}
                     onClick={(event) => {
                       event.stopPropagation();
                       void handleCancelFlowAction(row.id);
+                    }}
+                    showInMenu
+                  />,
+                ]
+              : []),
+            ...(row.canReactivate
+              ? [
+                  <GridActionsCellItem
+                    key="reactivate"
+                    icon={<RestartAltRoundedIcon fontSize="small" />}
+                    label={reactivatingFlowId === row.id ? "Reactivando..." : "Reactivar flow"}
+                    disabled={Boolean(reactivatingFlowId || cancellingFlowId || deletingFlowId)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void handleReactivateFlowAction(row.id);
                     }}
                     showInMenu
                   />,
@@ -647,7 +702,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                     key="delete"
                     icon={<DeleteOutlineRoundedIcon fontSize="small" />}
                     label={deletingFlowId === row.id ? "Eliminando..." : "Eliminar flow"}
-                    disabled={Boolean(deletingFlowId || cancellingFlowId)}
+                    disabled={Boolean(deletingFlowId || cancellingFlowId || reactivatingFlowId)}
                     onClick={(event) => {
                       event.stopPropagation();
                       void handleDeleteFlowAction(row.id);
@@ -660,7 +715,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         },
       },
     ],
-    [cancellingFlowId, deletingFlowId, navigate]
+    [cancellingFlowId, deletingFlowId, navigate, reactivatingFlowId]
   );
 
   const requirementColumns = useMemo<GridColDef<RequirementGridRow>[]>(

@@ -220,6 +220,58 @@ class WorkflowService:
 
         return self.get_workflow(workflow_id)
 
+    def reactivate_workflow(self, workflow_id: str) -> WorkflowDetail:
+        workflow = self.get_workflow(workflow_id)
+        if workflow.estado == WorkflowStatus.FINALIZADO:
+            raise BusinessRuleError("No se puede reactivar un flow finalizado")
+        if workflow.estado != WorkflowStatus.CANCELADO:
+            raise BusinessRuleError("Solo se puede reactivar un flow cancelado")
+
+        now = utc_now()
+        active_steps = [step for step in workflow.steps if step.estado == StepStatus.ACTIVO]
+        waiting_external_steps = [step for step in workflow.steps if step.estado == StepStatus.ESPERANDO_RESPUESTA]
+        paused_steps = [step for step in workflow.steps if step.estado == StepStatus.ESPERA]
+        problem_steps = [step for step in workflow.steps if step.estado == StepStatus.PROBLEMA]
+        open_steps = [step for step in workflow.steps if step.estado in OPEN_STEP_STATUSES]
+        active_orders = sorted(step.orden for step in open_steps)
+        fallback_order = min((step.orden for step in workflow.steps), default=None)
+
+        if active_steps:
+            next_status = WorkflowStatus.EN_PROCESO
+            next_step_order = active_orders[0] if active_orders else fallback_order
+        elif waiting_external_steps:
+            next_status = WorkflowStatus.ESPERANDO_RESPUESTA
+            next_step_order = active_orders[0] if active_orders else fallback_order
+        elif paused_steps:
+            next_status = WorkflowStatus.EN_ESPERA
+            next_step_order = active_orders[0] if active_orders else fallback_order
+        elif problem_steps:
+            next_status = WorkflowStatus.CON_PROBLEMA
+            next_step_order = active_orders[0] if active_orders else fallback_order
+        elif workflow.steps and any(step.estado != StepStatus.COMPLETADO for step in workflow.steps):
+            next_status = WorkflowStatus.PENDIENTE
+            next_step_order = min((step.orden for step in workflow.steps if step.estado != StepStatus.COMPLETADO), default=fallback_order)
+        else:
+            # If the workflow is inconsistent (all completed or no steps), keep it operable after reactivation.
+            next_status = WorkflowStatus.EN_PROCESO
+            next_step_order = fallback_order
+
+        updated_workflow = workflow.model_copy(
+            update={
+                "estado": next_status,
+                "fecha_fin": None,
+                "pasos_activos": active_orders,
+                "paso_actual": next_step_order,
+                "total_pasos": len(workflow.steps),
+            }
+        )
+        self.repository.save_workflow(updated_workflow)
+
+        for requirement_id in self._collect_requirement_ids(workflow):
+            self._reconcile_trigger_status(requirement_id, now, preferred_workflow_id=workflow.id)
+
+        return self.get_workflow(workflow_id)
+
     def get_workflow_steps(self, workflow_id: str) -> list[StepInstancePublic]:
         workflow = self.get_workflow(workflow_id)
         return workflow.steps

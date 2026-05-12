@@ -74,6 +74,10 @@ export function cancelWorkflow(workflowId: string) {
   return apiPatch<WorkflowDetail>(`/workflows/${workflowId}/cancel`, {});
 }
 
+export function reactivateWorkflow(workflowId: string) {
+  return apiPatch<WorkflowDetail>(`/workflows/${workflowId}/reactivate`, {});
+}
+
 export function deleteWorkflow(workflowId: string) {
   return apiDelete(`/workflows/${workflowId}`);
 }
