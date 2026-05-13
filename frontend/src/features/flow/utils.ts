@@ -67,20 +67,84 @@ export function formatCalendarDate(value: string | null) {
     return "Sin fecha";
   }
 
-  const matched = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
-  if (!matched) {
+  const calendarDay = toCalendarDayValue(value);
+  if (calendarDay === null) {
     return formatDateOnly(value);
   }
 
-  const year = Number(matched[1]);
-  const month = Number(matched[2]);
-  const day = Number(matched[3]);
+  const date = new Date(calendarDay * 86400000);
   return new Intl.DateTimeFormat("es-AR", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
     timeZone: "UTC",
-  }).format(new Date(Date.UTC(year, month - 1, day)));
+  }).format(date);
+}
+
+function padCalendarPart(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function parseCalendarValue(value: string) {
+  const matched = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (matched) {
+    return {
+      year: Number(matched[1]),
+      month: Number(matched[2]),
+      day: Number(matched[3]),
+    };
+  }
+
+  const parsed = new Date(value);
+  const parsedTime = parsed.getTime();
+  if (!Number.isFinite(parsedTime)) {
+    return null;
+  }
+
+  return {
+    year: parsed.getFullYear(),
+    month: parsed.getMonth() + 1,
+    day: parsed.getDate(),
+  };
+}
+
+export function formatLocalDateInput(value: Date) {
+  const year = value.getFullYear();
+  const month = padCalendarPart(value.getMonth() + 1);
+  const day = padCalendarPart(value.getDate());
+  return `${year}-${month}-${day}`;
+}
+
+export function getTodayLocalDateInput() {
+  return formatLocalDateInput(new Date());
+}
+
+export function toCalendarDayValue(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = parseCalendarValue(value);
+  if (!parsed) {
+    return null;
+  }
+
+  const dayMs = Date.UTC(parsed.year, parsed.month - 1, parsed.day);
+  return Math.floor(dayMs / 86400000);
+}
+
+export function getCalendarDayDiff(targetValue: string | null, baseValue: string | null = null) {
+  const targetDay = toCalendarDayValue(targetValue);
+  if (targetDay === null) {
+    return null;
+  }
+
+  const baseDay = baseValue ? toCalendarDayValue(baseValue) : toCalendarDayValue(getTodayLocalDateInput());
+  if (baseDay === null) {
+    return null;
+  }
+
+  return targetDay - baseDay;
 }
 
 export function formatRelativeCalendarDay(value: string | null) {
@@ -88,25 +152,10 @@ export function formatRelativeCalendarDay(value: string | null) {
     return null;
   }
 
-  const matched = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
-  let targetDayMs: number | null = null;
-  if (matched) {
-    const year = Number(matched[1]);
-    const month = Number(matched[2]);
-    const day = Number(matched[3]);
-    targetDayMs = Date.UTC(year, month - 1, day);
-  } else {
-    const parsed = new Date(value);
-    const parsedTime = parsed.getTime();
-    if (!Number.isFinite(parsedTime)) {
-      return null;
-    }
-    targetDayMs = Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+  const diffDays = getCalendarDayDiff(value);
+  if (diffDays === null) {
+    return null;
   }
-
-  const now = new Date();
-  const todayMs = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-  const diffDays = Math.round((targetDayMs - todayMs) / 86400000);
 
   if (diffDays === 0) {
     return "Hoy";

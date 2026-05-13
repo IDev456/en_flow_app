@@ -26,7 +26,7 @@ type CompleteStepDialogProps = {
 export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteStepDialogProps) {
   const [transition, setTransition] = useState<StepTransitionType>("next_task");
   const [nextTaskName, setNextTaskName] = useState("");
-  const [nextTaskExecutionDate, setNextTaskExecutionDate] = useState("");
+  const [nextTaskReminderDate, setNextTaskReminderDate] = useState("");
   const [comment, setComment] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -37,7 +37,7 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
     if (open) {
       setTransition("next_task");
       setNextTaskName("");
-      setNextTaskExecutionDate("");
+      setNextTaskReminderDate("");
       setComment("");
       setError(null);
       setSubmitting(false);
@@ -66,7 +66,7 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
           transition === "next_task"
             ? {
                 nombre: nextTaskName.trim(),
-                fecha_ejecucion_estimada: nextTaskExecutionDate ? `${nextTaskExecutionDate}T00:00:00Z` : null,
+                fecha_vencimiento: nextTaskReminderDate ? `${nextTaskReminderDate}T00:00:00Z` : null,
               }
             : null,
         external_wait: transition === "wait_external" ? { que_se_espera: "Esperando respuesta externa" } : null,
@@ -114,11 +114,11 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
                 autoFocus
               />
               <TextField
-                label="Fecha"
+                label="Recordatorio"
                 type="date"
-                value={nextTaskExecutionDate}
-                onChange={(event) => setNextTaskExecutionDate(event.target.value)}
-                helperText="Posible fecha de ejecución"
+                value={nextTaskReminderDate}
+                onChange={(event) => setNextTaskReminderDate(event.target.value)}
+                helperText="Fecha recordatorio"
                 slotProps={{ inputLabel: { shrink: true } }}
                 disabled={submitting}
               />

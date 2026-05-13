@@ -91,7 +91,6 @@ export function StepDetailPanel({
   const [resolveNextTaskDescription, setResolveNextTaskDescription] = useState("");
   const [resolveNextTaskAssignee, setResolveNextTaskAssignee] = useState("");
   const [resolveNextTaskDueDate, setResolveNextTaskDueDate] = useState("");
-  const [resolveNextTaskExecutionDate, setResolveNextTaskExecutionDate] = useState("");
   const [resolveFinishReason, setResolveFinishReason] = useState("");
   const [resolveAttachments, setResolveAttachments] = useState<AttachmentInput[]>([]);
   const [resolving, setResolving] = useState(false);
@@ -131,7 +130,6 @@ export function StepDetailPanel({
     setResolveNextTaskDescription("");
     setResolveNextTaskAssignee("");
     setResolveNextTaskDueDate("");
-    setResolveNextTaskExecutionDate("");
     setResolveFinishReason("");
     setResolveAttachments([]);
     setResolveError(null);
@@ -285,8 +283,7 @@ export function StepDetailPanel({
                 nombre: resolveNextTaskName.trim(),
                 descripcion: resolveNextTaskDescription.trim() || null,
                 asignado_a: resolveNextTaskAssignee.trim() || null,
-                fecha_vencimiento: resolveNextTaskDueDate || null,
-                fecha_ejecucion_estimada: resolveNextTaskExecutionDate ? `${resolveNextTaskExecutionDate}T00:00:00Z` : null,
+                fecha_vencimiento: resolveNextTaskDueDate ? `${resolveNextTaskDueDate}T00:00:00Z` : null,
               }
             : null,
         finish_data:
@@ -800,18 +797,11 @@ export function StepDetailPanel({
                     <TextField label="Detalle / contexto" multiline minRows={2} value={resolveNextTaskDescription} onChange={(event) => setResolveNextTaskDescription(event.target.value)} />
                     <TextField label="Asignado a" value={resolveNextTaskAssignee} onChange={(event) => setResolveNextTaskAssignee(event.target.value)} />
                     <TextField
-                      label="Fecha"
+                      label="Recordatorio"
                       type="date"
-                      value={resolveNextTaskExecutionDate}
-                      onChange={(event) => setResolveNextTaskExecutionDate(event.target.value)}
-                      helperText="Posible fecha de ejecución"
-                      slotProps={{ inputLabel: { shrink: true } }}
-                    />
-                    <TextField
-                      label="Fecha de vencimiento"
-                      type="datetime-local"
                       value={resolveNextTaskDueDate}
                       onChange={(event) => setResolveNextTaskDueDate(event.target.value)}
+                      helperText="Fecha recordatorio"
                       slotProps={{ inputLabel: { shrink: true } }}
                     />
                   </>

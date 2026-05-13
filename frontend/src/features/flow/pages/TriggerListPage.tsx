@@ -11,11 +11,13 @@ import FilterListRoundedIcon from "@mui/icons-material/FilterListRounded";
 import HourglassTopRoundedIcon from "@mui/icons-material/HourglassTopRounded";
 import InboxRoundedIcon from "@mui/icons-material/InboxRounded";
 import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
+import LocalFireDepartmentRoundedIcon from "@mui/icons-material/LocalFireDepartmentRounded";
 import MoreVertRoundedIcon from "@mui/icons-material/MoreVertRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import ScheduleRoundedIcon from "@mui/icons-material/ScheduleRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import ViewColumnRoundedIcon from "@mui/icons-material/ViewColumnRounded";
+import { useTheme } from "@mui/material/styles";
 import {
   Alert,
   Box,
@@ -57,7 +59,16 @@ import { useToastContext } from "../../../components/Toast";
 import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, getWorkflow, listTriggers, listWorkflows, reactivateWorkflow, updateStepDate } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Step, TriggerDetail, WorkflowDetail } from "../types";
-import { formatCalendarDate, formatDateOnly, formatElapsedTime, formatRelativeCalendarDay, getStatusTone } from "../utils";
+import {
+  formatCalendarDate,
+  formatElapsedTime,
+  formatLocalDateInput,
+  formatRelativeCalendarDay,
+  getCalendarDayDiff,
+  getStatusTone,
+  getTodayLocalDateInput,
+  toCalendarDayValue,
+} from "../utils";
 
 type ViewMode = "requirements" | "flows";
 type FlowFilter = "all" | "active" | "waiting" | "finalized" | "cancelled";
@@ -87,6 +98,8 @@ type FlowGridRow = {
   lastRecord: string;
   movementLabel: string;
   movementAt: number;
+  movementDays: number | null;
+  isDueToday: boolean;
   requirementsLabel: string;
   requirementsCount: number;
   canCancel: boolean;
@@ -180,7 +193,12 @@ function pickRelevantStep(workflow: WorkflowDetail): Step | null {
 
 function getLatestMovementAt(workflow: WorkflowDetail) {
   return workflow.steps.reduce<string | null>((latest, step) => {
-    const candidate = step.ultimo_comentario_fecha ?? step.fecha_estado_actual;
+    const commentAt = step.ultimo_comentario_fecha;
+    const stateAt = step.fecha_estado_actual;
+    const candidate =
+      commentAt && stateAt
+        ? (new Date(commentAt).getTime() > new Date(stateAt).getTime() ? commentAt : stateAt)
+        : (commentAt ?? stateAt);
     if (!candidate) return latest;
     if (!latest) return candidate;
     return new Date(candidate).getTime() > new Date(latest).getTime() ? candidate : latest;
@@ -223,13 +241,12 @@ function toDateInputValue(value: string | null | undefined) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(shortValue)) return shortValue;
   const parsed = new Date(value);
   if (!Number.isFinite(parsed.getTime())) return "";
-  return parsed.toISOString().slice(0, 10);
+  return formatLocalDateInput(parsed);
 }
 
 function toDateSortValue(dateInput: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) return Number.MAX_SAFE_INTEGER;
-  const [year, month, day] = dateInput.split("-").map((value) => Number(value));
-  return Date.UTC(year, month - 1, day);
+  const dayValue = toCalendarDayValue(dateInput);
+  return dayValue ?? Number.MAX_SAFE_INTEGER;
 }
 
 function fromDateInputValue(dateInput: string) {
@@ -238,21 +255,45 @@ function fromDateInputValue(dateInput: string) {
   return `${trimmed}T00:00:00Z`;
 }
 
-function formatNearestFuture(executionAtMs: number): string {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((executionAtMs - today.getTime()) / 86400000);
+function getMovementHeatVisual(days: number | null) {
+  if (days === null) {
+    return null;
+  }
+  if (days <= 1) {
+    return { color: "warning.light", opacity: 0.45 };
+  }
+  if (days <= 3) {
+    return { color: "warning.main", opacity: 0.62 };
+  }
+  if (days <= 6) {
+    return { color: "warning.dark", opacity: 0.78 };
+  }
+  return { color: "error.main", opacity: 0.94 };
+}
+
+function formatNearestFuture(executionDay: number, todayDay: number): string {
+  const diffDays = executionDay - todayDay;
   if (diffDays === 1) return "mañana";
   if (diffDays <= 6) return `en ${diffDays} días`;
-  return `el ${new Date(executionAtMs).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })}`;
+  return `el ${formatCalendarDate(new Date(executionDay * 86400000).toISOString())}`;
 }
 
 function formatFutureGroupLabel(dateInput: string, todayInput: string) {
-  const diffDays = Math.round((toDateSortValue(dateInput) - toDateSortValue(todayInput)) / 86400000);
-  const formattedDate = formatDateOnly(`${dateInput}T00:00:00Z`);
+  const diffDays = getCalendarDayDiff(dateInput, todayInput) ?? 0;
+  const formattedDate = formatCalendarDate(dateInput);
   if (diffDays === 1) return `Mañana · ${formattedDate}`;
   if (diffDays === 2) return `Pasado mañana · ${formattedDate}`;
   return formattedDate;
+}
+
+function getStatusPulseColor(statusValue: string, isDark: boolean) {
+  const tone = getStatusTone(statusValue);
+  if (tone === "en_proceso" || tone === "activo") return isDark ? "rgba(2, 136, 209, 0.3)" : "rgba(2, 136, 209, 0.18)";
+  if (tone === "espera" || tone === "espera_externa") return isDark ? "rgba(237, 108, 2, 0.3)" : "rgba(237, 108, 2, 0.2)";
+  if (tone === "problema" || tone === "error") return isDark ? "rgba(211, 47, 47, 0.3)" : "rgba(211, 47, 47, 0.2)";
+  if (tone === "finalizado" || tone === "completado" || tone === "resuelto") return isDark ? "rgba(46, 125, 50, 0.3)" : "rgba(46, 125, 50, 0.2)";
+  if (tone === "cancelado") return isDark ? "rgba(158, 158, 158, 0.25)" : "rgba(117, 117, 117, 0.18)";
+  return isDark ? "rgba(2, 136, 209, 0.3)" : "rgba(2, 136, 209, 0.18)";
 }
 
 function toQuickFilterValues(search: string) {
@@ -271,6 +312,7 @@ type GridToolbarProps = {
 };
 
 export function TriggerListPage({ defaultView = "requirements", lockView = false, title = "Proyectos" }: TriggerListPageProps) {
+  const theme = useTheme();
   const { showToast } = useToastContext();
   const [triggers, setTriggers] = useState<TriggerDetail[]>([]);
   const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
@@ -414,6 +456,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     );
   }, [triggers]);
 
+  const today = getTodayLocalDateInput();
+  const todaySortValue = toDateSortValue(today);
   const flowRows = useMemo<FlowGridRow[]>(() => {
     return flowCards.map((item) => {
       const step = item.relevantStep;
@@ -422,7 +466,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         step && ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado)
           ? "Disparador"
           : "Última tarea";
-      const movementAt = getDateValue(item.latestMovementAt) ?? 0;
+      const movementAtValue = getDateValue(item.latestMovementAt);
+      const movementAt = movementAtValue ?? Number.MAX_SAFE_INTEGER;
+      const movementDateInput = movementAtValue === null ? null : formatLocalDateInput(new Date(movementAtValue));
+      const movementDayDiff = getCalendarDayDiff(movementDateInput, today);
+      const movementDays = movementDayDiff === null ? null : Math.max(0, -movementDayDiff);
       return {
         id: item.workflow.id,
         stepId: step?.id ?? null,
@@ -433,7 +481,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         executionAt: executionDateInput ? toDateSortValue(executionDateInput) : Number.MAX_SAFE_INTEGER,
         lastRecord: getStepRecord(step),
         movementLabel: formatElapsedTime(item.latestMovementAt) ?? "Sin movimiento reciente",
-        movementAt: movementAt || Number.MAX_SAFE_INTEGER,
+        movementAt,
+        movementDays,
+        isDueToday: executionDateInput === today,
         requirementsLabel:
           item.linkedRequirements.length === 0
             ? "Sin proyectos"
@@ -444,9 +494,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         canDelete: canDeleteWorkflow(item.workflow),
       };
     });
-  }, [flowCards]);
+  }, [flowCards, today]);
 
-  const today = new Date().toISOString().slice(0, 10);
   const mainRows = useMemo(
     () => flowRows.filter((row) => !row.executionDateInput || row.executionDateInput <= today),
     [flowRows, today]
@@ -495,7 +544,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       return;
     }
 
-    const isoValue = nextValue ? new Date(nextValue).toISOString() : null;
+    const isoValue = fromDateInputValue(nextValue);
 
     try {
       await updateStepDate(row.stepId, { fecha_vencimiento: isoValue });
@@ -781,15 +830,16 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
           const originalValue = row.executionDateInput ? row.executionDateInput.slice(0, 10) : "";
           const isEditing = pendingDates.has(row.id);
           const showInput = isEditing;
-          const dateIsoValue = originalValue ? `${originalValue}T00:00:00Z` : null;
           const isFutureRow = Boolean(row.executionDateInput && row.executionDateInput > today);
 
           if (!showInput) {
             if (originalValue) {
-              const relativeLabel = !isFutureRow ? formatRelativeCalendarDay(dateIsoValue) : null;
-              const dateLabel = relativeLabel ?? formatCalendarDate(dateIsoValue);
-              const absoluteDateLabel = formatCalendarDate(dateIsoValue);
+              const relativeLabel = !isFutureRow ? formatRelativeCalendarDay(originalValue) : null;
+              const dateLabel = relativeLabel ?? formatCalendarDate(originalValue);
+              const absoluteDateLabel = formatCalendarDate(originalValue);
               const secondaryLabel = relativeLabel ? absoluteDateLabel : null;
+              const shouldPulseToday = row.isDueToday && !isEditing;
+              const pulseColor = getStatusPulseColor(row.status, theme.palette.mode === "dark");
               return (
                 <Tooltip title={absoluteDateLabel}>
                   <ButtonBase
@@ -810,7 +860,25 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       justifyContent: "center",
                     }}
                   >
-                    <Stack spacing={0} sx={{ alignItems: "center", minWidth: 134 }}>
+                    <Stack
+                      spacing={0}
+                      sx={{
+                        alignItems: "center",
+                        minWidth: 134,
+                        borderRadius: 0.75,
+                        ...(shouldPulseToday
+                          ? {
+                              px: 0.35,
+                              animation: "todaySoftPulse 2.2s ease-in-out infinite",
+                              "@keyframes todaySoftPulse": {
+                                "0%": { backgroundColor: "transparent" },
+                                "50%": { backgroundColor: pulseColor },
+                                "100%": { backgroundColor: "transparent" },
+                              },
+                            }
+                          : {}),
+                      }}
+                    >
                       <Typography variant="body2" sx={{ fontSize: "0.82rem", lineHeight: 1.2 }}>
                         {dateLabel}
                       </Typography>
@@ -888,11 +956,19 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         minWidth: 120,
         align: "center",
         headerAlign: "center",
-        renderCell: (params) => (
-          <Typography variant="caption" color="text.secondary">
-            {params.row.movementLabel}
-          </Typography>
-        ),
+        renderCell: (params) => {
+          const heatVisual = getMovementHeatVisual(params.row.movementDays);
+          return (
+            <Stack direction="row" spacing={0.45} sx={{ alignItems: "center", justifyContent: "center" }}>
+              <Typography variant="caption" color="text.secondary">
+                {params.row.movementLabel}
+              </Typography>
+              {heatVisual ? (
+                <LocalFireDepartmentRoundedIcon sx={{ fontSize: 14, color: heatVisual.color, opacity: heatVisual.opacity }} />
+              ) : null}
+            </Stack>
+          );
+        },
       },
       {
         field: "requirementsLabel",
@@ -1016,7 +1092,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         },
       },
     ],
-    [cancellingFlowId, deletingFlowId, flowActionsMenu, navigate, pendingDates, reactivatingFlowId, today]
+    [cancellingFlowId, deletingFlowId, flowActionsMenu, navigate, pendingDates, reactivatingFlowId, theme.palette.mode, today]
   );
 
   const requirementColumns = useMemo<GridColDef<RequirementGridRow>[]>(
@@ -1407,7 +1483,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   />
                 }
               >
-                {`Programados para más adelante (${futureRows.length})${nearestFutureMs ? ` · próximo ${formatNearestFuture(nearestFutureMs)}` : ""}`}
+                {`Programados para más adelante (${futureRows.length})${nearestFutureMs ? ` · próximo ${formatNearestFuture(nearestFutureMs, todaySortValue)}` : ""}`}
               </Button>
               <Collapse in={futuresOpen}>
                 <Stack spacing={0} sx={{ px: 1.25, pb: 1.25 }}>

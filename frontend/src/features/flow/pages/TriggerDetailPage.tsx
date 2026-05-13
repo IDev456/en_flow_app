@@ -39,7 +39,7 @@ export function TriggerDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newWorkflowFirstDescription, setNewWorkflowFirstDescription] = useState("");
-  const [newWorkflowExecutionDate, setNewWorkflowExecutionDate] = useState("");
+  const [newWorkflowReminderDate, setNewWorkflowReminderDate] = useState("");
   const [newWorkflowError, setNewWorkflowError] = useState<string | null>(null);
   const [newWorkflowSuccess, setNewWorkflowSuccess] = useState<string | null>(null);
   const [creatingWorkflow, setCreatingWorkflow] = useState(false);
@@ -231,13 +231,12 @@ export function TriggerDetailPage() {
           nombre: firstStepName,
           descripcion: newWorkflowFirstDescription.trim(),
           asignado_a: DEFAULT_ACTOR,
-          fecha_vencimiento: null,
-          fecha_ejecucion_estimada: newWorkflowExecutionDate ? `${newWorkflowExecutionDate}T00:00:00Z` : null,
+          fecha_vencimiento: newWorkflowReminderDate ? `${newWorkflowReminderDate}T00:00:00Z` : null,
         },
       });
       setNewWorkflowSuccess("Nuevo flow asociado creado.");
       setNewWorkflowFirstDescription("");
-      setNewWorkflowExecutionDate("");
+      setNewWorkflowReminderDate("");
       await loadTrigger();
       navigate(`/workflows/${newWorkflow.id}`);
     } catch (err) {
@@ -257,9 +256,22 @@ export function TriggerDetailPage() {
 
   function getLatestWorkflowMovementAt(workflow: WorkflowDetail) {
     return workflow.steps.reduce<string | null>((latest, step) => {
-      if (!latest) return step.fecha_estado_actual;
-      return new Date(step.fecha_estado_actual).getTime() > new Date(latest).getTime() ? step.fecha_estado_actual : latest;
+      const commentAt = step.ultimo_comentario_fecha;
+      const stateAt = step.fecha_estado_actual;
+      const candidate =
+        commentAt && stateAt
+          ? (new Date(commentAt).getTime() > new Date(stateAt).getTime() ? commentAt : stateAt)
+          : (commentAt ?? stateAt);
+      if (!candidate) return latest;
+      if (!latest) return candidate;
+      return new Date(candidate).getTime() > new Date(latest).getTime() ? candidate : latest;
     }, null);
+  }
+
+  function getWorkflowLastStep(workflow: WorkflowDetail) {
+    if (workflow.steps.length === 0) return null;
+    const byOrderDesc = [...workflow.steps].sort((left, right) => right.orden - left.orden);
+    return byOrderDesc[0] ?? null;
   }
 
   function getWorkflowDisplayStatus(workflow: WorkflowDetail) {
@@ -464,11 +476,11 @@ export function TriggerDetailPage() {
                   disabled={creatingWorkflow}
                 />
                 <TextField
-                  label="Fecha"
+                  label="Recordatorio"
                   type="date"
-                  value={newWorkflowExecutionDate}
-                  onChange={(event) => setNewWorkflowExecutionDate(event.target.value)}
-                  helperText="Posible fecha de ejecución"
+                  value={newWorkflowReminderDate}
+                  onChange={(event) => setNewWorkflowReminderDate(event.target.value)}
+                  helperText="Fecha recordatorio"
                   disabled={creatingWorkflow}
                   slotProps={{ inputLabel: { shrink: true } }}
                 />
@@ -492,7 +504,9 @@ export function TriggerDetailPage() {
                   <Stack spacing={1}>
                     {trigger.workflow_ids.map((workflowId) => {
                       const workflow = workflowsById[workflowId];
-                      const currentStep = workflow ? getWorkflowActiveStep(workflow) : null;
+                      const activeStep = workflow ? getWorkflowActiveStep(workflow) : null;
+                      const lastStep = workflow ? getWorkflowLastStep(workflow) : null;
+                      const displayStep = activeStep ?? lastStep;
                       const totalSteps = workflow?.steps.length ?? 0;
                       const commentElapsed = formatElapsedTime(workflowLatestCommentById[workflowId] ?? null);
                       return (
@@ -523,16 +537,19 @@ export function TriggerDetailPage() {
                                 sx={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 1 }}
                               >
                                 <Typography sx={{ fontWeight: 700, fontSize: "0.875rem" }}>
-                                  {currentStep?.nombre ??
-                                    (workflow?.estado === "finalizado" ? "Completado" :
-                                     workflow?.estado === "cancelado" ? "Cancelado" : "Sin tarea activa")}
+                                  {displayStep?.nombre ??
+                                    (workflow?.estado === "cancelado" ? "Flow cancelado" : "Sin tareas")}
                                 </Typography>
                                 {workflow && <StatusBadge value={getWorkflowDisplayStatus(workflow)} />}
                               </Stack>
                               {workflow ? (
                                 <>
                                   <Typography variant="caption" color="text.secondary">
-                                    {currentStep ? `Paso ${currentStep.orden} de ${totalSteps}` : `${totalSteps} tareas`}
+                                    {activeStep
+                                      ? `Paso ${activeStep.orden} de ${totalSteps}`
+                                      : lastStep
+                                        ? `Última tarea · paso ${lastStep.orden} de ${totalSteps}`
+                                        : `${totalSteps} tareas`}
                                   </Typography>
                                   {countExternalWaitingSteps(workflow) > 0 && (
                                     <Typography variant="caption" color="info.light">
