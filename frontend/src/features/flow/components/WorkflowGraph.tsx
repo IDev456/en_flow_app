@@ -24,14 +24,95 @@ type WorkflowGraphProps = {
   onOpenTrigger: () => void;
   onCompleteStepIntent?: (stepId: string) => void;
   onRenameStep?: (step: Step, nextName: string) => Promise<void>;
+  onUpdateStepReminderDate?: (stepId: string, dateInput: string) => Promise<void>;
 };
 
 export function WorkflowGraph(props: WorkflowGraphProps) {
-  if (props.variant === "gitlog") {
-    return <GitLogWorkflowGraph {...props} />;
+  const [editingReminderStepId, setEditingReminderStepId] = useState<string | null>(null);
+  const [savingReminderStepId, setSavingReminderStepId] = useState<string | null>(null);
+  const [reminderDraftByStepId, setReminderDraftByStepId] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!editingReminderStepId) return;
+    if (props.steps.some((step) => step.id === editingReminderStepId)) return;
+    setEditingReminderStepId(null);
+  }, [editingReminderStepId, props.steps]);
+
+  function toDateInputValue(value: string | null | undefined) {
+    return value ? value.slice(0, 10) : "";
   }
 
-  return <VerticalWorkflowGraph {...props} />;
+  function startReminderEdit(step: Step) {
+    setReminderDraftByStepId((previous) => ({
+      ...previous,
+      [step.id]: toDateInputValue(step.fecha_vencimiento),
+    }));
+    setEditingReminderStepId(step.id);
+  }
+
+  function cancelReminderEdit(step: Step) {
+    setReminderDraftByStepId((previous) => ({
+      ...previous,
+      [step.id]: toDateInputValue(step.fecha_vencimiento),
+    }));
+    setEditingReminderStepId((current) => (current === step.id ? null : current));
+  }
+
+  async function saveReminderEdit(step: Step) {
+    if (!props.onUpdateStepReminderDate) return;
+    const originalValue = toDateInputValue(step.fecha_vencimiento);
+    const draftValue = (reminderDraftByStepId[step.id] ?? originalValue).trim();
+    if (draftValue === originalValue) {
+      setEditingReminderStepId((current) => (current === step.id ? null : current));
+      return;
+    }
+
+    try {
+      setSavingReminderStepId(step.id);
+      await props.onUpdateStepReminderDate(step.id, draftValue);
+      setEditingReminderStepId((current) => (current === step.id ? null : current));
+    } finally {
+      setSavingReminderStepId((current) => (current === step.id ? null : current));
+    }
+  }
+
+  if (props.variant === "gitlog") {
+    return (
+      <GitLogWorkflowGraph
+        {...props}
+        editingReminderStepId={editingReminderStepId}
+        savingReminderStepId={savingReminderStepId}
+        reminderDraftByStepId={reminderDraftByStepId}
+        onReminderDraftChange={(stepId, value) =>
+          setReminderDraftByStepId((previous) => ({
+            ...previous,
+            [stepId]: value,
+          }))
+        }
+        onStartReminderEdit={startReminderEdit}
+        onCancelReminderEdit={cancelReminderEdit}
+        onSaveReminderEdit={saveReminderEdit}
+      />
+    );
+  }
+
+  return (
+    <VerticalWorkflowGraph
+      {...props}
+      editingReminderStepId={editingReminderStepId}
+      savingReminderStepId={savingReminderStepId}
+      reminderDraftByStepId={reminderDraftByStepId}
+      onReminderDraftChange={(stepId, value) =>
+        setReminderDraftByStepId((previous) => ({
+          ...previous,
+          [stepId]: value,
+        }))
+      }
+      onStartReminderEdit={startReminderEdit}
+      onCancelReminderEdit={cancelReminderEdit}
+      onSaveReminderEdit={saveReminderEdit}
+    />
+  );
 }
 
 function formatExpectedExternalEventLabel(expected?: string | null): string | null {
@@ -109,24 +190,111 @@ function renderStepRecordsIndicator(hasRecords: boolean, onClick: () => void): R
   );
 }
 
-function renderStepReminder(step: Step): React.ReactElement {
+type ReminderEditorProps = {
+  step: Step;
+  editingReminderStepId: string | null;
+  savingReminderStepId: string | null;
+  reminderDraftByStepId: Record<string, string>;
+  onUpdateStepReminderDate?: (stepId: string, dateInput: string) => Promise<void>;
+  onReminderDraftChange: (stepId: string, value: string) => void;
+  onStartReminderEdit: (step: Step) => void;
+  onCancelReminderEdit: (step: Step) => void;
+  onSaveReminderEdit: (step: Step) => Promise<void>;
+};
+
+function renderStepReminder({
+  step,
+  editingReminderStepId,
+  savingReminderStepId,
+  reminderDraftByStepId,
+  onUpdateStepReminderDate,
+  onReminderDraftChange,
+  onStartReminderEdit,
+  onCancelReminderEdit,
+  onSaveReminderEdit,
+}: ReminderEditorProps): React.ReactElement {
   const reminder = step.fecha_vencimiento;
   const relativeLabel = reminder ? formatRelativeCalendarDay(reminder) : null;
   const absoluteLabel = reminder ? formatCalendarDate(reminder) : null;
   const mainLabel = relativeLabel ?? absoluteLabel ?? "Sin recordatorio";
+  const isEditing = editingReminderStepId === step.id;
+  const isSaving = savingReminderStepId === step.id;
+  const originalValue = reminder ? reminder.slice(0, 10) : "";
+  const value = reminderDraftByStepId[step.id] ?? originalValue;
 
   return (
     <Stack spacing={0.1} sx={{ mt: 0.5 }}>
       <Typography variant="caption" color="text.secondary">
         Recordatorio
       </Typography>
-      <Typography variant="caption" color={reminder ? "text.primary" : "text.secondary"}>
-        {mainLabel}
-        {reminder && relativeLabel && absoluteLabel ? ` · ${absoluteLabel}` : ""}
-      </Typography>
+      {isEditing ? (
+        <TextField
+          type="date"
+          size="small"
+          value={value}
+          autoFocus
+          disabled={isSaving}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(event) => {
+            event.stopPropagation();
+            onReminderDraftChange(step.id, event.target.value);
+          }}
+          onBlur={() => {
+            void onSaveReminderEdit(step);
+          }}
+          onKeyDown={(event) => {
+            event.stopPropagation();
+            if (event.key === "Escape") {
+              event.preventDefault();
+              onCancelReminderEdit(step);
+              (event.target as HTMLInputElement).blur();
+            }
+            if (event.key === "Enter") {
+              event.preventDefault();
+              (event.target as HTMLInputElement).blur();
+            }
+          }}
+          sx={{ maxWidth: 190, "& input": { fontSize: "0.78rem", padding: "4px 8px" } }}
+        />
+      ) : onUpdateStepReminderDate ? (
+        <ButtonBase
+          onClick={(event) => {
+            event.stopPropagation();
+            onStartReminderEdit(step);
+          }}
+          sx={{
+            width: "fit-content",
+            borderRadius: 1,
+            textAlign: "left",
+            "&:hover .reminder-label": {
+              textDecoration: "underline",
+            },
+          }}
+        >
+          <Typography className="reminder-label" variant="caption" color={reminder ? "text.primary" : "text.secondary"}>
+            {mainLabel}
+            {reminder && relativeLabel && absoluteLabel ? ` · ${absoluteLabel}` : ""}
+          </Typography>
+        </ButtonBase>
+      ) : (
+        <Typography variant="caption" color={reminder ? "text.primary" : "text.secondary"}>
+          {mainLabel}
+          {reminder && relativeLabel && absoluteLabel ? ` · ${absoluteLabel}` : ""}
+        </Typography>
+      )}
     </Stack>
   );
 }
+
+type ReminderEditingStateProps = {
+  editingReminderStepId: string | null;
+  savingReminderStepId: string | null;
+  reminderDraftByStepId: Record<string, string>;
+  onReminderDraftChange: (stepId: string, value: string) => void;
+  onStartReminderEdit: (step: Step) => void;
+  onCancelReminderEdit: (step: Step) => void;
+  onSaveReminderEdit: (step: Step) => Promise<void>;
+};
 
 function getMutedSurface(theme: Theme) {
   return alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.16 : 0.52);
@@ -367,7 +535,15 @@ function VerticalWorkflowGraph({
   onOpenStep,
   onCompleteStepIntent,
   onRenameStep,
-}: WorkflowGraphProps) {
+  onUpdateStepReminderDate,
+  editingReminderStepId,
+  savingReminderStepId,
+  reminderDraftByStepId,
+  onReminderDraftChange,
+  onStartReminderEdit,
+  onCancelReminderEdit,
+  onSaveReminderEdit,
+}: WorkflowGraphProps & ReminderEditingStateProps) {
   const theme = useTheme();
   const viewportRef = useRef<HTMLDivElement>(null);
   const selectedCardRef = useRef<HTMLDivElement | null>(null);
@@ -568,7 +744,17 @@ function VerticalWorkflowGraph({
                       />
 
                       {renderStepTiming(step)}
-                      {renderStepReminder(step)}
+                      {renderStepReminder({
+                        step,
+                        editingReminderStepId,
+                        savingReminderStepId,
+                        reminderDraftByStepId,
+                        onUpdateStepReminderDate,
+                        onReminderDraftChange,
+                        onStartReminderEdit,
+                        onCancelReminderEdit,
+                        onSaveReminderEdit,
+                      })}
                       {renderStepRecordsIndicator(hasRecords, () => onOpenStep(step.id))}
                     </Stack>
                   </Box>
@@ -588,7 +774,15 @@ function GitLogWorkflowGraph({
   stepHasRecords,
   onOpenStep,
   onRenameStep,
-}: WorkflowGraphProps) {
+  onUpdateStepReminderDate,
+  editingReminderStepId,
+  savingReminderStepId,
+  reminderDraftByStepId,
+  onReminderDraftChange,
+  onStartReminderEdit,
+  onCancelReminderEdit,
+  onSaveReminderEdit,
+}: WorkflowGraphProps & ReminderEditingStateProps) {
   const theme = useTheme();
   const viewportRef = useRef<HTMLDivElement>(null);
   const selectedRowRef = useRef<HTMLDivElement | null>(null);
@@ -635,7 +829,17 @@ function GitLogWorkflowGraph({
                     </Stack>
                   </Stack>
                   {renderStepTiming(step)}
-                  {renderStepReminder(step)}
+                  {renderStepReminder({
+                    step,
+                    editingReminderStepId,
+                    savingReminderStepId,
+                    reminderDraftByStepId,
+                    onUpdateStepReminderDate,
+                    onReminderDraftChange,
+                    onStartReminderEdit,
+                    onCancelReminderEdit,
+                    onSaveReminderEdit,
+                  })}
                   {renderStepRecordsIndicator(hasRecords, () => onOpenStep(step.id))}
                 </Stack>
               </Box>

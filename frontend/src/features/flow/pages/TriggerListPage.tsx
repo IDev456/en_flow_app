@@ -22,7 +22,6 @@ import {
   ButtonBase,
   Button,
   Chip,
-  type ChipProps,
   Collapse,
   LinearProgress,
   IconButton,
@@ -31,6 +30,8 @@ import {
   Paper,
   Snackbar,
   Stack,
+  Tab,
+  Tabs,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
@@ -122,11 +123,12 @@ function getFilterIcon(filter: FlowFilter) {
   return <InboxRoundedIcon sx={{ fontSize: 14 }} />;
 }
 
-function getFilterChipColor(filter: FlowFilter): ChipProps["color"] {
+function getFilterTabColor(filter: FlowFilter) {
   if (filter === "active") return "info";
   if (filter === "waiting") return "warning";
   if (filter === "finalized") return "success";
-  return "default";
+  if (filter === "cancelled") return "text";
+  return "primary";
 }
 
 function getWorkflowDisplayStatus(workflow: WorkflowDetail) {
@@ -848,7 +850,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
               size="small"
               variant="outlined"
               value={value}
-              autoFocus={isEditing && !originalValue}
+              autoFocus={isEditing}
               disabled={!row.stepId}
               onClick={(event) => event.stopPropagation()}
               onChange={(event) => {
@@ -1322,24 +1324,74 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
           {error && <Alert severity="error">{error}</Alert>}
 
-          <Stack direction="row" spacing={0.65} sx={{ flexWrap: "wrap", rowGap: 0.55 }}>
-            {flowFilterOptions.map((option) => {
-              const selected = stateFilter === option.value;
-              const count = option.value !== "all" ? (currentCounts[option.value] ?? 0) : null;
-              return (
-                <Chip
-                  key={option.value}
-                  icon={getFilterIcon(option.value)}
-                  label={count !== null ? `${option.label} (${count})` : option.label}
-                  size="small"
-                  color={selected ? getFilterChipColor(option.value) : "default"}
-                  variant={selected ? "filled" : "outlined"}
-                  onClick={() => setStateFilter(option.value)}
-                  sx={{ cursor: "pointer", fontWeight: selected ? 600 : 400 }}
-                />
-              );
-            })}
-          </Stack>
+          <Box sx={{ width: "100%", maxWidth: 560 }}>
+            <Paper variant="outlined" sx={{ overflow: "hidden" }}>
+              <Tabs
+                value={stateFilter}
+                onChange={(_, value: FlowFilter) => setStateFilter(value)}
+                variant="fullWidth"
+                aria-label="Filtros de estado"
+                sx={{
+                  minHeight: 64,
+                  "& .MuiTabs-indicator": {
+                    height: 3,
+                  },
+                }}
+              >
+                {flowFilterOptions.map((option) => {
+                  const count = option.value !== "all" ? (currentCounts[option.value] ?? 0) : null;
+                  const colorTone = getFilterTabColor(option.value);
+                  const selectedColor =
+                    colorTone === "info"
+                      ? "info.main"
+                      : colorTone === "warning"
+                        ? "warning.main"
+                        : colorTone === "success"
+                          ? "success.main"
+                          : colorTone === "text"
+                            ? "text.secondary"
+                            : "primary.main";
+
+                  return (
+                    <Tab
+                      key={option.value}
+                      value={option.value}
+                      icon={getFilterIcon(option.value)}
+                      iconPosition="top"
+                      label={count !== null ? `${option.label} (${count})` : option.label}
+                      sx={{
+                        minWidth: 0,
+                        minHeight: 64,
+                        px: 0.75,
+                        py: 0.5,
+                        textTransform: "none",
+                        fontWeight: 500,
+                        fontSize: "0.73rem",
+                        letterSpacing: "0.01em",
+                        lineHeight: 1.15,
+                        whiteSpace: "nowrap",
+                        color: "text.secondary",
+                        "& .MuiTab-iconWrapper": {
+                          marginBottom: 0.25,
+                        },
+                        "& .MuiSvgIcon-root": {
+                          fontSize: 16,
+                          color: "text.secondary",
+                        },
+                        "&.Mui-selected": {
+                          color: selectedColor,
+                          backgroundColor: "action.hover",
+                        },
+                        "&.Mui-selected .MuiSvgIcon-root": {
+                          color: selectedColor,
+                        },
+                      }}
+                    />
+                  );
+                })}
+              </Tabs>
+            </Paper>
+          </Box>
 
           {isFlowsView && !loading && futureRows.length > 0 && (
             <Paper variant="outlined" sx={{ overflow: "hidden" }}>

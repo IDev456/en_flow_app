@@ -39,6 +39,7 @@ import {
   resolveExternalResponse,
   unlinkWorkflowRequirement,
   updateStep,
+  updateStepDate,
   updateStepStatus,
 } from "../api";
 import { StepDetailPanel } from "../components/StepDetailPanel";
@@ -287,6 +288,21 @@ export function WorkflowDetailPage() {
 
   async function handleStepUpdated(step: Step) {
     await refreshAfterStepChange(step.id);
+  }
+
+  async function handleUpdateStepReminderDate(stepId: string, dateInput: string) {
+    const nextValue = dateInput.trim();
+    const isoValue = nextValue ? `${nextValue}T00:00:00Z` : null;
+
+    try {
+      await updateStepDate(stepId, { fecha_vencimiento: isoValue });
+      await refreshAfterStepChange(stepId);
+      showToast("Fecha actualizada", "success");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudo actualizar la fecha";
+      showToast(message, "error");
+      throw err;
+    }
   }
 
   async function handleRenameStep(step: Step, nextName: string) {
@@ -552,6 +568,7 @@ export function WorkflowDetailPage() {
                 onOpenStep={handleOpenStep}
                 onCompleteStepIntent={handleOpenCompleteStep}
                 onRenameStep={handleRenameStep}
+                onUpdateStepReminderDate={handleUpdateStepReminderDate}
                 onOpenTrigger={() => {
                   const requirementId = workflow.trigger_id ?? workflow.requirement_ids[0];
                   if (requirementId) navigate(`/requirements/${requirementId}`);

@@ -25,7 +25,7 @@ import {
 } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
 
-import { updateStep } from "../api";
+import { updateStep, updateStepDate } from "../api";
 import type {
   AttachmentInput,
   ExternalEventCreateInput,
@@ -101,9 +101,13 @@ export function StepDetailPanel({
   const [stepDraftName, setStepDraftName] = useState("");
   const [stepDraftDescription, setStepDraftDescription] = useState("");
   const [stepDraftExecutionDate, setStepDraftExecutionDate] = useState("");
+  const [stepDraftReminderDate, setStepDraftReminderDate] = useState("");
   const [stepEditError, setStepEditError] = useState<string | null>(null);
   const [savingStep, setSavingStep] = useState(false);
   const [stepToastOpen, setStepToastOpen] = useState(false);
+  const [isReminderEditing, setIsReminderEditing] = useState(false);
+  const [reminderDraft, setReminderDraft] = useState("");
+  const [savingReminder, setSavingReminder] = useState(false);
 
   useEffect(() => {
     if (!step) {
@@ -136,6 +140,10 @@ export function StepDetailPanel({
     setStepDraftName(step.nombre);
     setStepDraftDescription(step.descripcion ?? "");
     setStepDraftExecutionDate(step.fecha_ejecucion_estimada ? step.fecha_ejecucion_estimada.slice(0, 10) : "");
+    setStepDraftReminderDate(step.fecha_vencimiento ? step.fecha_vencimiento.slice(0, 10) : "");
+    setIsReminderEditing(false);
+    setReminderDraft(step.fecha_vencimiento ? step.fecha_vencimiento.slice(0, 10) : "");
+    setSavingReminder(false);
     setStepEditError(null);
     setStepToastOpen(false);
   }, [step?.id, step?.estado, step?.expected_external_event, step?.external_reference, step?.external_wait_reason]);
@@ -304,6 +312,7 @@ export function StepDetailPanel({
     setStepDraftName(step.nombre);
     setStepDraftDescription(step.descripcion ?? "");
     setStepDraftExecutionDate(step.fecha_ejecucion_estimada ? step.fecha_ejecucion_estimada.slice(0, 10) : "");
+    setStepDraftReminderDate(step.fecha_vencimiento ? step.fecha_vencimiento.slice(0, 10) : "");
     setStepEditError(null);
     setEditingStep(true);
   }
@@ -313,6 +322,7 @@ export function StepDetailPanel({
     setStepDraftName(step.nombre);
     setStepDraftDescription(step.descripcion ?? "");
     setStepDraftExecutionDate(step.fecha_ejecucion_estimada ? step.fecha_ejecucion_estimada.slice(0, 10) : "");
+    setStepDraftReminderDate(step.fecha_vencimiento ? step.fecha_vencimiento.slice(0, 10) : "");
     setStepEditError(null);
     setEditingStep(false);
   }
@@ -323,17 +333,20 @@ export function StepDetailPanel({
     const nextName = stepDraftName.trim();
     const nextDescription = stepDraftDescription.trim();
     const nextExecutionDate = stepDraftExecutionDate ? `${stepDraftExecutionDate}T00:00:00Z` : null;
+    const nextReminderDate = stepDraftReminderDate ? `${stepDraftReminderDate}T00:00:00Z` : null;
+    const currentReminderInput = step.fecha_vencimiento ? step.fecha_vencimiento.slice(0, 10) : "";
+    const hasMetadataChanges =
+      nextName !== step.nombre ||
+      nextDescription !== (step.descripcion ?? "") ||
+      nextExecutionDate !== step.fecha_ejecucion_estimada;
+    const hasReminderChanges = stepDraftReminderDate !== currentReminderInput;
 
     if (!nextName) {
       setStepEditError("Debes indicar el nombre de la tarea.");
       return;
     }
 
-    if (
-      nextName === step.nombre &&
-      nextDescription === (step.descripcion ?? "") &&
-      nextExecutionDate === step.fecha_ejecucion_estimada
-    ) {
+    if (!hasMetadataChanges && !hasReminderChanges) {
       setEditingStep(false);
       setStepEditError(null);
       return;
@@ -342,14 +355,23 @@ export function StepDetailPanel({
     try {
       setSavingStep(true);
       setStepEditError(null);
-      const updatedStep = await updateStep(step.id, {
-        nombre: nextName,
-        descripcion: nextDescription || null,
-        fecha_ejecucion_estimada: nextExecutionDate,
-      });
+      let updatedStep: Step = step;
+      if (hasMetadataChanges) {
+        updatedStep = await updateStep(step.id, {
+          nombre: nextName,
+          descripcion: nextDescription || null,
+          fecha_ejecucion_estimada: nextExecutionDate,
+        });
+      }
+      if (hasReminderChanges) {
+        updatedStep = await updateStepDate(step.id, {
+          fecha_vencimiento: nextReminderDate,
+        });
+      }
       setStepDraftName(updatedStep.nombre);
       setStepDraftDescription(updatedStep.descripcion ?? "");
       setStepDraftExecutionDate(updatedStep.fecha_ejecucion_estimada ? updatedStep.fecha_ejecucion_estimada.slice(0, 10) : "");
+      setStepDraftReminderDate(updatedStep.fecha_vencimiento ? updatedStep.fecha_vencimiento.slice(0, 10) : "");
       await onStepUpdated?.(updatedStep);
       setEditingStep(false);
       setStepToastOpen(true);
@@ -357,6 +379,49 @@ export function StepDetailPanel({
       setStepEditError(err instanceof Error ? err.message : "No se pudo actualizar la tarea");
     } finally {
       setSavingStep(false);
+    }
+  }
+
+  function startReminderEdit() {
+    if (!step) return;
+    const currentValue = step.fecha_vencimiento ? step.fecha_vencimiento.slice(0, 10) : "";
+    setReminderDraft(currentValue);
+    setStepEditError(null);
+    setIsReminderEditing(true);
+  }
+
+  function cancelReminderEdit() {
+    if (!step) return;
+    const currentValue = step.fecha_vencimiento ? step.fecha_vencimiento.slice(0, 10) : "";
+    setReminderDraft(currentValue);
+    setStepEditError(null);
+    setIsReminderEditing(false);
+  }
+
+  async function saveReminderEdit() {
+    if (!step) return;
+    const currentValue = step.fecha_vencimiento ? step.fecha_vencimiento.slice(0, 10) : "";
+    const nextDraft = reminderDraft.trim();
+    if (nextDraft === currentValue) {
+      setIsReminderEditing(false);
+      return;
+    }
+
+    const nextReminderDate = nextDraft ? `${nextDraft}T00:00:00Z` : null;
+
+    try {
+      setSavingReminder(true);
+      setStepEditError(null);
+      const updatedStep = await updateStepDate(step.id, { fecha_vencimiento: nextReminderDate });
+      setStepDraftReminderDate(updatedStep.fecha_vencimiento ? updatedStep.fecha_vencimiento.slice(0, 10) : "");
+      setReminderDraft(updatedStep.fecha_vencimiento ? updatedStep.fecha_vencimiento.slice(0, 10) : "");
+      await onStepUpdated?.(updatedStep);
+      setIsReminderEditing(false);
+      setStepToastOpen(true);
+    } catch (err) {
+      setStepEditError(err instanceof Error ? err.message : "No se pudo actualizar la tarea");
+    } finally {
+      setSavingReminder(false);
     }
   }
 
@@ -378,13 +443,62 @@ export function StepDetailPanel({
       <CardContent sx={{ p: 0 }}>
         <Box sx={{ p: { xs: 2.5, md: 3 } }}>
           {drawer ? (
-            <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", justifyContent: "space-between" }}>
-              <Typography variant="h6">Registro de la tarea</Typography>
-              {onClose ? (
-                <IconButton onClick={onClose} aria-label="Cerrar panel de registros">
-                  <CloseRoundedIcon />
-                </IconButton>
-              ) : null}
+            <Stack spacing={1.5}>
+              <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", justifyContent: "space-between" }}>
+                <Typography variant="h6">Registro de la tarea</Typography>
+                {onClose ? (
+                  <IconButton onClick={onClose} aria-label="Cerrar panel de registros">
+                    <CloseRoundedIcon />
+                  </IconButton>
+                ) : null}
+              </Stack>
+              <Card variant="outlined">
+                <CardContent sx={{ p: 1.75 }}>
+                  <Stack spacing={0.5}>
+                    <Typography variant="body2" color="text.secondary">
+                      Recordatorio
+                    </Typography>
+                    {isReminderEditing ? (
+                      <TextField
+                        type="date"
+                        size="small"
+                        value={reminderDraft}
+                        autoFocus
+                        disabled={savingReminder}
+                        slotProps={{ inputLabel: { shrink: true } }}
+                        onChange={(event) => setReminderDraft(event.target.value)}
+                        onBlur={() => {
+                          void saveReminderEdit();
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") {
+                            cancelReminderEdit();
+                            (event.target as HTMLInputElement).blur();
+                          }
+                          if (event.key === "Enter") {
+                            (event.target as HTMLInputElement).blur();
+                          }
+                        }}
+                        sx={{ maxWidth: 210 }}
+                      />
+                    ) : (
+                      <Button
+                        variant="text"
+                        color="inherit"
+                        onClick={startReminderEdit}
+                        sx={{ justifyContent: "flex-start", px: 0, minWidth: 0, textTransform: "none" }}
+                      >
+                        <Typography variant="body2" color={step.fecha_vencimiento ? "text.primary" : "text.secondary"}>
+                          {step.fecha_vencimiento
+                            ? `${formatRelativeCalendarDay(step.fecha_vencimiento) ?? formatCalendarDate(step.fecha_vencimiento)} · ${formatCalendarDate(step.fecha_vencimiento)}`
+                            : "Sin recordatorio"}
+                        </Typography>
+                      </Button>
+                    )}
+                  </Stack>
+                </CardContent>
+              </Card>
+              {stepEditError && <Alert severity="error">{stepEditError}</Alert>}
             </Stack>
           ) : (
             <Stack spacing={2}>
@@ -416,6 +530,15 @@ export function StepDetailPanel({
                         value={stepDraftExecutionDate}
                         onChange={(event) => setStepDraftExecutionDate(event.target.value)}
                         helperText="Posible fecha de ejecución"
+                        slotProps={{ inputLabel: { shrink: true } }}
+                        disabled={savingStep}
+                      />
+                      <TextField
+                        label="Recordatorio"
+                        type="date"
+                        value={stepDraftReminderDate}
+                        onChange={(event) => setStepDraftReminderDate(event.target.value)}
+                        helperText="Fecha recordatorio"
                         slotProps={{ inputLabel: { shrink: true } }}
                         disabled={savingStep}
                       />
