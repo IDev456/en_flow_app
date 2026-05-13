@@ -19,6 +19,7 @@ import ViewColumnRoundedIcon from "@mui/icons-material/ViewColumnRounded";
 import {
   Alert,
   Box,
+  ButtonBase,
   Button,
   Chip,
   type ChipProps,
@@ -55,7 +56,7 @@ import { useToastContext } from "../../../components/Toast";
 import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, getWorkflow, listTriggers, listWorkflows, reactivateWorkflow, updateStepDate } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Step, TriggerDetail, WorkflowDetail } from "../types";
-import { formatDateOnly, formatElapsedTime, getStatusTone } from "../utils";
+import { formatCalendarDate, formatDateOnly, formatElapsedTime, formatRelativeCalendarDay, getStatusTone } from "../utils";
 
 type ViewMode = "requirements" | "flows";
 type FlowFilter = "all" | "active" | "waiting" | "finalized" | "cancelled";
@@ -777,9 +778,50 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
           const row = params.row;
           const originalValue = row.executionDateInput ? row.executionDateInput.slice(0, 10) : "";
           const isEditing = pendingDates.has(row.id);
-          const showInput = Boolean(originalValue) || isEditing;
+          const showInput = isEditing;
+          const dateIsoValue = originalValue ? `${originalValue}T00:00:00Z` : null;
+          const isFutureRow = Boolean(row.executionDateInput && row.executionDateInput > today);
 
           if (!showInput) {
+            if (originalValue) {
+              const relativeLabel = !isFutureRow ? formatRelativeCalendarDay(dateIsoValue) : null;
+              const dateLabel = relativeLabel ?? formatCalendarDate(dateIsoValue);
+              const absoluteDateLabel = formatCalendarDate(dateIsoValue);
+              const secondaryLabel = relativeLabel ? absoluteDateLabel : null;
+              return (
+                <Tooltip title={absoluteDateLabel}>
+                  <ButtonBase
+                    disabled={!row.stepId}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setPendingDates((previous) => {
+                        const next = new Map(previous);
+                        next.set(row.id, originalValue);
+                        return next;
+                      });
+                    }}
+                    sx={{
+                      borderRadius: 1,
+                      px: 0.5,
+                      py: 0.25,
+                      width: "100%",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Stack spacing={0} sx={{ alignItems: "center", minWidth: 134 }}>
+                      <Typography variant="body2" sx={{ fontSize: "0.82rem", lineHeight: 1.2 }}>
+                        {dateLabel}
+                      </Typography>
+                      {secondaryLabel ? (
+                        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.1 }}>
+                          {secondaryLabel}
+                        </Typography>
+                      ) : null}
+                    </Stack>
+                  </ButtonBase>
+                </Tooltip>
+              );
+            }
             return (
               <IconButton
                 size="small"
@@ -824,10 +866,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 event.stopPropagation();
                 if (event.key === "Escape") {
                   setPendingDates((previous) => {
+                    if (!previous.has(row.id)) return previous;
                     const next = new Map(previous);
-                    next.set(row.id, originalValue);
+                    next.delete(row.id);
                     return next;
                   });
+                  (event.target as HTMLInputElement).blur();
                 }
               }}
               sx={{ minWidth: 150, "& input": { fontSize: "0.82rem", padding: "4px 8px" } }}
@@ -970,7 +1014,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         },
       },
     ],
-    [cancellingFlowId, deletingFlowId, flowActionsMenu, navigate, pendingDates, reactivatingFlowId]
+    [cancellingFlowId, deletingFlowId, flowActionsMenu, navigate, pendingDates, reactivatingFlowId, today]
   );
 
   const requirementColumns = useMemo<GridColDef<RequirementGridRow>[]>(

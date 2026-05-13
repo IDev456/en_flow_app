@@ -9,7 +9,7 @@ import { alpha, useTheme } from "@mui/material/styles";
 import { Box, Button, ButtonBase, Card, Chip, IconButton, Stack, TextField, Typography } from "@mui/material";
 
 import type { Step } from "../types";
-import { formatDate, formatElapsedTime, getStatusTone, humanizeStatus } from "../utils";
+import { formatCalendarDate, formatElapsedTime, formatRelativeCalendarDay, getStatusTone, humanizeStatus } from "../utils";
 import type { WorkflowVariant } from "./WorkflowVariantSwitcher";
 
 type WorkflowGraphProps = {
@@ -106,6 +106,25 @@ function renderStepRecordsIndicator(hasRecords: boolean, onClick: () => void): R
         {hasRecords ? "Con registros" : "Sin registros"}
       </Typography>
     </ButtonBase>
+  );
+}
+
+function renderStepReminder(step: Step): React.ReactElement {
+  const reminder = step.fecha_vencimiento;
+  const relativeLabel = reminder ? formatRelativeCalendarDay(reminder) : null;
+  const absoluteLabel = reminder ? formatCalendarDate(reminder) : null;
+  const mainLabel = relativeLabel ?? absoluteLabel ?? "Sin recordatorio";
+
+  return (
+    <Stack spacing={0.1} sx={{ mt: 0.5 }}>
+      <Typography variant="caption" color="text.secondary">
+        Recordatorio
+      </Typography>
+      <Typography variant="caption" color={reminder ? "text.primary" : "text.secondary"}>
+        {mainLabel}
+        {reminder && relativeLabel && absoluteLabel ? ` · ${absoluteLabel}` : ""}
+      </Typography>
+    </Stack>
   );
 }
 
@@ -549,6 +568,7 @@ function VerticalWorkflowGraph({
                       />
 
                       {renderStepTiming(step)}
+                      {renderStepReminder(step)}
                       {renderStepRecordsIndicator(hasRecords, () => onOpenStep(step.id))}
                     </Stack>
                   </Box>
@@ -615,6 +635,7 @@ function GitLogWorkflowGraph({
                     </Stack>
                   </Stack>
                   {renderStepTiming(step)}
+                  {renderStepReminder(step)}
                   {renderStepRecordsIndicator(hasRecords, () => onOpenStep(step.id))}
                 </Stack>
               </Box>

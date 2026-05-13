@@ -37,7 +37,7 @@ import type {
   StepJournalEntryInput,
   StepTransitionType,
 } from "../types";
-import { buildJournalItems, DEFAULT_ACTOR, formatDateOnly } from "../utils";
+import { buildJournalItems, DEFAULT_ACTOR, formatCalendarDate, formatDateOnly, formatRelativeCalendarDay } from "../utils";
 import { Journal } from "./Journal";
 import { StatusBadge } from "./StatusBadge";
 
@@ -487,10 +487,20 @@ export function StepDetailPanel({
                     </Stack>
                     <Stack spacing={0.5}>
                       <Typography variant="body2" color="text.secondary">
-                        Fecha
+                        Fecha operativa
                       </Typography>
                       <Typography variant="body2" color={step.fecha_ejecucion_estimada ? "text.primary" : "text.secondary"}>
                         {step.fecha_ejecucion_estimada ? formatDateOnly(step.fecha_ejecucion_estimada) : "Sin fecha definida"}
+                      </Typography>
+                    </Stack>
+                    <Stack spacing={0.5}>
+                      <Typography variant="body2" color="text.secondary">
+                        Recordatorio
+                      </Typography>
+                      <Typography variant="body2" color={step.fecha_vencimiento ? "text.primary" : "text.secondary"}>
+                        {step.fecha_vencimiento
+                          ? `${formatRelativeCalendarDay(step.fecha_vencimiento) ?? formatCalendarDate(step.fecha_vencimiento)} · ${formatCalendarDate(step.fecha_vencimiento)}`
+                          : "Sin recordatorio"}
                       </Typography>
                     </Stack>
                   </Stack>

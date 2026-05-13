@@ -62,6 +62,71 @@ export function formatDateOnly(value: string | null) {
   }).format(new Date(value));
 }
 
+export function formatCalendarDate(value: string | null) {
+  if (!value) {
+    return "Sin fecha";
+  }
+
+  const matched = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!matched) {
+    return formatDateOnly(value);
+  }
+
+  const year = Number(matched[1]);
+  const month = Number(matched[2]);
+  const day = Number(matched[3]);
+  return new Intl.DateTimeFormat("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, day)));
+}
+
+export function formatRelativeCalendarDay(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const matched = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  let targetDayMs: number | null = null;
+  if (matched) {
+    const year = Number(matched[1]);
+    const month = Number(matched[2]);
+    const day = Number(matched[3]);
+    targetDayMs = Date.UTC(year, month - 1, day);
+  } else {
+    const parsed = new Date(value);
+    const parsedTime = parsed.getTime();
+    if (!Number.isFinite(parsedTime)) {
+      return null;
+    }
+    targetDayMs = Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+  }
+
+  const now = new Date();
+  const todayMs = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffDays = Math.round((targetDayMs - todayMs) / 86400000);
+
+  if (diffDays === 0) {
+    return "Hoy";
+  }
+  if (diffDays === -1) {
+    return "Ayer";
+  }
+  if (diffDays < -1) {
+    return `Hace ${Math.abs(diffDays)} días`;
+  }
+  if (diffDays === 1) {
+    return "Mañana";
+  }
+  if (diffDays > 1) {
+    return `En ${diffDays} días`;
+  }
+
+  return null;
+}
+
 export function formatElapsedTime(value: string | null) {
   if (!value) {
     return null;
