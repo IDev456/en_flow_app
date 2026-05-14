@@ -39,6 +39,7 @@ from app.schemas.workflow import (
     StepTransitionType,
     TriggerCreate,
     TriggerStatus,
+    WorkLogEntryType,
     WorkflowStartRequest,
     WorkflowStatus,
     WorkflowTemplatePublic,
@@ -535,6 +536,79 @@ class WorkflowDagTestCase(unittest.TestCase):
         self.assertEqual(step_one.ultimo_comentario, "Cierre operativo")
         self.assertNotEqual(step_one.ultimo_comentario, "Se creo la proxima tarea: Siguiente paso")
         self.assertIsNone(step_two.ultimo_comentario)
+
+    def test_work_log_entries_merge_sources_desc_filter_noise_and_keep_context(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        workflow = self.service.get_workflow(workflow_id)
+        step = workflow.steps[0]
+        self.assertIsNotNone(workflow.trigger_id)
+
+        self.repository.add_comment(
+            step.id,
+            CommentCreate(
+                autor="tester",
+                comentario="Registro operativo real",
+                attachments=[],
+            ),
+        )
+        self.repository.add_comment(
+            step.id,
+            CommentCreate(
+                autor="tester",
+                comentario="Tarea creada desde cierre dinámico",
+                attachments=[],
+            ),
+        )
+        self.repository.add_history(
+            StepHistoryPublic(
+                id=str(uuid4()),
+                step_instance_id=step.id,
+                campo="nombre",
+                valor_anterior="Paso A",
+                valor_nuevo="Paso A actualizado",
+                usuario="tester",
+                fecha=datetime(2020, 1, 1, tzinfo=timezone.utc),
+                nota="Cambio de campo manual",
+                attachments=[],
+            )
+        )
+        self.repository.add_external_event(
+            step.id,
+            ExternalEventCreate(
+                event_type="layout_recibido",
+                source="manual",
+                payload=None,
+                comentario="Respuesta externa recibida",
+                attachments=[],
+                registrado_por="tester",
+            ),
+        )
+
+        entries = self.service.list_work_log_entries()
+        self.assertGreaterEqual(len(entries), 3)
+
+        for idx in range(len(entries) - 1):
+            self.assertGreaterEqual(entries[idx].timestamp, entries[idx + 1].timestamp)
+
+        summaries = [entry.summary for entry in entries]
+        self.assertIn("Registro operativo real", summaries)
+        self.assertIn("Cambio de campo manual", summaries)
+        self.assertIn("Respuesta externa recibida", summaries)
+        self.assertNotIn("Tarea creada desde cierre dinámico", summaries)
+
+        entry_types = {entry.entry_type for entry in entries}
+        self.assertIn(WorkLogEntryType.COMMENT, entry_types)
+        self.assertIn(WorkLogEntryType.FIELD_CHANGE, entry_types)
+        self.assertIn(WorkLogEntryType.EXTERNAL_EVENT, entry_types)
+
+        context_entries = [entry for entry in entries if entry.step_id == step.id]
+        self.assertGreaterEqual(len(context_entries), 3)
+        for entry in context_entries:
+            self.assertEqual(entry.workflow_id, workflow_id)
+            self.assertEqual(entry.step_name, step.nombre)
+            self.assertEqual(entry.requirement_id, workflow.trigger_id)
+            self.assertEqual(entry.requirement_title, "Caso de prueba DAG")
+            self.assertTrue(entry.workflow_title is not None and entry.workflow_title.startswith("Flow "))
 
     def test_can_delete_finalized_workflow_and_reconcile_requirement(self) -> None:
         workflow_id = self._start_workflow(build_linear_template())

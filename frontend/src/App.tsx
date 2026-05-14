@@ -9,6 +9,7 @@ import { StepDetailPage } from "./features/flow/pages/StepDetailPage";
 import { TriggerCreatePage } from "./features/flow/pages/TriggerCreatePage";
 import { TriggerDetailPage } from "./features/flow/pages/TriggerDetailPage";
 import { TriggerListPage } from "./features/flow/pages/TriggerListPage";
+import { WorkLogPage } from "./features/flow/pages/WorkLogPage";
 import { WorkflowDetailPage } from "./features/flow/pages/WorkflowDetailPage";
 import { AppThemeMode, createAppTheme } from "./theme";
 
@@ -39,6 +40,7 @@ function App() {
           <Route path="/dashboard" element={<Navigate to="/flows" replace />} />
           <Route path="/board" element={<Navigate to="/flows" replace />} />
           <Route path="/flows" element={<TriggerListPage defaultView="flows" lockView title="Flows" />} />
+          <Route path="/bitacora" element={<WorkLogPage />} />
           <Route
             path="/requirements"
             element={<TriggerListPage defaultView="requirements" lockView title="Proyectos" />}

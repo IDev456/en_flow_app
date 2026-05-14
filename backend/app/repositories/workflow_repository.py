@@ -30,6 +30,8 @@ from app.schemas.workflow import (
     StepInstancePublic,
     StepStatus,
     StepTemplatePublic,
+    WorkLogEntry,
+    WorkLogEntryType,
     TriggerCreate,
     TriggerDetail,
     TriggerPublic,
@@ -84,6 +86,36 @@ def _is_noisy_automatic_journal_text(value: str | None) -> bool:
         or "esperando respuesta externa de externo" in normalized
         or "esperando respuesta de externo" in normalized
     )
+
+
+def _format_workflow_title(objetivo_final: str | None, workflow_id: str) -> str:
+    title = _clean_text(objetivo_final)
+    if title:
+        return title
+    return f"Flow {workflow_id[:8]}"
+
+
+def _format_history_summary(entry: StepHistoryPublic) -> str:
+    note = _clean_text(entry.nota)
+    if note:
+        return note
+
+    field = _clean_text(entry.campo) or "campo"
+    if entry.campo == "estado":
+        previous = _clean_text(entry.valor_anterior) or "sin estado"
+        current = _clean_text(entry.valor_nuevo) or "sin estado"
+        return f"Cambio de estado: {previous} -> {current}"
+
+    previous = _clean_text(entry.valor_anterior) or "sin valor"
+    current = _clean_text(entry.valor_nuevo) or "sin valor"
+    return f"Cambio en {field}: {previous} -> {current}"
+
+
+def _attachment_summary(attachments: list[AttachmentPublic]) -> str | None:
+    if not attachments:
+        return None
+    first = attachments[0]
+    return "Imagen adjunta" if first.content_type.startswith("image/") else "Archivo adjunto"
 
 
 def _resolve_first_step_name(payload: WorkflowInstanceBase) -> str:
@@ -245,6 +277,10 @@ class WorkflowRepository(ABC):
 
     @abstractmethod
     def list_active_workflows(self) -> list[WorkflowSummary]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def list_work_log_entries(self) -> list[WorkLogEntry]:
         raise NotImplementedError
 
     @abstractmethod
@@ -694,6 +730,96 @@ class InMemoryWorkflowRepository(WorkflowRepository):
                 WorkflowStatus.CON_PROBLEMA,
             }
         ]
+
+    def list_work_log_entries(self) -> list[WorkLogEntry]:
+        entries: list[WorkLogEntry] = []
+
+        for step in self._steps.values():
+            workflow = self._workflows.get(step.workflow_id)
+            if workflow is None:
+                continue
+
+            requirement_ids = list(self._requirement_ids_by_workflow.get(workflow.id, workflow.requirement_ids))
+            primary_requirement_id = workflow.trigger_id or (requirement_ids[0] if requirement_ids else None)
+            primary_requirement = self._triggers.get(primary_requirement_id) if primary_requirement_id else None
+            requirement_title = _clean_text(primary_requirement.descripcion) if primary_requirement else None
+            workflow_title = _format_workflow_title(workflow.objetivo_final, workflow.id)
+
+            comments = self._comments_by_step.get(step.id, [])
+            history_entries = self._history_by_step.get(step.id, [])
+            external_events = self._external_events_by_step.get(step.id, [])
+
+            for comment in comments:
+                text = _clean_text(comment.comentario)
+                if text and _is_noisy_automatic_journal_text(text):
+                    continue
+                summary = text or _attachment_summary(comment.attachments)
+                if not summary:
+                    continue
+                entries.append(
+                    WorkLogEntry(
+                        id=f"comment:{comment.id}",
+                        timestamp=comment.fecha_creacion,
+                        entry_type=WorkLogEntryType.COMMENT,
+                        summary=summary,
+                        author=comment.autor,
+                        step_id=step.id,
+                        step_name=step.nombre,
+                        step_order=step.orden,
+                        workflow_id=workflow.id,
+                        workflow_title=workflow_title,
+                        requirement_id=primary_requirement_id,
+                        requirement_title=requirement_title,
+                        attachments_count=len(comment.attachments),
+                    )
+                )
+
+            for entry in history_entries:
+                summary = _format_history_summary(entry)
+                if _is_noisy_automatic_journal_text(summary):
+                    continue
+                entries.append(
+                    WorkLogEntry(
+                        id=f"history:{entry.id}",
+                        timestamp=entry.fecha,
+                        entry_type=WorkLogEntryType.STATUS_CHANGE if entry.campo == "estado" else WorkLogEntryType.FIELD_CHANGE,
+                        summary=summary,
+                        author=entry.usuario,
+                        step_id=step.id,
+                        step_name=step.nombre,
+                        step_order=step.orden,
+                        workflow_id=workflow.id,
+                        workflow_title=workflow_title,
+                        requirement_id=primary_requirement_id,
+                        requirement_title=requirement_title,
+                        attachments_count=len(entry.attachments),
+                    )
+                )
+
+            for event in external_events:
+                text = _clean_text(event.comentario)
+                summary = text or f"Evento externo: {event.event_type}"
+                if _is_noisy_automatic_journal_text(summary):
+                    continue
+                entries.append(
+                    WorkLogEntry(
+                        id=f"external:{event.id}",
+                        timestamp=event.fecha_creacion,
+                        entry_type=WorkLogEntryType.EXTERNAL_EVENT,
+                        summary=summary,
+                        author=event.registrado_por,
+                        step_id=step.id,
+                        step_name=step.nombre,
+                        step_order=step.orden,
+                        workflow_id=workflow.id,
+                        workflow_title=workflow_title,
+                        requirement_id=primary_requirement_id,
+                        requirement_title=requirement_title,
+                        attachments_count=len(event.attachments),
+                    )
+                )
+
+        return sorted(entries, key=lambda item: item.timestamp, reverse=True)
 
     def list_workflow_templates(self) -> list[WorkflowTemplatePublic]:
         return list(self._workflow_templates.values())
@@ -1306,6 +1432,114 @@ class PostgresWorkflowRepository(WorkflowRepository):
                 .order_by(WorkflowModel.fecha_inicio.desc())
             ).all()
             return [self._workflow_to_summary(workflow) for workflow in workflows]
+
+    def list_work_log_entries(self) -> list[WorkLogEntry]:
+        with session_scope() as session:
+            steps = session.scalars(
+                select(StepModel)
+                .options(
+                    selectinload(StepModel.comments),
+                    selectinload(StepModel.history_entries),
+                    selectinload(StepModel.external_events),
+                    selectinload(StepModel.workflow).selectinload(WorkflowModel.requirements),
+                )
+            ).all()
+
+            entries: list[WorkLogEntry] = []
+            for step in steps:
+                workflow = step.workflow
+                if workflow is None:
+                    continue
+
+                sorted_requirements = sorted(workflow.requirements, key=lambda requirement: requirement.fecha_creacion)
+                requirement_ids = [requirement.id for requirement in sorted_requirements]
+                primary_requirement_id = workflow.trigger_id or (requirement_ids[0] if requirement_ids else None)
+                requirement_descriptions = {
+                    requirement.id: _clean_text(requirement.descripcion)
+                    for requirement in sorted_requirements
+                }
+                requirement_title = (
+                    requirement_descriptions.get(primary_requirement_id)
+                    if primary_requirement_id
+                    else None
+                )
+                workflow_title = _format_workflow_title(workflow.objetivo_final, workflow.id)
+
+                comments = [self._comment_to_public(comment) for comment in step.comments]
+                history_entries = [self._history_to_public(entry) for entry in step.history_entries]
+                external_events = [self._external_event_to_public(event) for event in step.external_events]
+
+                for comment in comments:
+                    text = _clean_text(comment.comentario)
+                    if text and _is_noisy_automatic_journal_text(text):
+                        continue
+                    summary = text or _attachment_summary(comment.attachments)
+                    if not summary:
+                        continue
+                    entries.append(
+                        WorkLogEntry(
+                            id=f"comment:{comment.id}",
+                            timestamp=comment.fecha_creacion,
+                            entry_type=WorkLogEntryType.COMMENT,
+                            summary=summary,
+                            author=comment.autor,
+                            step_id=step.id,
+                            step_name=step.nombre,
+                            step_order=step.orden,
+                            workflow_id=workflow.id,
+                            workflow_title=workflow_title,
+                            requirement_id=primary_requirement_id,
+                            requirement_title=requirement_title,
+                            attachments_count=len(comment.attachments),
+                        )
+                    )
+
+                for entry in history_entries:
+                    summary = _format_history_summary(entry)
+                    if _is_noisy_automatic_journal_text(summary):
+                        continue
+                    entries.append(
+                        WorkLogEntry(
+                            id=f"history:{entry.id}",
+                            timestamp=entry.fecha,
+                            entry_type=WorkLogEntryType.STATUS_CHANGE if entry.campo == "estado" else WorkLogEntryType.FIELD_CHANGE,
+                            summary=summary,
+                            author=entry.usuario,
+                            step_id=step.id,
+                            step_name=step.nombre,
+                            step_order=step.orden,
+                            workflow_id=workflow.id,
+                            workflow_title=workflow_title,
+                            requirement_id=primary_requirement_id,
+                            requirement_title=requirement_title,
+                            attachments_count=len(entry.attachments),
+                        )
+                    )
+
+                for event in external_events:
+                    text = _clean_text(event.comentario)
+                    summary = text or f"Evento externo: {event.event_type}"
+                    if _is_noisy_automatic_journal_text(summary):
+                        continue
+                    entries.append(
+                        WorkLogEntry(
+                            id=f"external:{event.id}",
+                            timestamp=event.fecha_creacion,
+                            entry_type=WorkLogEntryType.EXTERNAL_EVENT,
+                            summary=summary,
+                            author=event.registrado_por,
+                            step_id=step.id,
+                            step_name=step.nombre,
+                            step_order=step.orden,
+                            workflow_id=workflow.id,
+                            workflow_title=workflow_title,
+                            requirement_id=primary_requirement_id,
+                            requirement_title=requirement_title,
+                            attachments_count=len(event.attachments),
+                        )
+                    )
+
+            return sorted(entries, key=lambda item: item.timestamp, reverse=True)
 
     def list_workflow_templates(self) -> list[WorkflowTemplatePublic]:
         with session_scope() as session:

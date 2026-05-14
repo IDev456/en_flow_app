@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import AssignmentTurnedInRoundedIcon from "@mui/icons-material/AssignmentTurnedInRounded";
 import {
   Box,
   Divider,
@@ -8,7 +7,6 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  Stack,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -23,7 +21,7 @@ export type DashboardNavItem = {
   path?: string;
   icon: ReactNode;
   disabled?: boolean;
-  group: "main" | "future";
+  group: "main" | "worklog";
 };
 
 type DashboardSidebarProps = {
@@ -61,7 +59,7 @@ function SidebarBody({
 }) {
   const theme = useTheme();
   const mainItems = navItems.filter((item) => item.group === "main");
-  const futureItems = navItems.filter((item) => item.group === "future");
+  const workLogItems = navItems.filter((item) => item.group === "worklog");
 
   function renderItem(item: DashboardNavItem) {
     const active = item.path ? isRouteActive(item.path) : false;
@@ -130,7 +128,7 @@ function SidebarBody({
     if (!compact) return button;
 
     return (
-      <Tooltip key={`${item.label}-tooltip`} title={item.disabled ? `${item.label} (próximamente)` : item.label} placement="right">
+      <Tooltip key={`${item.label}-tooltip`} title={item.label} placement="right">
         <Box>{button}</Box>
       </Tooltip>
     );
@@ -138,45 +136,7 @@ function SidebarBody({
 
   return (
     <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      <Stack
-        direction="row"
-        spacing={1}
-        sx={{
-          alignItems: "center",
-          justifyContent: compact ? "center" : "flex-start",
-          px: compact ? 1.5 : 2,
-          py: 1.8,
-          minHeight: 72,
-        }}
-      >
-        <Box
-          sx={{
-            width: 34,
-            height: 34,
-            borderRadius: 1.75,
-            display: "grid",
-            placeItems: "center",
-            border: "1px solid",
-            borderColor: "divider",
-            bgcolor: "background.default",
-          }}
-        >
-          <AssignmentTurnedInRoundedIcon sx={{ fontSize: 18 }} />
-        </Box>
-
-        {!compact && (
-          <Box>
-            <Typography variant="subtitle2" sx={{ lineHeight: 1.1 }}>
-              En Flow
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              CRUD Dashboard
-            </Typography>
-          </Box>
-        )}
-      </Stack>
-
-      <Divider />
+      <Box sx={{ minHeight: 12 }} />
 
       <List sx={{ px: compact ? 1 : 1.2, pt: 1.2, pb: 0.8, display: "grid", gap: 0.55 }}>
         <SectionTitle compact={compact}>OPERACIÓN</SectionTitle>
@@ -186,8 +146,8 @@ function SidebarBody({
       <Divider sx={{ mx: compact ? 1 : 1.2, my: 1 }} />
 
       <List sx={{ px: compact ? 1 : 1.2, pt: 0.4, pb: 1.2, display: "grid", gap: 0.55 }}>
-        <SectionTitle compact={compact}>PRÓXIMAMENTE</SectionTitle>
-        {futureItems.map(renderItem)}
+        <SectionTitle compact={compact}>BITÁCORA</SectionTitle>
+        {workLogItems.map(renderItem)}
       </List>
 
       <Box sx={{ mt: "auto", p: compact ? 1 : 1.8 }}>

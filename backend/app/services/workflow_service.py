@@ -13,6 +13,7 @@ from app.schemas.workflow import (
     ExternalEventPublic,
     QuickCaptureRequest,
     RequirementCreateFromFlowPayload,
+    WorkLogEntry,
     StepDateUpdate,
     StepCompletePayload,
     StepCreate,
@@ -628,6 +629,9 @@ class WorkflowService:
                 if workflow.estado in {WorkflowStatus.FINALIZADO, WorkflowStatus.CANCELADO}
             ][:8],
         )
+
+    def list_work_log_entries(self) -> list[WorkLogEntry]:
+        return self.repository.list_work_log_entries()
 
     def list_step_external_events(self, step_id: str) -> list[ExternalEventPublic]:
         self.get_step(step_id)

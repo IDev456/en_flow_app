@@ -18,6 +18,7 @@ import type {
   TriggerCreateInput,
   TriggerDetail,
   TriggerUpdateInput,
+  WorkLogEntry,
   WorkflowDetail,
   WorkflowStartInput,
   WorkflowSummary
@@ -61,6 +62,10 @@ export function listPendingSteps() {
 
 export function getDailyBoard() {
   return apiGet<DailyBoardData>("/dashboard/daily-board");
+}
+
+export function listWorkLogEntries() {
+  return apiGet<WorkLogEntry[]>("/dashboard/work-log");
 }
 
 export function getWorkflow(workflowId: string) {

@@ -39,6 +39,13 @@ class StepTransitionType(StrEnum):
     FINISH_FLOW = "finish_flow"
 
 
+class WorkLogEntryType(StrEnum):
+    COMMENT = "comment"
+    STATUS_CHANGE = "status_change"
+    FIELD_CHANGE = "field_change"
+    EXTERNAL_EVENT = "external_event"
+
+
 class TriggerBase(BaseModel):
     solicitante: str | None = Field(default=None, min_length=2, max_length=150)
     descripcion: str | None = Field(default=None, max_length=1000)
@@ -323,6 +330,22 @@ class DailyBoardResponse(BaseModel):
     tareas_con_problema: list[StepInstancePublic] = Field(default_factory=list)
     flows_recientes: list[WorkflowSummary] = Field(default_factory=list)
     flows_cerrados_recientes: list[WorkflowSummary] = Field(default_factory=list)
+
+
+class WorkLogEntry(BaseModel):
+    id: str
+    timestamp: datetime
+    entry_type: WorkLogEntryType
+    summary: str
+    author: str
+    step_id: str
+    step_name: str
+    step_order: int
+    workflow_id: str
+    workflow_title: str | None = None
+    requirement_id: str | None = None
+    requirement_title: str | None = None
+    attachments_count: int = 0
 
 
 class CommentCreate(BaseModel):

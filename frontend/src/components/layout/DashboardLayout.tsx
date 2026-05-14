@@ -1,9 +1,7 @@
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
-import AssessmentRoundedIcon from "@mui/icons-material/AssessmentRounded";
-import FactCheckRoundedIcon from "@mui/icons-material/FactCheckRounded";
 import FormatListBulletedRoundedIcon from "@mui/icons-material/FormatListBulletedRounded";
-import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
+import HistoryRoundedIcon from "@mui/icons-material/HistoryRounded";
 import TimelineRoundedIcon from "@mui/icons-material/TimelineRounded";
 import { Box } from "@mui/material";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -35,25 +33,11 @@ const navItems: DashboardNavItem[] = [
     group: "main",
   },
   {
-    label: "Tareas",
-    description: "Próximamente",
-    icon: <FactCheckRoundedIcon fontSize="small" />,
-    disabled: true,
-    group: "future",
-  },
-  {
-    label: "Reportes",
-    description: "Próximamente",
-    icon: <AssessmentRoundedIcon fontSize="small" />,
-    disabled: true,
-    group: "future",
-  },
-  {
-    label: "Configuración",
-    description: "Próximamente",
-    icon: <SettingsRoundedIcon fontSize="small" />,
-    disabled: true,
-    group: "future",
+    label: "Bitácora",
+    description: "Registros globales",
+    path: "/bitacora",
+    icon: <HistoryRoundedIcon fontSize="small" />,
+    group: "worklog",
   },
 ];
 
@@ -90,6 +74,9 @@ export function DashboardLayout({ mode, onToggleMode, children }: DashboardLayou
           location.pathname.startsWith("/requirements/") ||
           location.pathname.startsWith("/triggers/")
         );
+      }
+      if (path === "/bitacora") {
+        return location.pathname === "/bitacora";
       }
       return location.pathname === path || location.pathname.startsWith(`${path}/`);
     },

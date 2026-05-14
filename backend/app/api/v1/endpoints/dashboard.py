@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from app.api.deps import get_workflow_service
-from app.schemas.workflow import DailyBoardResponse, StepInstancePublic, WorkflowSummary
+from app.schemas.workflow import DailyBoardResponse, StepInstancePublic, WorkLogEntry, WorkflowSummary
 from app.services.workflow_service import WorkflowService
 
 router = APIRouter()
@@ -20,3 +20,8 @@ def list_active_workflows(service: WorkflowService = Depends(get_workflow_servic
 @router.get("/daily-board", response_model=DailyBoardResponse)
 def get_daily_board(service: WorkflowService = Depends(get_workflow_service)) -> DailyBoardResponse:
     return service.get_daily_board()
+
+
+@router.get("/work-log", response_model=list[WorkLogEntry])
+def list_work_log_entries(service: WorkflowService = Depends(get_workflow_service)) -> list[WorkLogEntry]:
+    return service.list_work_log_entries()

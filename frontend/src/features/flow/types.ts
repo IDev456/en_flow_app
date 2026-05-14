@@ -2,6 +2,7 @@ export type TriggerStatus = "sin_flows" | "en_proceso" | "esperando_respuesta" |
 export type WorkflowStatus = "pendiente" | "en_proceso" | "esperando_respuesta" | "en_espera" | "con_problema" | "finalizado" | "cancelado";
 export type StepStatus = "activo" | "espera" | "problema" | "esperando_respuesta" | "completado" | "cancelada";
 export type StepTransitionType = "next_task" | "wait_external" | "finish_flow";
+export type WorkLogEntryType = "comment" | "status_change" | "field_change" | "external_event";
 
 export type Attachment = {
   id: string;
@@ -98,6 +99,22 @@ export type DailyBoardData = {
   tareas_con_problema: Step[];
   flows_recientes: WorkflowSummary[];
   flows_cerrados_recientes: WorkflowSummary[];
+};
+
+export type WorkLogEntry = {
+  id: string;
+  timestamp: string;
+  entry_type: WorkLogEntryType;
+  summary: string;
+  author: string;
+  step_id: string;
+  step_name: string;
+  step_order: number;
+  workflow_id: string;
+  workflow_title: string | null;
+  requirement_id: string | null;
+  requirement_title: string | null;
+  attachments_count: number;
 };
 
 export type StepComment = {
