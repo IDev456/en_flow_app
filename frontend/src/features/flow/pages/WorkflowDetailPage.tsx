@@ -28,6 +28,7 @@ import { useToastContext } from "../../../components/Toast";
 
 import {
   addStepComment,
+  cancelWorkflow,
   completeStep,
   createRequirementFromFlow,
   getStepComments,
@@ -84,6 +85,7 @@ export function WorkflowDetailPage() {
   const [linkingRequirement, setLinkingRequirement] = useState(false);
   const [creatingRequirement, setCreatingRequirement] = useState(false);
   const [unlinkingRequirementId, setUnlinkingRequirementId] = useState<string | null>(null);
+  const [cancellingFlow, setCancellingFlow] = useState(false);
   const [toastOpen, setToastOpen] = useState(Boolean(initialToastMessage));
   const [toastMessage, setToastMessage] = useState<string | null>(initialToastMessage);
 
@@ -437,6 +439,36 @@ export function WorkflowDetailPage() {
     }
   }
 
+  async function handleCancelCurrentFlow() {
+    if (!workflow) return;
+    if (workflow.estado === "finalizado" || workflow.estado === "cancelado") return;
+
+    const currentTask =
+      workflow.steps.find((item) => ["activo", "espera", "problema", "esperando_respuesta"].includes(item.estado))?.nombre?.trim() ||
+      workflow.objetivo_final?.trim() ||
+      "Flow sin tarea actual";
+
+    const confirmed = window.confirm(
+      `¿Cancelar este flow?\n\n${currentTask}\n\nEl flow pasará a estado cancelado y quedará en modo solo lectura operativa.\nNo se eliminarán tareas, comentarios ni proyectos vinculados.\nPara continuar operando tareas, primero deberás reactivarlo desde la pantalla de Flows.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setCancellingFlow(true);
+      await cancelWorkflow(workflow.id);
+      await loadWorkflow(selectedStepId ?? undefined);
+      setPendingCompleteDialogStepId(null);
+      setToastMessage("Flow cancelado.");
+      setToastOpen(true);
+      showToast("Flow cancelado.", "success");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudo cancelar el flow";
+      showToast(message, "error");
+    } finally {
+      setCancellingFlow(false);
+    }
+  }
+
   if (loading) {
     return (
       <Stack direction="row" spacing={1.5} sx={{ py: 8, alignItems: "center", justifyContent: "center" }}>
@@ -455,6 +487,8 @@ export function WorkflowDetailPage() {
   }
 
   const selectedStep: Step | null = workflow.steps.find((step) => step.id === selectedStepId) ?? pickRelevantStep(workflow);
+  const isWorkflowOperationalClosed = workflow.estado === "cancelado" || workflow.estado === "finalizado";
+  const canCancelCurrent = ["en_proceso", "esperando_respuesta", "en_espera", "con_problema", "pendiente"].includes(workflow.estado);
   const selectedStepJournalItems = buildJournalItems(stepHistory, stepComments).filter(
     (item) => item.body.trim().length > 0 || item.attachments.length > 0
   );
@@ -509,6 +543,11 @@ export function WorkflowDetailPage() {
                   <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                     Continuidad del flow de principio a fin.
                   </Typography>
+                  {workflow.estado === "cancelado" && (
+                    <Alert severity="warning" sx={{ mt: 1.5 }}>
+                      Flow cancelado, reactivar para continuar.
+                    </Alert>
+                  )}
                 </Box>
 
                 <Box
@@ -553,6 +592,15 @@ export function WorkflowDetailPage() {
                     <Button variant="text" size="small" color="inherit" onClick={handleOpenLinkRequirement}>
                       {linkedRequirements.length > 0 ? "Gestionar" : "Asociar"}
                     </Button>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      color="error"
+                      onClick={() => void handleCancelCurrentFlow()}
+                      disabled={!canCancelCurrent || cancellingFlow}
+                    >
+                      {cancellingFlow ? "Cancelando..." : "Cancelar flow"}
+                    </Button>
                   </Stack>
                 </Box>
               </Stack>
@@ -561,14 +609,14 @@ export function WorkflowDetailPage() {
                 variant="vertical"
                 triggerLabel={getPrimaryRequirementLabel()}
                 steps={workflow.steps}
-                workflowClosed={workflow.estado === "finalizado"}
+                workflowClosed={isWorkflowOperationalClosed}
                 selectedStepId={selectedStepId}
                 stepHasRecords={stepHasRecords}
                 onSelectStep={handleSelectStep}
                 onOpenStep={handleOpenStep}
-                onCompleteStepIntent={handleOpenCompleteStep}
-                onRenameStep={handleRenameStep}
-                onUpdateStepReminderDate={handleUpdateStepReminderDate}
+                onCompleteStepIntent={isWorkflowOperationalClosed ? undefined : handleOpenCompleteStep}
+                onRenameStep={isWorkflowOperationalClosed ? undefined : handleRenameStep}
+                onUpdateStepReminderDate={isWorkflowOperationalClosed ? undefined : handleUpdateStepReminderDate}
                 onOpenTrigger={() => {
                   const requirementId = workflow.trigger_id ?? workflow.requirement_ids[0];
                   if (requirementId) navigate(`/requirements/${requirementId}`);
@@ -593,6 +641,12 @@ export function WorkflowDetailPage() {
               onCompleteTask={handleCompleteTask}
               onRegisterExternalEvent={(input) => handleRegisterExternalEvent(selectedStep.id, input)}
               onResolveExternalResponse={(stepId, input) => handleResolveExternalResponse(stepId, input)}
+              operationLocked={isWorkflowOperationalClosed}
+              operationLockMessage={
+                workflow.estado === "cancelado"
+                  ? "Flow cancelado, reactivar para continuar."
+                  : "Flow finalizado, este paso queda en solo lectura operativa."
+              }
             />
           </Box>
         )}

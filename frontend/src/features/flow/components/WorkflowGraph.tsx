@@ -132,30 +132,42 @@ function formatDuration(ms: number): string {
 }
 
 function formatDurationBetween(start: string | null, end: string | null): string | null {
-  if (!start || !end) return null;
-  const ms = Math.abs(new Date(end).getTime() - new Date(start).getTime());
+  if (!start) return null;
+  const startMs = new Date(start).getTime();
+  const endMs = end ? new Date(end).getTime() : Date.now();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return null;
+  const ms = Math.max(0, endMs - startMs);
   return formatDuration(ms);
 }
 
 function renderStepTiming(step: Step): React.ReactElement | null {
   const createdElapsed = step.fecha_creacion ? formatElapsedTime(step.fecha_creacion) : null;
-  const stateElapsed = step.fecha_estado_actual ? formatElapsedTime(step.fecha_estado_actual) : null;
-  const durationEnd = step.fecha_cierre ?? step.fecha_estado_actual;
-  const duration = formatDurationBetween(step.fecha_creacion, durationEnd);
+  const stateSinceElapsed = step.fecha_estado_actual ? formatElapsedTime(step.fecha_estado_actual) : null;
+  const isClosed = step.estado === "completado" || step.estado === "cancelada";
+  const stateDuration = formatDurationBetween(step.fecha_estado_actual, isClosed ? step.fecha_cierre : null);
+  const totalDuration = isClosed ? formatDurationBetween(step.fecha_creacion, step.fecha_cierre) : null;
 
-  const parts: string[] = [];
-  if (createdElapsed) parts.push(`Creada ${createdElapsed}`);
-  if (stateElapsed) parts.push(`Estado ${stateElapsed}`);
-  if (duration) parts.push(`Duración ${duration}`);
+  const lines: string[] = [];
+  if (createdElapsed) lines.push(`Creada ${createdElapsed}`);
+  if (stateSinceElapsed) lines.push(`En este estado desde ${stateSinceElapsed}`);
+  if (isClosed && totalDuration) {
+    lines.push(`Tiempo total ${totalDuration}`);
+  } else if (stateDuration) {
+    lines.push(`Tiempo en estado ${stateDuration}`);
+  }
 
-  if (parts.length === 0) return null;
+  if (lines.length === 0) return null;
 
   return (
-    <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", mt: 0.5 }}>
-      <AccessTimeRoundedIcon sx={{ fontSize: 14, color: "text.secondary" }} />
-      <Typography variant="caption" color="text.secondary">
-        {parts.join(" · ")}
-      </Typography>
+    <Stack spacing={0.25} sx={{ mt: 0.5 }}>
+      {lines.map((line) => (
+        <Stack key={line} direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+          <AccessTimeRoundedIcon sx={{ fontSize: 14, color: "text.secondary" }} />
+          <Typography variant="caption" color="text.secondary">
+            {line}
+          </Typography>
+        </Stack>
+      ))}
     </Stack>
   );
 }
@@ -530,6 +542,7 @@ function StepNameEditor({ step, onRenameStep, onEditingChange, dense = false }: 
 
 function VerticalWorkflowGraph({
   steps,
+  workflowClosed,
   selectedStepId,
   stepHasRecords,
   onOpenStep,
@@ -593,7 +606,7 @@ function VerticalWorkflowGraph({
             const stateColors = getStepStateColors(theme, step.estado);
             const isFirst = index === 0;
             const isLast = index === orderedSteps.length - 1;
-            const canComplete = ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado);
+            const canComplete = !workflowClosed && ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado);
             const hasRecords =
               stepHasRecords?.[step.id] ??
               Boolean(step.ultimo_comentario_fecha || step.ultimo_comentario || step.resultado || step.observaciones);

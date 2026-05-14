@@ -317,6 +317,7 @@ class WorkflowService:
         workflow = self.get_workflow(workflow_id)
         if workflow.estado == WorkflowStatus.FINALIZADO:
             raise BusinessRuleError("No se pueden agregar tareas a un flow finalizado")
+        self._ensure_workflow_operable(workflow)
 
         steps = workflow.steps
         next_order = max((step.orden for step in steps), default=0) + 1
@@ -351,6 +352,8 @@ class WorkflowService:
 
     def update_step(self, step_id: str, payload: StepUpdate) -> StepInstancePublic:
         step = self.get_step(step_id)
+        workflow = self.get_workflow(step.workflow_id)
+        self._ensure_workflow_operable(workflow)
         patch_data = payload.model_dump(exclude_unset=True)
         update_data: dict[str, object] = {}
 
@@ -381,11 +384,15 @@ class WorkflowService:
 
     def update_step_date(self, step_id: str, payload: StepDateUpdate) -> StepInstancePublic:
         step = self.get_step(step_id)
+        workflow = self.get_workflow(step.workflow_id)
+        self._ensure_workflow_operable(workflow)
         updated = step.model_copy(update={"fecha_vencimiento": payload.fecha_vencimiento})
         return self.repository.save_step(updated)
 
     def update_step_status(self, step_id: str, payload: StepStatusUpdate) -> StepInstancePublic:
         step = self.get_step(step_id)
+        workflow = self.get_workflow(step.workflow_id)
+        self._ensure_workflow_operable(workflow)
         previous_status = step.estado
 
         if payload.estado == StepStatus.COMPLETADO:
@@ -425,10 +432,11 @@ class WorkflowService:
 
     def complete_step(self, step_id: str, payload: StepCompletePayload) -> StepInstancePublic:
         step = self.get_step(step_id)
+        workflow = self.get_workflow(step.workflow_id)
+        self._ensure_workflow_operable(workflow)
         if step.estado not in OPEN_STEP_STATUSES:
             raise BusinessRuleError("Solo se puede completar una tarea abierta")
 
-        workflow = self.get_workflow(step.workflow_id)
         now = utc_now()
         closing_note = self._resolve_closing_note(payload.resultado_cierre, payload.comentario)
 
@@ -588,6 +596,8 @@ class WorkflowService:
 
     def add_comment(self, step_id: str, payload: CommentCreate) -> CommentPublic:
         step = self.get_step(step_id)
+        workflow = self.get_workflow(step.workflow_id)
+        self._ensure_workflow_operable(workflow)
         if not step.puede_tener_comentarios:
             raise BusinessRuleError("Esta tarea no admite registros")
         return self.repository.add_comment(step_id, payload)
@@ -629,6 +639,8 @@ class WorkflowService:
 
     def register_external_event(self, step_id: str, payload: ExternalEventCreate) -> ExternalEventPublic:
         step = self.get_step(step_id)
+        workflow = self.get_workflow(step.workflow_id)
+        self._ensure_workflow_operable(workflow)
         if step.estado != StepStatus.ESPERANDO_RESPUESTA:
             raise BusinessRuleError("Solo puedes registrar respuesta externa en tareas esperando respuesta")
 
@@ -644,6 +656,10 @@ class WorkflowService:
         )
         self._sync_workflow_and_trigger_status(step.workflow_id, utc_now())
         return event
+
+    def _ensure_workflow_operable(self, workflow: WorkflowDetail | WorkflowSummary) -> None:
+        if workflow.estado == WorkflowStatus.CANCELADO:
+            raise BusinessRuleError("El flow está cancelado. Reactívalo para continuar operando tareas.")
 
     def _sync_workflow_and_trigger_status(self, workflow_id: str, now: datetime, *, force_finish: bool = False) -> None:
         workflow = self.get_workflow(workflow_id)

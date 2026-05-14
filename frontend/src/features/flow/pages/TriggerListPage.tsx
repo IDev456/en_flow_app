@@ -65,6 +65,7 @@ import {
   formatLocalDateInput,
   formatRelativeCalendarDay,
   getCalendarDayDiff,
+  isNoisyAutomaticJournalText,
   getStatusTone,
   getTodayLocalDateInput,
   toCalendarDayValue,
@@ -205,9 +206,26 @@ function getLatestMovementAt(workflow: WorkflowDetail) {
   }, null);
 }
 
-function getStepRecord(step: Step | null) {
-  if (!step) return "Sin registros todavía";
-  return step.ultimo_comentario?.trim() || (step.descripcion?.trim() ?? "Sin registros todavía");
+function getLatestMeaningfulWorkflowRecord(workflow: WorkflowDetail) {
+  const latestByStep = workflow.steps
+    .map((step) => {
+      const text = step.ultimo_comentario?.trim() ?? "";
+      const timestamp = step.ultimo_comentario_fecha;
+      if (!text || !timestamp || isNoisyAutomaticJournalText(text)) {
+        return null;
+      }
+      const parsed = new Date(timestamp).getTime();
+      if (!Number.isFinite(parsed)) return null;
+      return { text, timestampMs: parsed };
+    })
+    .filter((item): item is { text: string; timestampMs: number } => Boolean(item));
+
+  if (latestByStep.length === 0) {
+    return "Sin registros todavía";
+  }
+
+  const latest = latestByStep.reduce((current, candidate) => (candidate.timestampMs > current.timestampMs ? candidate : current));
+  return latest.text;
 }
 
 function canCancelWorkflow(workflow: WorkflowDetail) {
@@ -479,7 +497,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         stepLabel,
         executionDateInput,
         executionAt: executionDateInput ? toDateSortValue(executionDateInput) : Number.MAX_SAFE_INTEGER,
-        lastRecord: getStepRecord(step),
+        lastRecord: getLatestMeaningfulWorkflowRecord(item.workflow),
         movementLabel: formatElapsedTime(item.latestMovementAt) ?? "Sin movimiento reciente",
         movementAt,
         movementDays,

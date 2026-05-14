@@ -23,12 +23,16 @@ from app.db.models import (
 from app.repositories.workflow_repository import InMemoryWorkflowRepository
 from app.schemas.workflow import (
     CommentCreate,
+    ExternalResponseDecisionPayload,
     ExternalEventCreate,
     ExternalWaitInput,
     FinishFlowInput,
     InitialStepOverride,
+    NextTaskInput,
+    StepDateUpdate,
     StepCompletePayload,
     StepHistoryPublic,
+    StepUpdate,
     StepStatus,
     StepStatusUpdate,
     StepTemplatePublic,
@@ -410,6 +414,127 @@ class WorkflowDagTestCase(unittest.TestCase):
             trigger = self.service.get_trigger(trigger_id)
             self.assertEqual(trigger.workflow_ids, [])
             self.assertEqual(trigger.estado_general, TriggerStatus.SIN_FLOWS)
+
+    def test_cancelled_workflow_blocks_step_mutations(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        step = self.service.get_workflow(workflow_id).steps[0]
+        self.service.cancel_workflow(workflow_id)
+
+        with self.assertRaises(BusinessRuleError):
+            self.service.update_step(step.id, StepUpdate(nombre="Nombre bloqueado"))
+
+        with self.assertRaises(BusinessRuleError):
+            self.service.update_step_date(step.id, StepDateUpdate(fecha_vencimiento=datetime.now(timezone.utc)))
+
+        with self.assertRaises(BusinessRuleError):
+            self.service.update_step_status(
+                step.id,
+                StepStatusUpdate(
+                    estado=StepStatus.ESPERA,
+                    usuario="tester",
+                    nota="Intento bloqueado",
+                ),
+            )
+
+        with self.assertRaises(BusinessRuleError):
+            self.service.complete_step(
+                step.id,
+                StepCompletePayload(
+                    usuario="tester",
+                    comentario="Intento cierre bloqueado",
+                    resultado_cierre="Intento cierre bloqueado",
+                    observaciones=None,
+                    transition_type=StepTransitionType.FINISH_FLOW,
+                    finish_data=FinishFlowInput(resultado_final="No aplica", motivo_cierre="No aplica"),
+                ),
+            )
+
+        with self.assertRaises(BusinessRuleError):
+            self.service.add_comment(
+                step.id,
+                CommentCreate(
+                    autor="tester",
+                    comentario="Registro bloqueado",
+                    attachments=[],
+                ),
+            )
+
+        with self.assertRaises(BusinessRuleError):
+            self.service.register_external_event(
+                step.id,
+                ExternalEventCreate(
+                    event_type="respuesta_externa_recibida",
+                    source="manual",
+                    payload=None,
+                    comentario="Evento bloqueado",
+                    attachments=[],
+                    registrado_por="tester",
+                ),
+            )
+
+        with self.assertRaises(BusinessRuleError):
+            self.service.resolve_external_response(
+                step.id,
+                ExternalResponseDecisionPayload(
+                    usuario="tester",
+                    resultado_cierre="Resolucion bloqueada",
+                    comentario="Resolucion bloqueada",
+                    transition_type=StepTransitionType.FINISH_FLOW,
+                    next_task=None,
+                    finish_data=FinishFlowInput(resultado_final="No aplica", motivo_cierre="No aplica"),
+                    attachments=[],
+                ),
+            )
+
+    def test_reactivated_workflow_allows_step_mutations_again(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        step = self.service.get_workflow(workflow_id).steps[0]
+        self.service.cancel_workflow(workflow_id)
+        self.service.reactivate_workflow(workflow_id)
+
+        comment = self.service.add_comment(
+            step.id,
+            CommentCreate(
+                autor="tester",
+                comentario="Operativo tras reactivacion",
+                attachments=[],
+            ),
+        )
+
+        self.assertEqual(comment.comentario, "Operativo tras reactivacion")
+
+    def test_latest_snapshot_filters_noisy_automatic_messages(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        first_step = self.service.get_workflow(workflow_id).steps[0]
+
+        self.service.add_comment(
+            first_step.id,
+            CommentCreate(
+                autor="tester",
+                comentario="Avance manual",
+                attachments=[],
+            ),
+        )
+
+        self.service.complete_step(
+            first_step.id,
+            StepCompletePayload(
+                usuario="tester",
+                comentario="Cierre operativo",
+                resultado_cierre="Cierre operativo",
+                observaciones=None,
+                transition_type=StepTransitionType.NEXT_TASK,
+                next_task=NextTaskInput(nombre="Siguiente paso"),
+            ),
+        )
+
+        workflow = self.service.get_workflow(workflow_id)
+        step_one = next(step for step in workflow.steps if step.orden == 1)
+        step_two = next(step for step in workflow.steps if step.orden == 2)
+
+        self.assertEqual(step_one.ultimo_comentario, "Cierre operativo")
+        self.assertNotEqual(step_one.ultimo_comentario, "Se creo la proxima tarea: Siguiente paso")
+        self.assertIsNone(step_two.ultimo_comentario)
 
     def test_can_delete_finalized_workflow_and_reconcile_requirement(self) -> None:
         workflow_id = self._start_workflow(build_linear_template())

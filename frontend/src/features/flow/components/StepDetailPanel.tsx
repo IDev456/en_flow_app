@@ -55,6 +55,8 @@ type StepDetailPanelProps = {
   onStepUpdated?: (step: Step) => Promise<void> | void;
   onRegisterExternalEvent?: (input: ExternalEventCreateInput) => Promise<void>;
   onResolveExternalResponse?: (stepId: string, input: ExternalResponseDecisionInput) => Promise<void>;
+  operationLocked?: boolean;
+  operationLockMessage?: string | null;
 };
 
 export function StepDetailPanel({
@@ -70,6 +72,8 @@ export function StepDetailPanel({
   onStepUpdated,
   onRegisterExternalEvent,
   onResolveExternalResponse,
+  operationLocked = false,
+  operationLockMessage = null,
 }: StepDetailPanelProps) {
   const [selectedStatus, setSelectedStatus] = useState<"" | "espera" | "problema">("");
   const [composerExpanded, setComposerExpanded] = useState(false);
@@ -166,8 +170,8 @@ export function StepDetailPanel({
     );
   }
 
-  const canChangeStatus = ["activo", "espera", "problema"].includes(step.estado);
-  const canAddManualRecords = !["completado", "cancelada"].includes(step.estado);
+  const canChangeStatus = !operationLocked && ["activo", "espera", "problema"].includes(step.estado);
+  const canAddManualRecords = !operationLocked && !["completado", "cancelada"].includes(step.estado);
   const isWaitingExternal = step.estado === "esperando_respuesta";
   const latestJournalItem = buildJournalItems(history, comments).find(
     (item) => item.body.trim().length > 0 || item.attachments.length > 0
@@ -181,6 +185,9 @@ export function StepDetailPanel({
   const displayStepDescription = stepDraftDescription.trim();
 
   async function handleSubmitJournal(input: StepJournalEntryInput) {
+    if (operationLocked) {
+      return;
+    }
     await onSubmitJournal(input);
     setSelectedStatus("");
     setComposerExpanded(false);
@@ -188,6 +195,7 @@ export function StepDetailPanel({
   }
 
   function handleStatusIntent(status: "" | "espera" | "problema") {
+    if (operationLocked) return;
     setSelectedStatus(status);
     setComposerExpanded(true);
     setMenuAnchor(null);
@@ -229,6 +237,10 @@ export function StepDetailPanel({
   }
 
   async function handleRegisterExternalEvent() {
+    if (operationLocked) {
+      setExternalError(operationLockMessage ?? "El flow está en modo solo lectura.");
+      return;
+    }
     if (!onRegisterExternalEvent) return;
     if (externalComment.trim().length < 3) {
       setExternalError("Debes indicar qué respuesta llegó.");
@@ -256,6 +268,10 @@ export function StepDetailPanel({
   }
 
   async function handleResolveAfterExternal() {
+    if (operationLocked) {
+      setResolveError(operationLockMessage ?? "El flow está en modo solo lectura.");
+      return;
+    }
     if (!onResolveExternalResponse) return;
     const currentStep = step;
     if (!currentStep) return;
@@ -305,6 +321,7 @@ export function StepDetailPanel({
   }
 
   function handleStartStepEdit() {
+    if (operationLocked) return;
     if (!step) return;
     setStepDraftName(step.nombre);
     setStepDraftDescription(step.descripcion ?? "");
@@ -326,6 +343,10 @@ export function StepDetailPanel({
 
   async function handleSaveStepEdit() {
     if (!step) return;
+    if (operationLocked) {
+      setStepEditError(operationLockMessage ?? "El flow está en modo solo lectura.");
+      return;
+    }
 
     const nextName = stepDraftName.trim();
     const nextDescription = stepDraftDescription.trim();
@@ -380,6 +401,7 @@ export function StepDetailPanel({
   }
 
   function startReminderEdit() {
+    if (operationLocked) return;
     if (!step) return;
     const currentValue = step.fecha_vencimiento ? step.fecha_vencimiento.slice(0, 10) : "";
     setReminderDraft(currentValue);
@@ -397,6 +419,10 @@ export function StepDetailPanel({
 
   async function saveReminderEdit() {
     if (!step) return;
+    if (operationLocked) {
+      setStepEditError(operationLockMessage ?? "El flow está en modo solo lectura.");
+      return;
+    }
     const currentValue = step.fecha_vencimiento ? step.fecha_vencimiento.slice(0, 10) : "";
     const nextDraft = reminderDraft.trim();
     if (nextDraft === currentValue) {
@@ -461,7 +487,7 @@ export function StepDetailPanel({
                         size="small"
                         value={reminderDraft}
                         autoFocus
-                        disabled={savingReminder}
+                        disabled={savingReminder || operationLocked}
                         slotProps={{ inputLabel: { shrink: true } }}
                         onChange={(event) => setReminderDraft(event.target.value)}
                         onBlur={() => {
@@ -479,22 +505,31 @@ export function StepDetailPanel({
                         sx={{ maxWidth: 210 }}
                       />
                     ) : (
-                      <Button
-                        variant="text"
-                        color="inherit"
-                        onClick={startReminderEdit}
-                        sx={{ justifyContent: "flex-start", px: 0, minWidth: 0, textTransform: "none" }}
-                      >
+                      operationLocked ? (
                         <Typography variant="body2" color={step.fecha_vencimiento ? "text.primary" : "text.secondary"}>
                           {step.fecha_vencimiento
                             ? `${formatRelativeCalendarDay(step.fecha_vencimiento) ?? formatCalendarDate(step.fecha_vencimiento)} · ${formatCalendarDate(step.fecha_vencimiento)}`
                             : "Sin recordatorio"}
                         </Typography>
-                      </Button>
+                      ) : (
+                        <Button
+                          variant="text"
+                          color="inherit"
+                          onClick={startReminderEdit}
+                          sx={{ justifyContent: "flex-start", px: 0, minWidth: 0, textTransform: "none" }}
+                        >
+                          <Typography variant="body2" color={step.fecha_vencimiento ? "text.primary" : "text.secondary"}>
+                            {step.fecha_vencimiento
+                              ? `${formatRelativeCalendarDay(step.fecha_vencimiento) ?? formatCalendarDate(step.fecha_vencimiento)} · ${formatCalendarDate(step.fecha_vencimiento)}`
+                              : "Sin recordatorio"}
+                          </Typography>
+                        </Button>
+                      )
                     )}
                   </Stack>
                 </CardContent>
               </Card>
+              {operationLocked && operationLockMessage && <Alert severity="warning">{operationLockMessage}</Alert>}
               {stepEditError && <Alert severity="error">{stepEditError}</Alert>}
             </Stack>
           ) : (
@@ -564,12 +599,12 @@ export function StepDetailPanel({
                         {savingStep ? "Guardando..." : "Guardar"}
                       </Button>
                     </>
-                  ) : (
+                  ) : !operationLocked ? (
                     <Button variant="text" color="inherit" onClick={handleStartStepEdit}>
                       Editar
                     </Button>
-                  )}
-                  {isWaitingExternal && onRegisterExternalEvent && (
+                  ) : null}
+                  {!operationLocked && isWaitingExternal && onRegisterExternalEvent && (
                     <Button variant="contained" color="info" onClick={() => setExternalDialogOpen(true)} sx={{ textTransform: "none" }}>
                       Registrar respuesta recibida
                     </Button>
@@ -589,6 +624,7 @@ export function StepDetailPanel({
               </Stack>
 
               {stepEditError && <Alert severity="error">{stepEditError}</Alert>}
+              {operationLocked && operationLockMessage && <Alert severity="warning">{operationLockMessage}</Alert>}
 
               <Card variant="outlined">
                 <CardContent sx={{ p: 1.75 }}>

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
+import unicodedata
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -65,6 +66,24 @@ def _clean_text(value: object | None) -> str | None:
         return None
     normalized = value.strip()
     return normalized or None
+
+
+def _normalize_journal_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFD", value.strip().lower())
+    without_accents = "".join(char for char in normalized if unicodedata.category(char) != "Mn")
+    return " ".join(without_accents.split())
+
+
+def _is_noisy_automatic_journal_text(value: str | None) -> bool:
+    normalized = _normalize_journal_text(value or "")
+    if not normalized:
+        return False
+    return (
+        "tarea creada desde cierre dinamico" in normalized
+        or "se creo la proxima tarea" in normalized
+        or "esperando respuesta externa de externo" in normalized
+        or "esperando respuesta de externo" in normalized
+    )
 
 
 def _resolve_first_step_name(payload: WorkflowInstanceBase) -> str:
@@ -689,16 +708,20 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         comments = self._comments_by_step.get(step.id, [])
         history_entries = self._history_by_step.get(step.id, [])
 
-        latest_comment = comments[-1] if comments else None
-        latest_history = history_entries[-1] if history_entries else None
+        latest_snapshot = self._empty_latest_snapshot()
+        for comment in reversed(comments):
+            snapshot = self._build_latest_snapshot_from_comment(comment)
+            if snapshot["timestamp"]:
+                latest_snapshot = snapshot
+                break
 
-        latest_snapshot = self._build_latest_snapshot_from_comment(latest_comment)
-        latest_history_snapshot = self._build_latest_snapshot_from_history(latest_history)
-
-        if latest_history_snapshot["timestamp"] and (
-            latest_snapshot["timestamp"] is None or latest_history_snapshot["timestamp"] > latest_snapshot["timestamp"]
-        ):
-            latest_snapshot = latest_history_snapshot
+        for entry in reversed(history_entries):
+            snapshot = self._build_latest_snapshot_from_history(entry)
+            if not snapshot["timestamp"]:
+                continue
+            if latest_snapshot["timestamp"] is None or snapshot["timestamp"] > latest_snapshot["timestamp"]:
+                latest_snapshot = snapshot
+            break
 
         return step.model_copy(
             update={
@@ -715,7 +738,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
             return self._empty_latest_snapshot()
 
         text = (comment.comentario or "").strip()
-        if text:
+        if text and not _is_noisy_automatic_journal_text(text):
             return {
                 "text": text,
                 "kind": "texto",
@@ -741,7 +764,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
             return self._empty_latest_snapshot()
 
         text = (entry.nota or "").strip()
-        if text:
+        if text and not _is_noisy_automatic_journal_text(text):
             return {
                 "text": text,
                 "kind": "texto",
@@ -1378,16 +1401,20 @@ class PostgresWorkflowRepository(WorkflowRepository):
     def _step_to_public(self, step: StepModel) -> StepInstancePublic:
         comments = [self._comment_to_public(comment) for comment in step.comments]
         history_entries = [self._history_to_public(entry) for entry in step.history_entries]
-        latest_comment = comments[-1] if comments else None
-        latest_history = history_entries[-1] if history_entries else None
+        latest_snapshot = self._empty_latest_snapshot()
+        for comment in reversed(comments):
+            snapshot = self._build_latest_snapshot_from_comment(comment)
+            if snapshot["timestamp"]:
+                latest_snapshot = snapshot
+                break
 
-        latest_snapshot = self._build_latest_snapshot_from_comment(latest_comment)
-        latest_history_snapshot = self._build_latest_snapshot_from_history(latest_history)
-
-        if latest_history_snapshot["timestamp"] and (
-            latest_snapshot["timestamp"] is None or latest_history_snapshot["timestamp"] > latest_snapshot["timestamp"]
-        ):
-            latest_snapshot = latest_history_snapshot
+        for entry in reversed(history_entries):
+            snapshot = self._build_latest_snapshot_from_history(entry)
+            if not snapshot["timestamp"]:
+                continue
+            if latest_snapshot["timestamp"] is None or snapshot["timestamp"] > latest_snapshot["timestamp"]:
+                latest_snapshot = snapshot
+            break
 
         return StepInstancePublic(
             id=step.id,
@@ -1507,7 +1534,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             return self._empty_latest_snapshot()
 
         text = (comment.comentario or "").strip()
-        if text:
+        if text and not _is_noisy_automatic_journal_text(text):
             return {
                 "text": text,
                 "kind": "texto",
@@ -1533,7 +1560,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             return self._empty_latest_snapshot()
 
         text = (entry.nota or "").strip()
-        if text:
+        if text and not _is_noisy_automatic_journal_text(text):
             return {
                 "text": text,
                 "kind": "texto",
