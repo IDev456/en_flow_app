@@ -9,6 +9,7 @@ import type { Theme } from "@mui/material/styles";
 import { alpha, useTheme } from "@mui/material/styles";
 import { Box, Button, ButtonBase, Card, Chip, IconButton, Stack, TextField, Typography } from "@mui/material";
 
+import { getStatusToken } from "../../../theme";
 import type { Step } from "../types";
 import { formatCalendarDate, formatElapsedTime, formatRelativeCalendarDay, getStatusTone, humanizeStatus } from "../utils";
 import type { WorkflowVariant } from "./WorkflowVariantSwitcher";
@@ -222,14 +223,18 @@ function renderStepRecordsIndicator(hasRecords: boolean, onClick: () => void): R
         textAlign: "left",
         px: 0.9,
         py: 0.45,
-        backgroundColor: (theme) => alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.1 : 0.04),
+        backgroundColor: "surfaceContainerLow",
         border: "1px solid",
-        borderColor: (theme) => alpha(theme.palette.text.primary, 0.12),
+        borderColor: "outlineVariant",
+        transition: (theme) =>
+          theme.transitions.create(["background-color", "border-color", "color"], {
+            duration: theme.appMotion.short,
+          }),
         "&:hover .records-label, &:hover .records-value": {
           textDecoration: "underline",
         },
         "&:hover": {
-          backgroundColor: (theme) => alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.14 : 0.07),
+          backgroundColor: (theme) => alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.08 : 0.05),
         },
       }}
     >
@@ -323,14 +328,18 @@ function renderStepReminder({
             px: 0.9,
             py: 0.45,
             textAlign: "left",
-            backgroundColor: (theme) => alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.16 : 0.08),
+            backgroundColor: (theme) => theme.palette.status.active.soft,
             border: "1px solid",
-            borderColor: (theme) => alpha(theme.palette.primary.main, 0.14),
+            borderColor: (theme) => theme.palette.status.active.border,
+            transition: (theme) =>
+              theme.transitions.create(["background-color", "border-color", "color"], {
+                duration: theme.appMotion.short,
+              }),
             "&:hover .reminder-label": {
               textDecoration: "underline",
             },
             "&:hover": {
-              backgroundColor: (theme) => alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.22 : 0.12),
+              backgroundColor: (theme) => theme.palette.status.active.container,
             },
           }}
         >
@@ -369,63 +378,14 @@ type ReminderEditingStateProps = {
   onSaveReminderEdit: (step: Step) => Promise<void>;
 };
 
-function getMutedSurface(theme: Theme) {
-  return alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.16 : 0.52);
-}
-
 function getStepStateColors(theme: Theme, status: Step["estado"]) {
-  const tone = getStatusTone(status);
-
-  if (tone === "completado" || tone === "finalizado" || tone === "resuelto") {
-    return {
-      borderColor: alpha(theme.palette.success.main, 0.68),
-      backgroundColor: alpha(theme.palette.success.main, 0.24),
-      textColor: theme.palette.success.dark,
-      lineColor: alpha(theme.palette.success.main, 0.64),
-    };
-  }
-
-  if (tone === "espera") {
-    return {
-      borderColor: alpha(theme.palette.warning.main, 0.72),
-      backgroundColor: alpha(theme.palette.warning.main, 0.24),
-      textColor: theme.palette.warning.dark,
-      lineColor: alpha(theme.palette.warning.main, 0.68),
-    };
-  }
-
-  if (tone === "espera_externa") {
-    return {
-      borderColor: alpha(theme.palette.warning.main, 0.72),
-      backgroundColor: alpha(theme.palette.warning.main, 0.24),
-      textColor: theme.palette.warning.dark,
-      lineColor: alpha(theme.palette.warning.main, 0.68),
-    };
-  }
-
-  if (tone === "cancelado") {
-    return {
-      borderColor: alpha(theme.palette.text.secondary, 0.46),
-      backgroundColor: alpha(theme.palette.text.secondary, 0.12),
-      textColor: theme.palette.text.secondary,
-      lineColor: alpha(theme.palette.text.secondary, 0.32),
-    };
-  }
-
-  if (tone === "error" || tone === "problema") {
-    return {
-      borderColor: alpha(theme.palette.error.main, 0.72),
-      backgroundColor: alpha(theme.palette.error.main, 0.22),
-      textColor: theme.palette.error.dark,
-      lineColor: alpha(theme.palette.error.main, 0.68),
-    };
-  }
-
+  const token = getStatusToken(theme, getStatusTone(status));
   return {
-    borderColor: alpha(theme.palette.primary.main, 0.72),
-    backgroundColor: alpha(theme.palette.primary.main, 0.22),
-    textColor: theme.palette.primary.main,
-    lineColor: alpha(theme.palette.primary.main, 0.68),
+    borderColor: token.border,
+    backgroundColor: token.container,
+    textColor: token.onContainer,
+    lineColor: alpha(token.accent, 0.56),
+    accent: token.accent,
   };
 }
 
@@ -737,22 +697,10 @@ function VerticalWorkflowGraph({
                             "&::after": {
                               content: '""',
                               position: "absolute",
-                              inset: -2,
+                              inset: -3,
                               borderRadius: "50%",
                               pointerEvents: "none",
-                              boxShadow: `0 0 0 0 ${alpha(stateColors.textColor, 0.14)}`,
-                              animation: "softPulse 2.8s ease-in-out infinite",
-                            },
-                            "@keyframes softPulse": {
-                              "0%": {
-                                boxShadow: `0 0 0 0 ${alpha(stateColors.textColor, 0.14)}`,
-                              },
-                              "50%": {
-                                boxShadow: `0 0 0 6px ${alpha(stateColors.textColor, 0.06)}`,
-                              },
-                              "100%": {
-                                boxShadow: `0 0 0 0 ${alpha(stateColors.textColor, 0)}`,
-                              },
+                              border: `1px solid ${alpha(stateColors.accent, 0.22)}`,
                             },
                           }
                         : {}),
@@ -772,10 +720,13 @@ function VerticalWorkflowGraph({
                   variant="outlined"
                   sx={{
                     position: "relative",
-                    borderColor: isSelected ? "primary.main" : "divider",
-                    boxShadow: isSelected ? `0 0 0 1px ${alpha(theme.palette.primary.main, 0.34)}` : "none",
-                    borderRadius: 2,
-                    transition: "box-shadow 180ms ease",
+                    borderColor: isSelected ? "primary.main" : "outlineVariant",
+                    backgroundColor: isSelected ? "surfaceContainerLow" : "surfaceContainerLowest",
+                    boxShadow: isSelected ? `0 0 0 1px ${alpha(theme.palette.primary.main, 0.2)}` : theme.appElevation.surface,
+                    borderRadius: 3,
+                    transition: theme.transitions.create(["box-shadow", "border-color", "background-color"], {
+                      duration: theme.appMotion.short,
+                    }),
                     "&:hover .complete-step-button, &:focus-within .complete-step-button": {
                       opacity: 1,
                       visibility: "visible",
@@ -801,7 +752,9 @@ function VerticalWorkflowGraph({
                         right: 12,
                         opacity: 0,
                         visibility: "hidden",
-                        transition: "opacity 180ms ease",
+                        transition: theme.transitions.create("opacity", {
+                          duration: theme.appMotion.short,
+                        }),
                         textTransform: "none",
                         zIndex: 1,
                       }}
@@ -891,9 +844,10 @@ function GitLogWorkflowGraph({
               ref={isSelected ? selectedRowRef : null}
               variant="outlined"
               sx={{
-                borderColor: isSelected ? "primary.main" : "divider",
-                boxShadow: isSelected ? `0 0 0 1px ${alpha(theme.palette.primary.main, 0.34)}` : "none",
-                borderRadius: 2,
+                borderColor: isSelected ? "primary.main" : "outlineVariant",
+                backgroundColor: isSelected ? "surfaceContainerLow" : "surfaceContainerLowest",
+                boxShadow: isSelected ? `0 0 0 1px ${alpha(theme.palette.primary.main, 0.2)}` : theme.appElevation.surface,
+                borderRadius: 3,
               }}
             >
               <Box sx={{ p: 1.5 }}>

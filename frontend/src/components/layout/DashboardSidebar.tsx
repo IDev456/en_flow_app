@@ -1,15 +1,5 @@
 import type { ReactNode } from "react";
-import {
-  Box,
-  Divider,
-  Drawer,
-  List,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Tooltip,
-  Typography,
-} from "@mui/material";
+import { Box, Divider, Drawer, List, ListItemButton, ListItemIcon, ListItemText, Tooltip, Typography } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
 
 export const DASHBOARD_DRAWER_EXPANDED_WIDTH = 268;
@@ -36,7 +26,7 @@ type DashboardSidebarProps = {
 function SectionTitle({ compact, children }: { compact: boolean; children: ReactNode }) {
   if (compact) return null;
   return (
-    <Typography variant="caption" color="text.secondary" sx={{ px: 1, pb: 0.65 }}>
+    <Typography variant="caption" color="text.secondary" sx={{ px: 1, pb: 0.75 }}>
       {children}
     </Typography>
   );
@@ -75,37 +65,38 @@ function SidebarBody({
         }}
         sx={{
           position: "relative",
-          borderRadius: 2,
-          py: 0.95,
-          px: compact ? 1 : 1.25,
-          minHeight: 44,
+          borderRadius: 3,
+          py: 1,
+          px: compact ? 1 : 1.35,
+          minHeight: 48,
           justifyContent: compact ? "center" : "flex-start",
           border: "1px solid",
-          borderColor: active ? alpha(theme.palette.text.primary, 0.16) : "transparent",
-          bgcolor: active ? alpha(theme.palette.action.selected, theme.palette.mode === "dark" ? 0.52 : 0.92) : "transparent",
+          borderColor: active ? alpha(theme.palette.primary.main, 0.22) : "transparent",
+          bgcolor: active ? alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.22 : 0.1) : "transparent",
           opacity: item.disabled ? 0.54 : 1,
           "&:hover": {
             bgcolor: active
-              ? alpha(theme.palette.action.selected, theme.palette.mode === "dark" ? 0.62 : 1)
-              : alpha(theme.palette.action.hover, theme.palette.mode === "dark" ? 0.4 : 0.78),
+              ? alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.28 : 0.14)
+              : alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.06 : 0.035),
           },
           "&.Mui-selected::before": {
             content: '""',
             position: "absolute",
-            left: 0,
-            top: "20%",
-            height: "60%",
-            width: 3,
-            borderRadius: "0 2px 2px 0",
+            left: 8,
+            top: "50%",
+            height: 18,
+            width: 4,
+            borderRadius: 999,
             backgroundColor: theme.palette.primary.main,
+            transform: "translateY(-50%)",
           },
         }}
       >
         <ListItemIcon
           sx={{
-            minWidth: compact ? 0 : 34,
-            mr: compact ? 0 : 0.85,
-            color: active ? "text.primary" : "text.secondary",
+            minWidth: compact ? 0 : 38,
+            mr: compact ? 0 : 0.9,
+            color: active ? "primary.main" : "text.secondary",
             justifyContent: "center",
           }}
         >
@@ -118,7 +109,7 @@ function SidebarBody({
             secondary={item.description}
             slotProps={{
               primary: { sx: { fontWeight: active ? 700 : 600 } },
-              secondary: { variant: "caption", sx: { mt: 0.1 } },
+              secondary: { variant: "caption", sx: { mt: 0.15, color: "text.secondary" } },
             }}
           />
         )}
@@ -138,21 +129,28 @@ function SidebarBody({
     <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
       <Box sx={{ minHeight: 12 }} />
 
-      <List sx={{ px: compact ? 1 : 1.2, pt: 1.2, pb: 0.8, display: "grid", gap: 0.55 }}>
-        <SectionTitle compact={compact}>OPERACIÓN</SectionTitle>
+      <List sx={{ px: compact ? 1 : 1.25, pt: 1.25, pb: 0.8, display: "grid", gap: 0.6 }}>
+        <SectionTitle compact={compact}>OPERACION</SectionTitle>
         {mainItems.map(renderItem)}
       </List>
 
-      <Divider sx={{ mx: compact ? 1 : 1.2, my: 1 }} />
+      <Divider sx={{ mx: compact ? 1 : 1.25, my: 1.2, borderColor: "outlineVariant" }} />
 
-      <List sx={{ px: compact ? 1 : 1.2, pt: 0.4, pb: 1.2, display: "grid", gap: 0.55 }}>
-        <SectionTitle compact={compact}>BITÁCORA</SectionTitle>
+      <List sx={{ px: compact ? 1 : 1.25, pt: 0.2, pb: 1.2, display: "grid", gap: 0.6 }}>
+        <SectionTitle compact={compact}>BITACORA</SectionTitle>
         {workLogItems.map(renderItem)}
       </List>
 
-      <Box sx={{ mt: "auto", p: compact ? 1 : 1.8 }}>
+      <Box
+        sx={{
+          mt: "auto",
+          p: compact ? 1 : 1.8,
+          borderTop: "1px solid",
+          borderColor: "outlineVariant",
+        }}
+      >
         <Typography variant="caption" color="text.secondary" sx={{ display: compact ? "none" : "block" }}>
-          Operación guiada
+          Continuidad operativa sin perder contexto.
         </Typography>
       </Box>
     </Box>
@@ -197,9 +195,9 @@ export function DashboardSidebar({ mobileOpen, onMobileClose, collapsed, onNavig
             width: drawerWidth,
             boxSizing: "border-box",
             overflowX: "hidden",
-            transition: theme.transitions.create("width", {
-              easing: theme.transitions.easing.sharp,
-              duration: theme.transitions.duration.shorter,
+            transition: theme.transitions.create(["width", "background-color"], {
+              easing: theme.transitions.easing.easeInOut,
+              duration: theme.appMotion.layout,
             }),
           },
         }}

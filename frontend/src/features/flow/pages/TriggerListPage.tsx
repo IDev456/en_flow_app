@@ -17,7 +17,7 @@ import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import ScheduleRoundedIcon from "@mui/icons-material/ScheduleRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import ViewColumnRoundedIcon from "@mui/icons-material/ViewColumnRounded";
-import { useTheme } from "@mui/material/styles";
+import { type Theme, useTheme } from "@mui/material/styles";
 import {
   Alert,
   Box,
@@ -56,6 +56,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import { PageContainer } from "../../../components/layout/PageContainer";
 import { useToastContext } from "../../../components/Toast";
+import { getStatusSemanticKey } from "../../../theme";
 import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, getWorkflow, listTriggers, listWorkflows, reactivateWorkflow, updateStepDate } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Step, TriggerDetail, WorkflowDetail } from "../types";
@@ -72,7 +73,7 @@ import {
 } from "../utils";
 
 type ViewMode = "requirements" | "flows";
-type FlowFilter = "all" | "active" | "waiting" | "finalized" | "cancelled";
+type FlowFilter = "all" | "active" | "waiting" | "finalized";
 
 type TriggerListPageProps = {
   defaultView?: ViewMode;
@@ -125,7 +126,6 @@ const flowFilterOptions: Array<{ value: FlowFilter; label: string }> = [
   { value: "active", label: "Activos" },
   { value: "waiting", label: "Esperando" },
   { value: "finalized", label: "Finalizados" },
-  { value: "cancelled", label: "Cancelados" },
   { value: "all", label: "Todos" },
 ];
 
@@ -133,16 +133,7 @@ function getFilterIcon(filter: FlowFilter) {
   if (filter === "active") return <BoltRoundedIcon sx={{ fontSize: 14 }} />;
   if (filter === "waiting") return <HourglassTopRoundedIcon sx={{ fontSize: 14 }} />;
   if (filter === "finalized") return <CheckCircleRoundedIcon sx={{ fontSize: 14 }} />;
-  if (filter === "cancelled") return <CancelOutlinedIcon sx={{ fontSize: 14 }} />;
   return <InboxRoundedIcon sx={{ fontSize: 14 }} />;
-}
-
-function getFilterTabColor(filter: FlowFilter) {
-  if (filter === "active") return "info";
-  if (filter === "waiting") return "warning";
-  if (filter === "finalized") return "success";
-  if (filter === "cancelled") return "text";
-  return "primary";
 }
 
 function getWorkflowDisplayStatus(workflow: WorkflowDetail) {
@@ -160,9 +151,9 @@ function getWorkflowDisplayStatus(workflow: WorkflowDetail) {
   return workflow.estado;
 }
 
-function getFlowFilterFromStatus(statusValue: string): Exclude<FlowFilter, "all"> {
+function getFlowFilterFromStatus(statusValue: string): Exclude<FlowFilter, "all"> | null {
   const tone = getStatusTone(statusValue);
-  if (tone === "cancelado") return "cancelled";
+  if (tone === "cancelado") return null;
   if (tone === "finalizado" || tone === "completado" || tone === "resuelto") return "finalized";
   if (tone === "espera" || tone === "espera_externa" || statusValue === "en_espera") return "waiting";
   return "active";
@@ -304,14 +295,9 @@ function formatFutureGroupLabel(dateInput: string, todayInput: string) {
   return formattedDate;
 }
 
-function getStatusPulseColor(statusValue: string, isDark: boolean) {
-  const tone = getStatusTone(statusValue);
-  if (tone === "en_proceso" || tone === "activo") return isDark ? "rgba(2, 136, 209, 0.3)" : "rgba(2, 136, 209, 0.18)";
-  if (tone === "espera" || tone === "espera_externa") return isDark ? "rgba(237, 108, 2, 0.3)" : "rgba(237, 108, 2, 0.2)";
-  if (tone === "problema" || tone === "error") return isDark ? "rgba(211, 47, 47, 0.3)" : "rgba(211, 47, 47, 0.2)";
-  if (tone === "finalizado" || tone === "completado" || tone === "resuelto") return isDark ? "rgba(46, 125, 50, 0.3)" : "rgba(46, 125, 50, 0.2)";
-  if (tone === "cancelado") return isDark ? "rgba(158, 158, 158, 0.25)" : "rgba(117, 117, 117, 0.18)";
-  return isDark ? "rgba(2, 136, 209, 0.3)" : "rgba(2, 136, 209, 0.18)";
+function getStatusHighlight(statusValue: string, theme: Theme) {
+  const semantic = getStatusSemanticKey(getStatusTone(statusValue));
+  return theme.palette.status[semantic];
 }
 
 function toQuickFilterValues(search: string) {
@@ -448,10 +434,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       .map((workflow) => getWorkflowDisplayStatus(workflow))
       .reduce<Record<Exclude<FlowFilter, "all">, number>>(
         (acc, status) => {
-          acc[getFlowFilterFromStatus(status)] += 1;
+          const filter = getFlowFilterFromStatus(status);
+          if (!filter) return acc;
+          acc[filter] += 1;
           return acc;
         },
-        { active: 0, waiting: 0, finalized: 0, cancelled: 0 }
+        { active: 0, waiting: 0, finalized: 0 }
       );
   }, [workflowsById]);
 
@@ -467,10 +455,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const requirementCounts = useMemo(() => {
     return triggers.reduce<Record<Exclude<FlowFilter, "all">, number>>(
       (acc, trigger) => {
-        acc[getFlowFilterFromStatus(trigger.estado_general)] += 1;
+        const filter = getFlowFilterFromStatus(trigger.estado_general);
+        if (!filter) return acc;
+        acc[filter] += 1;
         return acc;
       },
-      { active: 0, waiting: 0, finalized: 0, cancelled: 0 }
+      { active: 0, waiting: 0, finalized: 0 }
     );
   }, [triggers]);
 
@@ -690,7 +680,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     const currentTask = pickRelevantStep(workflow)?.nombre?.trim() || workflow.objetivo_final?.trim() || "Flow sin tarea actual";
 
     const confirmed = window.confirm(
-      `¿Cancelar este flow?\n\n${currentTask}\n\nEl flow saldrá de la operación activa y pasará a Cancelados.\nNo se eliminarán tareas, comentarios ni proyectos vinculados.\nSi fue un error, luego podrás reactivarlo.`
+      `¿Cancelar este flow?\n\n${currentTask}\n\nEl flow saldra de la operacion activa y quedara en modo cancelado.\nNo se eliminaran tareas, comentarios ni proyectos vinculados.\nSi fue un error, luego podras reactivarlo.`
     );
     if (!confirmed) return;
 
@@ -714,7 +704,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     const currentTask = pickRelevantStep(workflow)?.nombre?.trim() || workflow.objetivo_final?.trim() || "Flow sin tarea actual";
 
     const confirmed = window.confirm(
-      `¿Reactivar este flow?\n\n${currentTask}\n\nEl flow volverá a la operación y saldrá de Cancelados.\nNo se eliminarán tareas, comentarios ni proyectos vinculados.`
+      `¿Reactivar este flow?\n\n${currentTask}\n\nEl flow volvera a la operacion activa.\nNo se eliminaran tareas, comentarios ni proyectos vinculados.`
     );
     if (!confirmed) return;
 
@@ -857,7 +847,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
               const absoluteDateLabel = formatCalendarDate(originalValue);
               const secondaryLabel = relativeLabel ? absoluteDateLabel : null;
               const shouldPulseToday = row.isDueToday && !isEditing;
-              const pulseColor = getStatusPulseColor(row.status, theme.palette.mode === "dark");
+              const statusHighlight = getStatusHighlight(row.status, theme);
               return (
                 <Tooltip title={absoluteDateLabel}>
                   <ButtonBase
@@ -884,17 +874,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                         alignItems: "center",
                         minWidth: 134,
                         borderRadius: 0.75,
-                        ...(shouldPulseToday
-                          ? {
-                              px: 0.35,
-                              animation: "todaySoftPulse 2.2s ease-in-out infinite",
-                              "@keyframes todaySoftPulse": {
-                                "0%": { backgroundColor: "transparent" },
-                                "50%": { backgroundColor: pulseColor },
-                                "100%": { backgroundColor: "transparent" },
-                              },
-                            }
-                          : {}),
+                        px: shouldPulseToday ? 0.45 : 0,
+                        backgroundColor: shouldPulseToday ? statusHighlight.soft : "transparent",
+                        border: shouldPulseToday ? `1px solid ${statusHighlight.border}` : "1px solid transparent",
+                        transition: theme.transitions.create(["background-color", "border-color"], {
+                          duration: theme.appMotion.short,
+                        }),
                       }}
                     >
                       <Typography variant="body2" sx={{ fontSize: "0.82rem", lineHeight: 1.2 }}>
@@ -1434,17 +1419,14 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
               >
                 {flowFilterOptions.map((option) => {
                   const count = option.value !== "all" ? (currentCounts[option.value] ?? 0) : null;
-                  const colorTone = getFilterTabColor(option.value);
-                  const selectedColor =
-                    colorTone === "info"
-                      ? "info.main"
-                      : colorTone === "warning"
-                        ? "warning.main"
-                        : colorTone === "success"
-                          ? "success.main"
-                          : colorTone === "text"
-                            ? "text.secondary"
-                            : "primary.main";
+                  const filterToken =
+                    option.value === "active"
+                      ? theme.palette.status.active
+                      : option.value === "waiting"
+                        ? theme.palette.status.waiting
+                        : option.value === "finalized"
+                          ? theme.palette.status.finalized
+                          : theme.palette.status.neutral;
 
                   return (
                     <Tab
@@ -1473,11 +1455,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                           color: "text.secondary",
                         },
                         "&.Mui-selected": {
-                          color: selectedColor,
-                          backgroundColor: "action.hover",
+                          color: filterToken.onContainer,
+                          backgroundColor: filterToken.container,
                         },
                         "&.Mui-selected .MuiSvgIcon-root": {
-                          color: selectedColor,
+                          color: filterToken.accent,
                         },
                       }}
                     />

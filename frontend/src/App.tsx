@@ -1,8 +1,9 @@
-import { Box, CssBaseline, Fade, ThemeProvider } from "@mui/material";
+import { CssBaseline, ThemeProvider } from "@mui/material";
 import { useMemo, useState } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 import { DashboardLayout } from "./components/layout/DashboardLayout";
+import { PageTransition } from "./components/motion/PageTransition";
 import { TriggerCreateModal } from "./features/flow/components/TriggerCreateModal";
 import { NotFoundPage } from "./features/flow/pages/NotFoundPage";
 import { StepDetailPage } from "./features/flow/pages/StepDetailPage";
@@ -79,11 +80,9 @@ function AppShell({ mode, onToggleMode }: AppShellProps) {
 
   return (
     <DashboardLayout mode={mode} onToggleMode={onToggleMode}>
-      <Fade key={location.pathname} timeout={200} in>
-        <Box>
-          <Outlet />
-        </Box>
-      </Fade>
+      <PageTransition transitionKey={location.pathname}>
+        <Outlet />
+      </PageTransition>
       {isCreateModalOpen && <TriggerCreateModal onClose={closeCreateModal} />}
     </DashboardLayout>
   );

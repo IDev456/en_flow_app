@@ -84,7 +84,14 @@ export function DashboardLayout({ mode, onToggleMode, children }: DashboardLayou
   );
 
   return (
-    <Box sx={{ minHeight: "100vh", display: "flex", bgcolor: "background.default" }}>
+    <Box
+      sx={{
+        minHeight: "100vh",
+        display: "flex",
+        bgcolor: "background.default",
+        color: "text.primary",
+      }}
+    >
       <DashboardHeader
         mode={mode}
         collapsed={collapsed}
@@ -111,9 +118,22 @@ export function DashboardLayout({ mode, onToggleMode, children }: DashboardLayou
           pt: "64px",
           height: "100vh",
           overflow: "auto",
+          transition: (theme) =>
+            theme.transitions.create(["width", "background-color"], {
+              duration: theme.appMotion.layout,
+            }),
         }}
       >
-        <Box sx={{ px: { xs: 1.5, sm: 2.25, md: 3 }, py: { xs: 2, md: 2.5 }, maxWidth: 1680, mx: "auto" }}>{children}</Box>
+        <Box
+          sx={{
+            px: { xs: 1.5, sm: 2.5, md: 3.25 },
+            py: { xs: 2, md: 2.75 },
+            maxWidth: 1680,
+            mx: "auto",
+          }}
+        >
+          {children}
+        </Box>
       </Box>
     </Box>
   );

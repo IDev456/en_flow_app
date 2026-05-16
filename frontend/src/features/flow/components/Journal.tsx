@@ -341,12 +341,16 @@ export function Journal({
                   direction={{ xs: "column", sm: "row" }}
                   spacing={1.25}
                   sx={{
-                    alignItems: { xs: "stretch", sm: "center" },
-                    justifyContent: "space-between",
-                    gap: 1.25,
+                    alignItems: "stretch",
+                    borderRadius: SHAPE_RADIUS,
+                    border: "1px solid",
+                    borderColor: "divider",
+                    backgroundColor: "surfaceContainerLow",
+                    px: { xs: 1.1, sm: 1.25 },
+                    py: { xs: 1, sm: 1.1 },
                   }}
                 >
-                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: { xs: "flex-start", sm: "center" } }}>
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-start" }}>
                     <Tooltip title="Adjuntar archivos">
                       <span>
                         <IconButton
@@ -357,10 +361,10 @@ export function Journal({
                           aria-label="Adjuntar archivos"
                           sx={{
                             border: "1px solid",
-                            borderColor: (theme) => alpha(theme.palette.text.primary, 0.16),
-                            backgroundColor: (theme) => alpha(theme.palette.background.paper, 0.92),
+                            borderColor: "outline",
+                            backgroundColor: "background.paper",
                             "&:hover": {
-                              backgroundColor: (theme) => alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.12 : 0.05),
+                              backgroundColor: (theme) => alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.14 : 0.06),
                             },
                           }}
                         >
@@ -371,12 +375,13 @@ export function Journal({
                   </Box>
 
                   <Stack
-                    direction="row"
+                    direction={{ xs: "row", sm: "row" }}
                     spacing={1}
                     sx={{
                       width: { xs: "100%", sm: "auto" },
                       alignItems: "center",
                       justifyContent: { xs: "space-between", sm: "flex-end" },
+                      flexWrap: "wrap",
                     }}
                   >
                     <Button
@@ -385,7 +390,7 @@ export function Journal({
                       color="inherit"
                       onClick={handleCancelComposer}
                       disabled={submitting}
-                      sx={{ alignSelf: { xs: "stretch", sm: "auto" } }}
+                      sx={{ order: { xs: 1, sm: 1 }, alignSelf: { xs: "stretch", sm: "auto" } }}
                     >
                       Cancelar
                     </Button>
@@ -395,13 +400,14 @@ export function Journal({
                       onClick={() => void handleSubmit()}
                       disabled={!canSubmit}
                       sx={{
+                        order: { xs: 2, sm: 2 },
                         flex: { xs: 1, sm: "0 0 auto" },
-                        minWidth: { sm: 220 },
+                        minWidth: { xs: 0, sm: 220 },
                         px: 2.2,
-                        boxShadow: 3,
+                        boxShadow: 0,
                         "&.Mui-disabled": {
-                          backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.24),
-                          color: (theme) => alpha(theme.palette.primary.contrastText, 0.72),
+                          backgroundColor: (theme) => alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.24 : 0.16),
+                          color: (theme) => alpha(theme.palette.primary.contrastText, 0.88),
                         },
                       }}
                     >

@@ -1,5 +1,5 @@
-import { createContext, useCallback, useContext, useState } from "react";
 import type { ReactNode } from "react";
+import { createContext, useCallback, useContext, useState } from "react";
 
 export type ToastVariant = "success" | "error" | "info";
 
@@ -16,7 +16,7 @@ type ToastContextValue = {
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
-let _nextToastId = 1;
+let nextToastId = 1;
 
 export function useToastContext(): ToastContextValue {
   const ctx = useContext(ToastContext);
@@ -28,17 +28,17 @@ function useToast() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const dismissToast = useCallback((id: number) => {
-    setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, exiting: true } : t)));
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 300);
+    setToasts((prev) => prev.map((toast) => (toast.id === id ? { ...toast, exiting: true } : toast)));
+    window.setTimeout(() => {
+      setToasts((prev) => prev.filter((toast) => toast.id !== id));
+    }, 220);
   }, []);
 
   const showToast = useCallback(
     (message: string, variant: ToastVariant = "info") => {
-      const id = _nextToastId++;
+      const id = nextToastId++;
       setToasts((prev) => [...prev, { id, message, variant, exiting: false }]);
-      setTimeout(() => {
+      window.setTimeout(() => {
         dismissToast(id);
       }, 4000);
     },
@@ -48,13 +48,7 @@ function useToast() {
   return { toasts, showToast, dismissToast };
 }
 
-function ToastContainer({
-  toasts,
-  onDismiss,
-}: {
-  toasts: ToastItem[];
-  onDismiss: (id: number) => void;
-}) {
+function ToastContainer({ toasts, onDismiss }: { toasts: ToastItem[]; onDismiss: (id: number) => void }) {
   if (toasts.length === 0) return null;
 
   return (
@@ -66,13 +60,8 @@ function ToastContainer({
           role="alert"
         >
           <span className="toast__message">{toast.message}</span>
-          <button
-            className="toast__dismiss"
-            type="button"
-            onClick={() => onDismiss(toast.id)}
-            aria-label="Cerrar notificación"
-          >
-            ×
+          <button className="toast__dismiss" type="button" onClick={() => onDismiss(toast.id)} aria-label="Cerrar notificacion">
+            x
           </button>
         </div>
       ))}

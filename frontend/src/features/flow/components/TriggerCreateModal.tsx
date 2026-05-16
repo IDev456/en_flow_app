@@ -1,19 +1,7 @@
 import { useState } from "react";
 import AddTaskRoundedIcon from "@mui/icons-material/AddTaskRounded";
 import TuneRoundedIcon from "@mui/icons-material/TuneRounded";
-import {
-  Alert,
-  Box,
-  Button,
-  Collapse,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Stack,
-  TextField,
-  Typography,
-} from "@mui/material";
+import { Alert, Box, Button, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import { useNavigate } from "react-router-dom";
 
@@ -39,7 +27,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
 
   function handleClose() {
     if (title.trim() || detail.trim() || assignee.trim() || executionDate) {
-      if (!window.confirm("¿Cerrar sin guardar? Se perderán los datos ingresados.")) {
+      if (!window.confirm("Cerrar sin guardar? Se perderan los datos ingresados.")) {
         return;
       }
     }
@@ -77,17 +65,17 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
       <DialogTitle sx={{ pb: 1 }}>
         <Stack spacing={1}>
           <Typography variant="subtitle2" color="text.secondary">
-            Captura rápida
+            Captura rapida
           </Typography>
           <Typography variant="h4">Capturar tarea</Typography>
         </Stack>
       </DialogTitle>
 
-      <DialogContent dividers sx={{ borderColor: "divider" }}>
+      <DialogContent dividers sx={{ borderColor: "outlineVariant" }}>
         <Stack spacing={2.5}>
           <TextField
             autoFocus
-            label="¿Qué tenés que hacer? *"
+            label="Que tenes que hacer? *"
             multiline
             minRows={3}
             value={title}
@@ -100,35 +88,29 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
             {showOptional ? "Ocultar datos opcionales" : "Agregar datos opcionales"}
           </Button>
 
-          <Collapse in={showOptional}>
+          <Collapse in={showOptional} timeout={220}>
             <Box
               sx={{
                 p: { xs: 2, md: 2.5 },
                 borderRadius: 3,
                 border: "1px solid",
-                borderColor: "divider",
+                borderColor: "outlineVariant",
                 backgroundColor: (theme) =>
-                  alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.34 : 0.82),
+                  alpha(theme.palette.surfaceContainerLow, theme.palette.mode === "dark" ? 0.84 : 0.98),
               }}
             >
               <Stack spacing={1.5}>
                 <Typography variant="subtitle2" color="text.secondary">
                   Datos opcionales
                 </Typography>
-                <TextField
-                  label="Detalle"
-                  multiline
-                  minRows={2}
-                  value={detail}
-                  onChange={(event) => setDetail(event.target.value)}
-                />
+                <TextField label="Detalle" multiline minRows={2} value={detail} onChange={(event) => setDetail(event.target.value)} />
                 <TextField label="Asignado a" value={assignee} onChange={(event) => setAssignee(event.target.value)} />
                 <TextField
                   label="Fecha"
                   type="date"
                   value={executionDate}
                   onChange={(event) => setExecutionDate(event.target.value)}
-                  helperText="Posible fecha de ejecución"
+                  helperText="Posible fecha de ejecucion"
                   slotProps={{ inputLabel: { shrink: true } }}
                 />
               </Stack>
@@ -139,7 +121,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
         </Stack>
       </DialogContent>
 
-      <DialogActions sx={{ p: 3, justifyContent: "space-between" }}>
+      <DialogActions sx={{ p: 3, justifyContent: "space-between", gap: 1.5, flexWrap: "wrap" }}>
         <Typography variant="body2" color="text.secondary">
           Se crea un flow con una tarea activa inicial.
         </Typography>
@@ -147,12 +129,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
           <Button variant="text" color="inherit" onClick={handleClose} disabled={submitting}>
             Cancelar
           </Button>
-          <Button
-            variant="contained"
-            onClick={() => void handleSubmit()}
-            disabled={submitting || !canSubmit}
-            startIcon={<AddTaskRoundedIcon />}
-          >
+          <Button variant="contained" onClick={() => void handleSubmit()} disabled={submitting || !canSubmit} startIcon={<AddTaskRoundedIcon />}>
             {submitting ? "Guardando..." : "Capturar tarea"}
           </Button>
         </Stack>

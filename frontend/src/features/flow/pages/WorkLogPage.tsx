@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import InboxRoundedIcon from "@mui/icons-material/InboxRounded";
 import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
-import { Alert, Box, Button, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Paper, Stack, TextField, Typography } from "@mui/material";
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import { Link as RouterLink } from "react-router-dom";
 
+import { DataGridEmptyState } from "../../../components/feedback/DataGridEmptyState";
 import { PageContainer } from "../../../components/layout/PageContainer";
 import { listWorkLogEntries } from "../api";
 import type { WorkLogEntry, WorkLogEntryType } from "../types";
@@ -222,7 +224,7 @@ export function WorkLogPage() {
 
         {error ? <Alert severity="error">{error}</Alert> : null}
 
-        <Box sx={{ height: "70vh", minHeight: 520 }}>
+        <Paper variant="outlined" sx={{ height: "70vh", minHeight: 520, overflow: "hidden" }}>
           <DataGrid
             rows={filteredRows}
             columns={columns}
@@ -238,11 +240,20 @@ export function WorkLogPage() {
                 sortModel: [{ field: "timestamp", sort: "desc" }],
               },
             }}
+            slots={{
+              noRowsOverlay: () => (
+                <DataGridEmptyState
+                  icon={<InboxRoundedIcon color="action" />}
+                  title="Sin registros todavia"
+                  description="Cuando haya comentarios, cambios o eventos externos, vas a verlos aca."
+                />
+              ),
+            }}
             localeText={{
               noRowsLabel: loading ? "Cargando..." : "Sin registros para mostrar.",
             }}
           />
-        </Box>
+        </Paper>
       </Stack>
     </PageContainer>
   );
