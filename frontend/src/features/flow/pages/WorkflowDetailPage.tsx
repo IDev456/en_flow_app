@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import {
   Alert,
   Box,
@@ -560,47 +561,56 @@ export function WorkflowDetailPage() {
                   <Typography variant="caption" color="text.secondary">
                     {linkedRequirements.length > 0 ? linkedRequirementLabel : "Sin proyectos asociados"}
                   </Typography>
-                  <Stack
-                    direction={{ xs: "column", md: "row" }}
-                    spacing={0.75}
-                    sx={{
-                      mt: 0.5,
-                      justifyContent: { md: "flex-end" },
-                      alignItems: { xs: "stretch", md: "center" },
-                      flexWrap: "wrap",
-                      rowGap: 0.75,
-                    }}
-                  >
-                    {linkedRequirements.slice(0, 2).map((item) => (
-                      <Chip
-                        key={item.id}
-                        size="small"
-                        variant="outlined"
-                        label={item.descripcion?.trim() || `Proyecto ${item.id.slice(0, 8)}`}
-                        sx={{
-                          maxWidth: { xs: "100%", md: 260 },
-                          "& .MuiChip-label": {
-                            display: "block",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          },
-                        }}
-                      />
-                    ))}
-                    {linkedRequirements.length > 2 && <Chip size="small" variant="outlined" label={`+${linkedRequirements.length - 2}`} />}
-                    <Button variant="text" size="small" color="inherit" onClick={handleOpenLinkRequirement}>
-                      {linkedRequirements.length > 0 ? "Gestionar" : "Asociar"}
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      color="error"
-                      onClick={() => void handleCancelCurrentFlow()}
-                      disabled={!canCancelCurrent || cancellingFlow}
+                  <Stack spacing={1.05} sx={{ mt: 0.7 }}>
+                    <Stack
+                      direction="row"
+                      spacing={0.75}
+                      sx={{
+                        justifyContent: { md: "flex-end" },
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        rowGap: 0.75,
+                      }}
                     >
-                      {cancellingFlow ? "Cancelando..." : "Cancelar flow"}
-                    </Button>
+                      {linkedRequirements.slice(0, 2).map((item) => (
+                        <Chip
+                          key={item.id}
+                          size="small"
+                          variant="outlined"
+                          label={item.descripcion?.trim() || `Proyecto ${item.id.slice(0, 8)}`}
+                          sx={{
+                            maxWidth: { xs: "100%", md: 260 },
+                            "& .MuiChip-label": {
+                              display: "block",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            },
+                          }}
+                        />
+                      ))}
+                      {linkedRequirements.length > 2 && (
+                        <Chip size="small" variant="outlined" label={`+${linkedRequirements.length - 2}`} />
+                      )}
+                    </Stack>
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      sx={{
+                        justifyContent: { md: "flex-end" },
+                        alignItems: "center",
+                      }}
+                    >
+                      <Button
+                        variant="text"
+                        size="small"
+                        color="inherit"
+                        onClick={handleOpenLinkRequirement}
+                        sx={{ px: 0.5 }}
+                      >
+                        {linkedRequirements.length > 0 ? "Gestionar" : "Asociar"}
+                      </Button>
+                    </Stack>
                   </Stack>
                 </Box>
               </Stack>
@@ -622,6 +632,43 @@ export function WorkflowDetailPage() {
                   if (requirementId) navigate(`/requirements/${requirementId}`);
                 }}
               />
+
+              {canCancelCurrent && (
+                <>
+                  <Divider />
+                  <Stack
+                    direction={{ xs: "column", md: "row" }}
+                    spacing={1.5}
+                    sx={{
+                      justifyContent: "space-between",
+                      alignItems: { xs: "flex-start", md: "center" },
+                    }}
+                  >
+                    <Box>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Acciones del flow
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>
+                        Cancelar el flow detiene su operaci&oacute;n, pero no modifica el proyecto asociado.
+                      </Typography>
+                    </Box>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      color="error"
+                      startIcon={<CancelOutlinedIcon fontSize="small" />}
+                      onClick={() => void handleCancelCurrentFlow()}
+                      disabled={cancellingFlow}
+                      sx={{
+                        alignSelf: { xs: "stretch", md: "center" },
+                        px: 1.5,
+                      }}
+                    >
+                      {cancellingFlow ? "Cancelando..." : "Cancelar flow"}
+                    </Button>
+                  </Stack>
+                </>
+              )}
             </Stack>
           </CardContent>
         </Card>

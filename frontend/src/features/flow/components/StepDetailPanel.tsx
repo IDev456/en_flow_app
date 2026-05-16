@@ -475,7 +475,7 @@ export function StepDetailPanel({
                   </IconButton>
                 ) : null}
               </Stack>
-              <Card variant="outlined">
+              <Card variant="outlined" sx={{ display: "none" }}>
                 <CardContent sx={{ p: 1.75 }}>
                   <Stack spacing={0.5}>
                     <Typography variant="body2" color="text.secondary">

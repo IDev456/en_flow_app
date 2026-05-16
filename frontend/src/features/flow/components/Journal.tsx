@@ -19,6 +19,7 @@ import {
   TextField,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
@@ -335,22 +336,78 @@ export function Journal({
                   helperText={`${text.length} / ${MAX_CHARS}`}
                 />
 
+                <input ref={fileInputRef} type="file" multiple hidden onChange={handleFileChange} />
                 <Stack
                   direction={{ xs: "column", sm: "row" }}
                   spacing={1.25}
-                  sx={{ alignItems: { xs: "stretch", sm: "center" } }}
+                  sx={{
+                    alignItems: { xs: "stretch", sm: "center" },
+                    justifyContent: "space-between",
+                    gap: 1.25,
+                  }}
                 >
-                  <input ref={fileInputRef} type="file" multiple hidden onChange={handleFileChange} />
-                  <Button
-                    type="button"
-                    variant="outlined"
-                    color="inherit"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={!canComment || submitting}
-                    startIcon={<AddPhotoAlternateRoundedIcon />}
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: { xs: "flex-start", sm: "center" } }}>
+                    <Tooltip title="Adjuntar archivos">
+                      <span>
+                        <IconButton
+                          type="button"
+                          color="inherit"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={!canComment || submitting}
+                          aria-label="Adjuntar archivos"
+                          sx={{
+                            border: "1px solid",
+                            borderColor: (theme) => alpha(theme.palette.text.primary, 0.16),
+                            backgroundColor: (theme) => alpha(theme.palette.background.paper, 0.92),
+                            "&:hover": {
+                              backgroundColor: (theme) => alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.12 : 0.05),
+                            },
+                          }}
+                        >
+                          <AddPhotoAlternateRoundedIcon />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                  </Box>
+
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{
+                      width: { xs: "100%", sm: "auto" },
+                      alignItems: "center",
+                      justifyContent: { xs: "space-between", sm: "flex-end" },
+                    }}
                   >
-                    Adjuntar archivos
-                  </Button>
+                    <Button
+                      type="button"
+                      variant="text"
+                      color="inherit"
+                      onClick={handleCancelComposer}
+                      disabled={submitting}
+                      sx={{ alignSelf: { xs: "stretch", sm: "auto" } }}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="contained"
+                      onClick={() => void handleSubmit()}
+                      disabled={!canSubmit}
+                      sx={{
+                        flex: { xs: 1, sm: "0 0 auto" },
+                        minWidth: { sm: 220 },
+                        px: 2.2,
+                        boxShadow: 3,
+                        "&.Mui-disabled": {
+                          backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.24),
+                          color: (theme) => alpha(theme.palette.primary.contrastText, 0.72),
+                        },
+                      }}
+                    >
+                      {submitting ? "Guardando..." : getSubmitLabel()}
+                    </Button>
+                  </Stack>
                 </Stack>
               </Stack>
             ) : (
@@ -359,123 +416,106 @@ export function Journal({
               </Button>
             )}
 
-            {attachments.length > 0 && (
+            {composerExpanded && attachments.length > 0 && (
               <Box
-              sx={{
-                display: "grid",
-                gap: 1.25,
-                gridTemplateColumns: { xs: "1fr", sm: "repeat(auto-fit, minmax(220px, 1fr))" },
-              }}
-            >
-              {attachments.map((attachment) => (
-                <Card key={attachment.local_id} variant="outlined">
-                  <CardContent sx={{ display: "grid", gap: 1.25 }}>
-                    <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between" }}>
-                      <Box sx={{ minWidth: 0 }}>
-                        <Typography noWrap sx={{ fontWeight: 700 }}>
-                          {attachment.nombre}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {formatFileSize(attachment.size_bytes)}
-                        </Typography>
-                      </Box>
-                      <IconButton size="small" onClick={() => handleRemoveAttachment(attachment.local_id)}>
-                        <CloseRoundedIcon fontSize="small" />
-                      </IconButton>
-                    </Stack>
-                    {attachment.content_type.startsWith("image/") ? (
-                      <Box
-                        component="img"
-                        src={attachment.preview_url}
-                        alt={attachment.nombre}
-                        sx={{
-                          width: "100%",
-                          maxHeight: 220,
-                          objectFit: "cover",
-                          borderRadius: 2,
-                          border: "1px solid",
-                          borderColor: "divider",
-                        }}
-                      />
-                    ) : (
-                      <Stack
-                        spacing={1}
-                        sx={{
-                          alignItems: "center",
-                          justifyContent: "center",
-                          minHeight: 120,
-                          borderRadius: 2,
-                          border: "1px dashed",
-                          borderColor: "divider",
-                        }}
-                      >
-                        <InsertDriveFileRoundedIcon color="action" />
-                        <Typography variant="body2" color="text.secondary">
-                          Archivo listo para enviar
-                        </Typography>
-                      </Stack>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </Box>
-          )}
-
-          {composerExpanded && canChangeStatus && (
-            <Stack spacing={1.25}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Cambiar estado
-              </Typography>
-              <ToggleButtonGroup
-                exclusive
-                value={selectedStatus || null}
-                onChange={(_, value: "" | "espera" | "problema" | null) => {
-                  onSelectedStatusChange(value ?? "");
-                  setError(null);
-                }}
                 sx={{
-                  flexWrap: "wrap",
-                  gap: 1,
-                  p: 0.75,
-                  borderRadius: SHAPE_RADIUS,
-                  backgroundColor: (theme) =>
-                    alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.42 : 0.72),
+                  display: "grid",
+                  gap: 1.25,
+                  gridTemplateColumns: { xs: "1fr", sm: "repeat(auto-fit, minmax(220px, 1fr))" },
                 }}
               >
-                {stepStatusOptions.map((option) => (
-                  <ToggleButton
-                    key={option.value}
-                    value={option.value}
-                    disabled={submitting}
-                    sx={getStatusToggleSx(option.value as StatusOptionValue)}
-                  >
-                    {option.label}
-                  </ToggleButton>
+                {attachments.map((attachment) => (
+                  <Card key={attachment.local_id} variant="outlined">
+                    <CardContent sx={{ display: "grid", gap: 1.25 }}>
+                      <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between" }}>
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography noWrap sx={{ fontWeight: 700 }}>
+                            {attachment.nombre}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {formatFileSize(attachment.size_bytes)}
+                          </Typography>
+                        </Box>
+                        <IconButton size="small" onClick={() => handleRemoveAttachment(attachment.local_id)}>
+                          <CloseRoundedIcon fontSize="small" />
+                        </IconButton>
+                      </Stack>
+                      {attachment.content_type.startsWith("image/") ? (
+                        <Box
+                          component="img"
+                          src={attachment.preview_url}
+                          alt={attachment.nombre}
+                          sx={{
+                            width: "100%",
+                            maxHeight: 220,
+                            objectFit: "cover",
+                            borderRadius: 2,
+                            border: "1px solid",
+                            borderColor: "divider",
+                          }}
+                        />
+                      ) : (
+                        <Stack
+                          spacing={1}
+                          sx={{
+                            alignItems: "center",
+                            justifyContent: "center",
+                            minHeight: 120,
+                            borderRadius: 2,
+                            border: "1px dashed",
+                            borderColor: "divider",
+                          }}
+                        >
+                          <InsertDriveFileRoundedIcon color="action" />
+                          <Typography variant="body2" color="text.secondary">
+                            Archivo listo para enviar
+                          </Typography>
+                        </Stack>
+                      )}
+                    </CardContent>
+                  </Card>
                 ))}
-              </ToggleButtonGroup>
-            </Stack>
-          )}
+              </Box>
+            )}
 
-          {error && <Alert severity="error">{error}</Alert>}
-
-          {composerExpanded && (
-            <Stack
-              direction={{ xs: "column", sm: "row" }}
-              spacing={1.25}
-              sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", sm: "center" } }}
-            >
-              <Stack direction="row" spacing={1}>
-                <Button type="button" variant="contained" onClick={() => void handleSubmit()} disabled={!canSubmit}>
-                  {submitting ? "Guardando..." : getSubmitLabel()}
-                </Button>
-                <Button type="button" variant="text" color="inherit" onClick={handleCancelComposer} disabled={submitting}>
-                  Cancelar
-                </Button>
+            {composerExpanded && canChangeStatus && (
+              <Stack spacing={1.25}>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Cambiar estado
+                </Typography>
+                <ToggleButtonGroup
+                  exclusive
+                  value={selectedStatus || null}
+                  onChange={(_, value: "" | "espera" | "problema" | null) => {
+                    onSelectedStatusChange(value ?? "");
+                    setError(null);
+                  }}
+                  sx={{
+                    flexWrap: "wrap",
+                    gap: 1,
+                    p: 0.75,
+                    borderRadius: SHAPE_RADIUS,
+                    backgroundColor: (theme) =>
+                      alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.42 : 0.72),
+                  }}
+                >
+                  {stepStatusOptions.map((option) => (
+                    <ToggleButton
+                      key={option.value}
+                      value={option.value}
+                      disabled={submitting}
+                      sx={getStatusToggleSx(option.value as StatusOptionValue)}
+                    >
+                      {option.label}
+                    </ToggleButton>
+                  ))}
+                </ToggleButtonGroup>
               </Stack>
-            </Stack>
-          )}
+            )}
+
+            {error && <Alert severity="error">{error}</Alert>}
         </Stack>
-      </Box>
+        </Box>
       ) : null}
 
       <Snackbar

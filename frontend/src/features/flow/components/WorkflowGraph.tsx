@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type Mous
 import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
 import CheckRoundedIcon from "@mui/icons-material/CheckRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
+import EditCalendarRoundedIcon from "@mui/icons-material/EditCalendarRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import NotesRoundedIcon from "@mui/icons-material/NotesRounded";
 import type { Theme } from "@mui/material/styles";
@@ -159,16 +160,49 @@ function renderStepTiming(step: Step): React.ReactElement | null {
   if (lines.length === 0) return null;
 
   return (
-    <Stack spacing={0.25} sx={{ mt: 0.5 }}>
-      {lines.map((line) => (
-        <Stack key={line} direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+    <Box
+      sx={{
+        mt: 0.65,
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: 0.85,
+      }}
+    >
+      {lines.map((line, index) => (
+        <Stack
+          key={line}
+          direction="row"
+          spacing={0.5}
+          sx={{
+            alignItems: "center",
+            minWidth: 0,
+            ...(index > 0
+              ? {
+                  pl: 0.85,
+                  position: "relative",
+                  "&::before": {
+                    content: '""',
+                    position: "absolute",
+                    left: 0,
+                    top: "50%",
+                    width: 4,
+                    height: 4,
+                    borderRadius: "50%",
+                    backgroundColor: "divider",
+                    transform: "translateY(-50%)",
+                  },
+                }
+              : {}),
+          }}
+        >
           <AccessTimeRoundedIcon sx={{ fontSize: 14, color: "text.secondary" }} />
           <Typography variant="caption" color="text.secondary">
             {line}
           </Typography>
         </Stack>
       ))}
-    </Stack>
+    </Box>
   );
 }
 
@@ -182,20 +216,28 @@ function renderStepRecordsIndicator(hasRecords: boolean, onClick: () => void): R
       sx={{
         display: "inline-flex",
         alignItems: "center",
-        gap: 0.5,
-        borderRadius: 1,
-        mt: 0.5,
+        gap: 0.6,
+        borderRadius: 999,
         width: "fit-content",
-        color: "text.secondary",
         textAlign: "left",
-        "&:hover": {
-          color: "primary.main",
+        px: 0.9,
+        py: 0.45,
+        backgroundColor: (theme) => alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.1 : 0.04),
+        border: "1px solid",
+        borderColor: (theme) => alpha(theme.palette.text.primary, 0.12),
+        "&:hover .records-label, &:hover .records-value": {
           textDecoration: "underline",
+        },
+        "&:hover": {
+          backgroundColor: (theme) => alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.14 : 0.07),
         },
       }}
     >
       <NotesRoundedIcon sx={{ fontSize: 14 }} />
-      <Typography variant="caption">
+      <Typography className="records-label" variant="caption" color="text.secondary">
+        Registros
+      </Typography>
+      <Typography className="records-value" variant="caption" color={hasRecords ? "text.primary" : "text.secondary"}>
         {hasRecords ? "Con registros" : "Sin registros"}
       </Typography>
     </ButtonBase>
@@ -228,17 +270,18 @@ function renderStepReminder({
   const reminder = step.fecha_vencimiento;
   const relativeLabel = reminder ? formatRelativeCalendarDay(reminder) : null;
   const absoluteLabel = reminder ? formatCalendarDate(reminder) : null;
-  const mainLabel = relativeLabel ?? absoluteLabel ?? "Sin recordatorio";
+  const valueLabel = reminder
+    ? relativeLabel && absoluteLabel
+      ? `${relativeLabel} · ${absoluteLabel}`
+      : relativeLabel ?? absoluteLabel ?? "Sin recordatorio"
+    : "Sin recordatorio";
   const isEditing = editingReminderStepId === step.id;
   const isSaving = savingReminderStepId === step.id;
   const originalValue = reminder ? reminder.slice(0, 10) : "";
   const value = reminderDraftByStepId[step.id] ?? originalValue;
 
   return (
-    <Stack spacing={0.1} sx={{ mt: 0.5 }}>
-      <Typography variant="caption" color="text.secondary">
-        Recordatorio
-      </Typography>
+    <Stack spacing={0.45}>
       {isEditing ? (
         <TextField
           type="date"
@@ -276,23 +319,41 @@ function renderStepReminder({
           }}
           sx={{
             width: "fit-content",
-            borderRadius: 1,
+            borderRadius: 999,
+            px: 0.9,
+            py: 0.45,
             textAlign: "left",
+            backgroundColor: (theme) => alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.16 : 0.08),
+            border: "1px solid",
+            borderColor: (theme) => alpha(theme.palette.primary.main, 0.14),
             "&:hover .reminder-label": {
               textDecoration: "underline",
             },
+            "&:hover": {
+              backgroundColor: (theme) => alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.22 : 0.12),
+            },
           }}
         >
-          <Typography className="reminder-label" variant="caption" color={reminder ? "text.primary" : "text.secondary"}>
-            {mainLabel}
-            {reminder && relativeLabel && absoluteLabel ? ` · ${absoluteLabel}` : ""}
-          </Typography>
+          <Stack direction="row" spacing={0.6} sx={{ alignItems: "center", minWidth: 0 }}>
+            <EditCalendarRoundedIcon sx={{ fontSize: 14, color: reminder ? "primary.main" : "text.secondary" }} />
+            <Typography className="reminder-label" variant="caption" color="text.secondary">
+              Recordatorio
+            </Typography>
+            <Typography variant="caption" color={reminder ? "text.primary" : "text.secondary"}>
+              {valueLabel}
+            </Typography>
+          </Stack>
         </ButtonBase>
       ) : (
-        <Typography variant="caption" color={reminder ? "text.primary" : "text.secondary"}>
-          {mainLabel}
-          {reminder && relativeLabel && absoluteLabel ? ` · ${absoluteLabel}` : ""}
-        </Typography>
+        <Stack direction="row" spacing={0.6} sx={{ alignItems: "center", minWidth: 0 }}>
+          <EditCalendarRoundedIcon sx={{ fontSize: 14, color: reminder ? "primary.main" : "text.secondary" }} />
+          <Typography variant="caption" color="text.secondary">
+            Recordatorio
+          </Typography>
+          <Typography variant="caption" color={reminder ? "text.primary" : "text.secondary"}>
+            {valueLabel}
+          </Typography>
+        </Stack>
       )}
     </Stack>
   );
@@ -757,18 +818,20 @@ function VerticalWorkflowGraph({
                       />
 
                       {renderStepTiming(step)}
-                      {renderStepReminder({
-                        step,
-                        editingReminderStepId,
-                        savingReminderStepId,
-                        reminderDraftByStepId,
-                        onUpdateStepReminderDate,
-                        onReminderDraftChange,
-                        onStartReminderEdit,
-                        onCancelReminderEdit,
-                        onSaveReminderEdit,
-                      })}
-                      {renderStepRecordsIndicator(hasRecords, () => onOpenStep(step.id))}
+                      <Stack direction="row" spacing={0.85} sx={{ alignItems: "center", flexWrap: "wrap", gap: 0.85 }}>
+                        {renderStepReminder({
+                          step,
+                          editingReminderStepId,
+                          savingReminderStepId,
+                          reminderDraftByStepId,
+                          onUpdateStepReminderDate,
+                          onReminderDraftChange,
+                          onStartReminderEdit,
+                          onCancelReminderEdit,
+                          onSaveReminderEdit,
+                        })}
+                        {renderStepRecordsIndicator(hasRecords, () => onOpenStep(step.id))}
+                      </Stack>
                     </Stack>
                   </Box>
                 </Card>
@@ -842,18 +905,20 @@ function GitLogWorkflowGraph({
                     </Stack>
                   </Stack>
                   {renderStepTiming(step)}
-                  {renderStepReminder({
-                    step,
-                    editingReminderStepId,
-                    savingReminderStepId,
-                    reminderDraftByStepId,
-                    onUpdateStepReminderDate,
-                    onReminderDraftChange,
-                    onStartReminderEdit,
-                    onCancelReminderEdit,
-                    onSaveReminderEdit,
-                  })}
-                  {renderStepRecordsIndicator(hasRecords, () => onOpenStep(step.id))}
+                  <Stack direction="row" spacing={0.85} sx={{ alignItems: "center", flexWrap: "wrap", gap: 0.85 }}>
+                    {renderStepReminder({
+                      step,
+                      editingReminderStepId,
+                      savingReminderStepId,
+                      reminderDraftByStepId,
+                      onUpdateStepReminderDate,
+                      onReminderDraftChange,
+                      onStartReminderEdit,
+                      onCancelReminderEdit,
+                      onSaveReminderEdit,
+                    })}
+                    {renderStepRecordsIndicator(hasRecords, () => onOpenStep(step.id))}
+                  </Stack>
                 </Stack>
               </Box>
             </Card>
