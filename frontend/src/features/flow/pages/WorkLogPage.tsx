@@ -244,8 +244,8 @@ export function WorkLogPage() {
               noRowsOverlay: () => (
                 <DataGridEmptyState
                   icon={<InboxRoundedIcon color="action" />}
-                  title="Sin registros todavia"
-                  description="Cuando haya comentarios, cambios o eventos externos, vas a verlos aca."
+                  title="Sin registros todavía"
+                  description="Cuando haya comentarios, cambios o eventos externos, vas a verlos acá."
                 />
               ),
             }}

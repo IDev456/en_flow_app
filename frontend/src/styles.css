@@ -35,6 +35,12 @@ select {
 .page-transition-root {
   min-width: 0;
   will-change: opacity, transform;
+  animation-name: page-enter;
+  animation-fill-mode: both;
+}
+
+.page-transition-root--reduced {
+  animation: none !important;
 }
 
 .toast-container {
@@ -117,7 +123,7 @@ select {
 }
 
 .animate-fade-up {
-  animation: fade-up 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: fade-up 0.24s cubic-bezier(0.2, 0, 0, 1) both;
 }
 
 .surface-shimmer {
@@ -151,11 +157,22 @@ select {
 @keyframes fade-up {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
   }
 }
 
@@ -179,6 +196,7 @@ select {
   }
 
   .page-transition-root,
+  .page-transition-root--reduced,
   .animate-fade-up,
   .toast,
   .toast--exiting,

@@ -60,7 +60,7 @@ function ToastContainer({ toasts, onDismiss }: { toasts: ToastItem[]; onDismiss:
           role="alert"
         >
           <span className="toast__message">{toast.message}</span>
-          <button className="toast__dismiss" type="button" onClick={() => onDismiss(toast.id)} aria-label="Cerrar notificacion">
+          <button className="toast__dismiss" type="button" onClick={() => onDismiss(toast.id)} aria-label="Cerrar notificación">
             x
           </button>
         </div>

@@ -80,7 +80,7 @@ function AppShell({ mode, onToggleMode }: AppShellProps) {
 
   return (
     <DashboardLayout mode={mode} onToggleMode={onToggleMode}>
-      <PageTransition transitionKey={location.pathname}>
+      <PageTransition key={location.pathname}>
         <Outlet />
       </PageTransition>
       {isCreateModalOpen && <TriggerCreateModal onClose={closeCreateModal} />}

@@ -11,7 +11,7 @@ const triggerOptions = [
   {
     value: "incidente",
     label: "Incidente operativo",
-    description: "Corte, error o situacion que necesita resolucion secuencial.",
+    description: "Corte, error o situación que necesita resolución secuencial.",
   },
   {
     value: "solicitud",
@@ -21,7 +21,7 @@ const triggerOptions = [
   {
     value: "mejora",
     label: "Mejora planificada",
-    description: "Cambio estructurado con diagnostico, ejecucion y verificacion.",
+    description: "Cambio estructurado con diagnóstico, ejecución y verificación.",
   },
 ];
 

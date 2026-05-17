@@ -27,7 +27,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
 
   function handleClose() {
     if (title.trim() || detail.trim() || assignee.trim() || executionDate) {
-      if (!window.confirm("Cerrar sin guardar? Se perderan los datos ingresados.")) {
+      if (!window.confirm("¿Cerrar sin guardar? Se perderán los datos ingresados.")) {
         return;
       }
     }
@@ -65,7 +65,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
       <DialogTitle sx={{ pb: 1 }}>
         <Stack spacing={1}>
           <Typography variant="subtitle2" color="text.secondary">
-            Captura rapida
+            Captura rápida
           </Typography>
           <Typography variant="h4">Capturar tarea</Typography>
         </Stack>
@@ -75,7 +75,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
         <Stack spacing={2.5}>
           <TextField
             autoFocus
-            label="Que tenes que hacer? *"
+            label="¿Qué tenés que hacer? *"
             multiline
             minRows={3}
             value={title}
@@ -92,7 +92,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
             <Box
               sx={{
                 p: { xs: 2, md: 2.5 },
-                borderRadius: 3,
+                borderRadius: "10px",
                 border: "1px solid",
                 borderColor: "outlineVariant",
                 backgroundColor: (theme) =>
@@ -110,7 +110,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
                   type="date"
                   value={executionDate}
                   onChange={(event) => setExecutionDate(event.target.value)}
-                  helperText="Posible fecha de ejecucion"
+                  helperText="Posible fecha de ejecución"
                   slotProps={{ inputLabel: { shrink: true } }}
                 />
               </Stack>

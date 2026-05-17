@@ -723,7 +723,7 @@ function VerticalWorkflowGraph({
                     borderColor: isSelected ? "primary.main" : "outlineVariant",
                     backgroundColor: isSelected ? "surfaceContainerLow" : "surfaceContainerLowest",
                     boxShadow: isSelected ? `0 0 0 1px ${alpha(theme.palette.primary.main, 0.2)}` : theme.appElevation.surface,
-                    borderRadius: 3,
+                    borderRadius: "10px",
                     transition: theme.transitions.create(["box-shadow", "border-color", "background-color"], {
                       duration: theme.appMotion.short,
                     }),
@@ -847,7 +847,7 @@ function GitLogWorkflowGraph({
                 borderColor: isSelected ? "primary.main" : "outlineVariant",
                 backgroundColor: isSelected ? "surfaceContainerLow" : "surfaceContainerLowest",
                 boxShadow: isSelected ? `0 0 0 1px ${alpha(theme.palette.primary.main, 0.2)}` : theme.appElevation.surface,
-                borderRadius: 3,
+                borderRadius: "10px",
               }}
             >
               <Box sx={{ p: 1.5 }}>

@@ -95,7 +95,7 @@ export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInsp
             {workflowId}
           </Typography>
           <Typography variant="h5">{step.nombre}</Typography>
-          <Typography color="text.secondary">{step.descripcion ?? "Sin descripcion"}</Typography>
+          <Typography color="text.secondary">{step.descripcion ?? "Sin descripción"}</Typography>
           <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
             <StatusBadge value={step.estado} />
             <Typography variant="body2" color="text.secondary">
@@ -118,7 +118,7 @@ export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInsp
             Vencimiento: {formatDate(step.fecha_vencimiento)}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Resultado: {step.resultado ?? "Todavia sin resultado"}
+            Resultado: {step.resultado ?? "Todavía sin resultado"}
           </Typography>
         </Stack>
 
@@ -131,7 +131,7 @@ export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInsp
               minRows={3}
               value={resultado}
               onChange={(event) => setResultado(event.target.value)}
-              placeholder="Que se obtuvo al finalizar esta tarea?"
+              placeholder="¿Qué se obtuvo al finalizar esta tarea?"
             />
             <TextField
               label="Observaciones"
@@ -139,7 +139,7 @@ export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInsp
               minRows={3}
               value={observaciones}
               onChange={(event) => setObservaciones(event.target.value)}
-              placeholder="Detalles tecnicos o impedimentos encontrados durante la ejecucion..."
+              placeholder="Detalles técnicos o impedimentos encontrados durante la ejecución..."
             />
             <TextField
               label="Resultado final"
@@ -155,7 +155,7 @@ export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInsp
             </Button>
           </Stack>
         ) : (
-          <Alert severity="info">Esta tarea no esta lista para completarse desde la vista del flow.</Alert>
+          <Alert severity="info">Esta tarea no está lista para completarse desde la vista del flow.</Alert>
         )}
 
         <Link component={RouterLink} to={`/steps/${step.id}`} underline="hover">

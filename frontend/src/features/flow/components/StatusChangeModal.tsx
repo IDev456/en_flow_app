@@ -1,14 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Stack,
-  TextField,
-  Typography,
-} from "@mui/material";
+import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography } from "@mui/material";
 
 import type { Step, StepStatus } from "../types";
 import { stepStatusOptions } from "../utils";
@@ -82,7 +73,7 @@ export function StatusChangeModal({
             value={note}
             onChange={(event) => setNote(event.target.value)}
             error={requiresNote && charCount < 3}
-            helperText={requiresNote ? `${charCount} / 3 caracteres minimo` : "Opcional"}
+            helperText={requiresNote ? `${charCount} / 3 caracteres mínimo` : "Opcional"}
           />
         </Stack>
       </DialogContent>

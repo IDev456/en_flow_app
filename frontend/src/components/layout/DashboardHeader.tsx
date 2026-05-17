@@ -39,11 +39,11 @@ export function DashboardHeader({
       }}
     >
       <Toolbar sx={{ minHeight: 64, gap: 1.2 }}>
-        <Tooltip title={isDesktop ? (collapsed ? "Expandir navegacion" : "Colapsar navegacion") : "Abrir navegacion"}>
+        <Tooltip title={isDesktop ? (collapsed ? "Expandir navegación" : "Colapsar navegación") : "Abrir navegación"}>
           <IconButton
             color="inherit"
             onClick={isDesktop ? onToggleDesktopNav : onOpenMobileNav}
-            aria-label="Alternar navegacion"
+            aria-label="Alternar navegación"
             sx={{
               border: "1px solid",
               borderColor: "outline",
@@ -72,7 +72,7 @@ export function DashboardHeader({
               En Flow
             </Typography>
             <Typography variant="caption" color="text.secondary" sx={{ display: { xs: "none", sm: "inline" } }}>
-              Operacion guiada y trazabilidad
+              Operación guiada y trazabilidad
             </Typography>
           </Stack>
         </Stack>

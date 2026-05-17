@@ -65,7 +65,7 @@ function SidebarBody({
         }}
         sx={{
           position: "relative",
-          borderRadius: 3,
+          borderRadius: "10px",
           py: 1,
           px: compact ? 1 : 1.35,
           minHeight: 48,
@@ -130,14 +130,14 @@ function SidebarBody({
       <Box sx={{ minHeight: 12 }} />
 
       <List sx={{ px: compact ? 1 : 1.25, pt: 1.25, pb: 0.8, display: "grid", gap: 0.6 }}>
-        <SectionTitle compact={compact}>OPERACION</SectionTitle>
+        <SectionTitle compact={compact}>OPERACIÓN</SectionTitle>
         {mainItems.map(renderItem)}
       </List>
 
       <Divider sx={{ mx: compact ? 1 : 1.25, my: 1.2, borderColor: "outlineVariant" }} />
 
       <List sx={{ px: compact ? 1 : 1.25, pt: 0.2, pb: 1.2, display: "grid", gap: 0.6 }}>
-        <SectionTitle compact={compact}>BITACORA</SectionTitle>
+        <SectionTitle compact={compact}>BITÁCORA</SectionTitle>
         {workLogItems.map(renderItem)}
       </List>
 

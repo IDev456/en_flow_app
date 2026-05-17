@@ -84,8 +84,8 @@ export function createAppTheme(mode: AppThemeMode) {
 
   const motion: AppMotionTokens = {
     micro: 140,
-    short: 180,
-    medium: 230,
+    short: 190,
+    medium: 240,
     layout: 280,
   };
 
@@ -219,7 +219,7 @@ export function createAppTheme(mode: AppThemeMode) {
     appMotion: motion,
     appElevation: elevation,
     shape: {
-      borderRadius: 14,
+      borderRadius: 8,
     },
     spacing: 8,
     typography: {
@@ -316,6 +316,7 @@ export function createAppTheme(mode: AppThemeMode) {
             backgroundImage: "none",
             backgroundColor: theme.palette.surfaceContainerLowest,
             border: `1px solid ${theme.palette.outlineVariant}`,
+            borderRadius: 10,
             boxShadow: theme.appElevation.surface,
             transition: theme.transitions.create(["border-color", "box-shadow", "background-color"], {
               duration: theme.appMotion.short,
@@ -330,7 +331,7 @@ export function createAppTheme(mode: AppThemeMode) {
         styleOverrides: {
           root: ({ theme }) => ({
             minHeight: 38,
-            borderRadius: 12,
+            borderRadius: 10,
             paddingInline: 16,
             transition: theme.transitions.create(["background-color", "border-color", "box-shadow", "color"], {
               duration: theme.appMotion.short,
@@ -364,7 +365,7 @@ export function createAppTheme(mode: AppThemeMode) {
       MuiIconButton: {
         styleOverrides: {
           root: ({ theme }) => ({
-            borderRadius: 12,
+            borderRadius: 10,
             transition: theme.transitions.create(["background-color", "color", "border-color"], {
               duration: theme.appMotion.short,
             }),
@@ -380,7 +381,7 @@ export function createAppTheme(mode: AppThemeMode) {
       MuiOutlinedInput: {
         styleOverrides: {
           root: ({ theme }) => ({
-            borderRadius: 12,
+            borderRadius: 10,
             backgroundColor: alpha(theme.palette.surfaceContainerLow, isDark ? 0.78 : 0.95),
             transition: theme.transitions.create(["background-color", "border-color", "box-shadow"], {
               duration: theme.appMotion.short,
@@ -434,6 +435,7 @@ export function createAppTheme(mode: AppThemeMode) {
             backgroundImage: "none",
             backgroundColor: theme.palette.surfaceContainerLowest,
             border: `1px solid ${theme.palette.outlineVariant}`,
+            borderRadius: 10,
             boxShadow: theme.appElevation.overlay,
           }),
         },
@@ -447,7 +449,7 @@ export function createAppTheme(mode: AppThemeMode) {
         },
         styleOverrides: {
           tooltip: ({ theme }) => ({
-            borderRadius: 10,
+            borderRadius: 8,
             backgroundColor: isDark ? alpha("#02050a", 0.92) : alpha("#182131", 0.92),
             border: `1px solid ${alpha(theme.palette.common.white, isDark ? 0.08 : 0.12)}`,
             boxShadow: theme.appElevation.overlay,
@@ -474,7 +476,7 @@ export function createAppTheme(mode: AppThemeMode) {
         styleOverrides: {
           root: ({ theme }) => ({
             padding: 4,
-            borderRadius: 14,
+            borderRadius: 10,
             border: `1px solid ${theme.palette.outlineVariant}`,
             backgroundColor: alpha(theme.palette.surfaceContainerLow, isDark ? 0.9 : 0.96),
           }),
@@ -484,7 +486,7 @@ export function createAppTheme(mode: AppThemeMode) {
         styleOverrides: {
           root: ({ theme }) => ({
             border: 0,
-            borderRadius: 10,
+            borderRadius: 8,
             color: theme.palette.text.secondary,
             fontWeight: 600,
             paddingInline: 12,
@@ -517,6 +519,7 @@ export function createAppTheme(mode: AppThemeMode) {
             backgroundImage: "none",
             backgroundColor: theme.palette.surfaceContainerLowest,
             border: `1px solid ${theme.palette.outlineVariant}`,
+            borderRadius: 10,
             boxShadow: theme.appElevation.overlay,
           }),
         },
@@ -534,7 +537,7 @@ export function createAppTheme(mode: AppThemeMode) {
         styleOverrides: {
           root: ({ theme }) => ({
             border: `1px solid ${theme.palette.outlineVariant}`,
-            borderRadius: 16,
+            borderRadius: 10,
             backgroundColor: theme.palette.surfaceContainerLowest,
             color: theme.palette.text.primary,
             "--DataGrid-rowBorderColor": alpha(theme.palette.outlineVariant, 0.96),
@@ -562,7 +565,7 @@ export function createAppTheme(mode: AppThemeMode) {
             "& .MuiDataGrid-toolbarButton": {
               minWidth: 34,
               minHeight: 34,
-              borderRadius: 10,
+              borderRadius: 8,
             },
             "& .MuiDataGrid-toolbarButton .MuiSvgIcon-root": {
               fontSize: "1rem",
