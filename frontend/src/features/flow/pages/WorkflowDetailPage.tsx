@@ -8,6 +8,7 @@ import {
   Card,
   CardContent,
   Chip,
+  ClickAwayListener,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -23,7 +24,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
-import { Link as RouterLink, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link as RouterLink, useLocation, useParams } from "react-router-dom";
 
 import { useToastContext } from "../../../components/Toast";
 
@@ -41,7 +42,6 @@ import {
   resolveExternalResponse,
   unlinkWorkflowRequirement,
   updateStep,
-  updateStepDate,
   updateStepStatus,
 } from "../api";
 import { StepDetailPanel } from "../components/StepDetailPanel";
@@ -63,7 +63,6 @@ import { buildJournalItems, DEFAULT_ACTOR } from "../utils";
 export function WorkflowDetailPage() {
   const { workflowId = "" } = useParams();
   const location = useLocation();
-  const navigate = useNavigate();
   const { showToast } = useToastContext();
   const initialToastMessage = (location.state as { toast?: string } | null)?.toast ?? null;
   const [workflow, setWorkflow] = useState<WorkflowDetail | null>(null);
@@ -275,13 +274,13 @@ export function WorkflowDetailPage() {
     await refreshAfterStepChange(nextActiveStep?.id ?? stepId);
   }
 
-  function handleSelectStep(stepId: string) {
-    setSelectedStepId(stepId);
-  }
-
-  function handleOpenStep(stepId: string) {
+  function handleStepBodyClick(stepId: string) {
     setSelectedStepId(stepId);
     setPanelOpen(true);
+  }
+
+  function closeSidePanel() {
+    setPanelOpen(false);
   }
 
   function handleOpenCompleteStep(stepId: string) {
@@ -291,21 +290,6 @@ export function WorkflowDetailPage() {
 
   async function handleStepUpdated(step: Step) {
     await refreshAfterStepChange(step.id);
-  }
-
-  async function handleUpdateStepReminderDate(stepId: string, dateInput: string) {
-    const nextValue = dateInput.trim();
-    const isoValue = nextValue ? `${nextValue}T00:00:00Z` : null;
-
-    try {
-      await updateStepDate(stepId, { fecha_vencimiento: isoValue });
-      await refreshAfterStepChange(stepId);
-      showToast("Fecha actualizada", "success");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "No se pudo actualizar la fecha";
-      showToast(message, "error");
-      throw err;
-    }
   }
 
   async function handleRenameStep(step: Step, nextName: string) {
@@ -617,20 +601,13 @@ export function WorkflowDetailPage() {
 
               <WorkflowGraph
                 variant="vertical"
-                triggerLabel={getPrimaryRequirementLabel()}
                 steps={workflow.steps}
                 workflowClosed={isWorkflowOperationalClosed}
                 selectedStepId={selectedStepId}
                 stepHasRecords={stepHasRecords}
-                onSelectStep={handleSelectStep}
-                onOpenStep={handleOpenStep}
+                onStepBodyClick={handleStepBodyClick}
                 onCompleteStepIntent={isWorkflowOperationalClosed ? undefined : handleOpenCompleteStep}
                 onRenameStep={isWorkflowOperationalClosed ? undefined : handleRenameStep}
-                onUpdateStepReminderDate={isWorkflowOperationalClosed ? undefined : handleUpdateStepReminderDate}
-                onOpenTrigger={() => {
-                  const requirementId = workflow.trigger_id ?? workflow.requirement_ids[0];
-                  if (requirementId) navigate(`/requirements/${requirementId}`);
-                }}
               />
 
               {canCancelCurrent && (
@@ -674,28 +651,30 @@ export function WorkflowDetailPage() {
         </Card>
 
         {selectedStep && panelOpen && (
-          <Box>
-            <StepDetailPanel
-              workflowId={workflow.id}
-              step={selectedStep}
-              comments={stepComments}
-              history={stepHistory}
-              drawer
-              error={panelError}
-              onClose={() => setPanelOpen(false)}
-              onStepUpdated={handleStepUpdated}
-              onSubmitJournal={handleSubmitJournal}
-              onCompleteTask={handleCompleteTask}
-              onRegisterExternalEvent={(input) => handleRegisterExternalEvent(selectedStep.id, input)}
-              onResolveExternalResponse={(stepId, input) => handleResolveExternalResponse(stepId, input)}
-              operationLocked={isWorkflowOperationalClosed}
-              operationLockMessage={
-                workflow.estado === "cancelado"
-                  ? "Flow cancelado, reactivar para continuar."
-                  : "Flow finalizado, este paso queda en solo lectura operativa."
-              }
-            />
-          </Box>
+          <ClickAwayListener mouseEvent="onMouseDown" touchEvent="onTouchStart" onClickAway={closeSidePanel}>
+            <Box>
+              <StepDetailPanel
+                workflowId={workflow.id}
+                step={selectedStep}
+                comments={stepComments}
+                history={stepHistory}
+                drawer
+                error={panelError}
+                onClose={closeSidePanel}
+                onStepUpdated={handleStepUpdated}
+                onSubmitJournal={handleSubmitJournal}
+                onCompleteTask={handleCompleteTask}
+                onRegisterExternalEvent={(input) => handleRegisterExternalEvent(selectedStep.id, input)}
+                onResolveExternalResponse={(stepId, input) => handleResolveExternalResponse(stepId, input)}
+                operationLocked={isWorkflowOperationalClosed}
+                operationLockMessage={
+                  workflow.estado === "cancelado"
+                    ? "Flow cancelado, reactivar para continuar."
+                    : "Flow finalizado, este paso queda en solo lectura operativa."
+                }
+              />
+            </Box>
+          </ClickAwayListener>
         )}
       </Box>
 

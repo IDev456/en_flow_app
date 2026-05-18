@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
+import EditCalendarRoundedIcon from "@mui/icons-material/EditCalendarRounded";
 import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
 import {
   Alert,
@@ -469,13 +470,24 @@ export function StepDetailPanel({
             <Stack spacing={1.5}>
               <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", justifyContent: "space-between" }}>
                 <Typography variant="h6">Registro de la tarea</Typography>
-                {onClose ? (
-                  <IconButton onClick={onClose} aria-label="Cerrar panel de registros">
-                    <CloseRoundedIcon />
+                <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+                  <IconButton
+                    size="small"
+                    color="inherit"
+                    onClick={isReminderEditing ? () => void saveReminderEdit() : startReminderEdit}
+                    disabled={savingReminder || operationLocked}
+                    aria-label={step.fecha_vencimiento ? "Editar recordatorio" : "Agregar recordatorio"}
+                  >
+                    <EditCalendarRoundedIcon fontSize="small" />
                   </IconButton>
-                ) : null}
+                  {onClose ? (
+                    <IconButton onClick={onClose} aria-label="Cerrar panel de registros">
+                      <CloseRoundedIcon />
+                    </IconButton>
+                  ) : null}
+                </Stack>
               </Stack>
-              <Card variant="outlined" sx={{ display: "none" }}>
+              <Card variant="outlined">
                 <CardContent sx={{ p: 1.75 }}>
                   <Stack spacing={0.5}>
                     <Typography variant="body2" color="text.secondary">
