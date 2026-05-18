@@ -23,13 +23,16 @@ import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 
 import { deleteTrigger, getStepComments, getTrigger, getWorkflow, listTriggers, listWorkflows, startWorkflow, updateTrigger } from "../api";
 import { DuplicateFlowWarningDialog } from "../components/DuplicateFlowWarningDialog";
+import { LiveDuplicateSuggestions } from "../components/LiveDuplicateSuggestions";
 import { StatusBadge } from "../components/StatusBadge";
 import type { TriggerDetail, WorkflowDetail, WorkflowStartInput } from "../types";
 import { DEFAULT_ACTOR, formatElapsedTime } from "../utils";
 import {
   buildRequirementByWorkflowId,
   findSimilarFlows,
+  getSignificantTokens,
   isOperationalWorkflowStatus,
+  normalizeText,
   type DuplicateCandidate,
   type RequirementByWorkflowId,
 } from "../utils/duplicateDetection";
@@ -57,6 +60,8 @@ export function TriggerDetailPage() {
   const [newWorkflowSuccess, setNewWorkflowSuccess] = useState<string | null>(null);
   const [creatingWorkflow, setCreatingWorkflow] = useState(false);
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
+  const [checkingLiveDuplicates, setCheckingLiveDuplicates] = useState(false);
+  const [liveDuplicateCandidates, setLiveDuplicateCandidates] = useState<DuplicateCandidate[]>([]);
   const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
   const [workflowLatestCommentById, setWorkflowLatestCommentById] = useState<Record<string, string | null>>({});
   const [workflowsError, setWorkflowsError] = useState<string | null>(null);
@@ -71,6 +76,7 @@ export function TriggerDetailPage() {
   const [pendingWorkflowPayload, setPendingWorkflowPayload] = useState<WorkflowStartInput | null>(null);
   const navigate = useNavigate();
   const duplicateCatalogRef = useRef<DuplicateCatalog | null>(null);
+  const liveRequestIdRef = useRef(0);
 
   function getPrimaryDetail(currentTrigger: TriggerDetail) {
     return currentTrigger.descripcion?.trim() || "Proyecto sin detalle";
@@ -89,6 +95,67 @@ export function TriggerDetailPage() {
     setEditSolicitante(trigger.solicitante ?? "");
     setEditDescripcion(trigger.descripcion ?? "");
   }, [trigger?.id, trigger?.solicitante, trigger?.descripcion]);
+
+  useEffect(() => {
+    if (!trigger) {
+      liveRequestIdRef.current += 1;
+      setCheckingLiveDuplicates(false);
+      setLiveDuplicateCandidates([]);
+      return;
+    }
+
+    const descriptionText = newWorkflowFirstDescription.trim();
+    const normalizedDescription = normalizeText(descriptionText);
+    const significantTokens = getSignificantTokens(descriptionText);
+
+    if (significantTokens.length === 0 || normalizedDescription.length < 3) {
+      liveRequestIdRef.current += 1;
+      setCheckingLiveDuplicates(false);
+      setLiveDuplicateCandidates([]);
+      return;
+    }
+
+    const requestId = liveRequestIdRef.current + 1;
+    liveRequestIdRef.current = requestId;
+
+    const timeoutId = window.setTimeout(async () => {
+      setCheckingLiveDuplicates(true);
+
+      try {
+        const catalog = await loadDuplicateCatalog(workflowsById);
+        if (liveRequestIdRef.current !== requestId) return;
+
+        const payload = buildNewWorkflowPayload(trigger);
+        const candidates = findSimilarFlows(
+          {
+            taskName: payload.primer_paso.nombre,
+            taskDescription: payload.primer_paso.descripcion,
+            workflowObjective: payload.objetivo_final,
+            requirementId: trigger.id,
+            requirementLabel: trigger.descripcion?.trim() || null,
+            reminderAt: payload.primer_paso.fecha_vencimiento ?? null,
+          },
+          catalog.workflowsById,
+          catalog.requirementByWorkflowId
+        );
+
+        if (liveRequestIdRef.current !== requestId) return;
+        setLiveDuplicateCandidates(candidates);
+      } catch (err) {
+        if (liveRequestIdRef.current !== requestId) return;
+        console.warn("No se pudieron cargar sugerencias de duplicados para el nuevo flow.", err);
+        setLiveDuplicateCandidates([]);
+      } finally {
+        if (liveRequestIdRef.current === requestId) {
+          setCheckingLiveDuplicates(false);
+        }
+      }
+    }, 400);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [newWorkflowFirstDescription, newWorkflowReminderDate, trigger, workflowsById]);
 
   async function loadDuplicateCatalog(seedWorkflowsById?: Record<string, WorkflowDetail>) {
     if (duplicateCatalogRef.current) {
@@ -341,6 +408,10 @@ export function TriggerDetailPage() {
     navigate(`/workflows/${workflowId}`);
   }
 
+  function handleOpenExistingWorkflowFromSuggestions(workflowId: string) {
+    navigate(`/workflows/${workflowId}`);
+  }
+
   function handleCancelDuplicateWarning() {
     setDuplicateCandidates([]);
     setPendingWorkflowPayload(null);
@@ -574,6 +645,11 @@ export function TriggerDetailPage() {
                   value={newWorkflowFirstDescription}
                   onChange={(event) => setNewWorkflowFirstDescription(event.target.value)}
                   disabled={creatingWorkflow || checkingDuplicates}
+                />
+                <LiveDuplicateSuggestions
+                  candidates={liveDuplicateCandidates}
+                  checking={checkingLiveDuplicates}
+                  onOpenExisting={handleOpenExistingWorkflowFromSuggestions}
                 />
                 <TextField
                   label="Recordatorio"

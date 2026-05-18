@@ -72,9 +72,14 @@ export function LiveDuplicateSuggestions({ candidates, checking, onOpenExisting 
                 spacing={1}
                 sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", sm: "center" } }}
               >
-                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                  {candidate.taskName}
-                </Typography>
+                <Stack spacing={0.35}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                    {candidate.taskName}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Coincidencia estimada: {Math.round(candidate.score * 100)}%
+                  </Typography>
+                </Stack>
                 <StatusBadge value={candidate.displayStatus} />
               </Stack>
 

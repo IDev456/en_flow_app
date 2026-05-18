@@ -296,6 +296,7 @@ export function findSimilarFlows(
     return [];
   }
 
+  const minimumScore = inputTokens.length === 1 ? 0.6 : 0.46;
   const candidates: DuplicateCandidate[] = [];
 
   for (const workflow of Object.values(workflowsById)) {
@@ -354,7 +355,7 @@ export function findSimilarFlows(
         matchedTokenBonus
     );
 
-    if (score < 0.46) {
+    if (score < minimumScore) {
       continue;
     }
 

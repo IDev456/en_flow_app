@@ -38,7 +38,6 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
   const [submitting, setSubmitting] = useState(false);
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
   const [checkingLiveDuplicates, setCheckingLiveDuplicates] = useState(false);
-  const [duplicateCatalogReady, setDuplicateCatalogReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showOptional, setShowOptional] = useState(false);
   const [duplicateCandidates, setDuplicateCandidates] = useState<DuplicateCandidate[]>([]);
@@ -61,7 +60,6 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
 
   async function loadDuplicateCatalog() {
     if (duplicateCatalogRef.current) {
-      setDuplicateCatalogReady(true);
       return duplicateCatalogRef.current;
     }
 
@@ -75,7 +73,6 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
     } satisfies DuplicateCatalog;
 
     duplicateCatalogRef.current = catalog;
-    setDuplicateCatalogReady(true);
     return catalog;
   }
 
@@ -244,7 +241,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
 
             <LiveDuplicateSuggestions
               candidates={liveDuplicateCandidates}
-              checking={checkingLiveDuplicates && (duplicateCatalogReady || title.trim().length > 0 || detail.trim().length > 0)}
+              checking={checkingLiveDuplicates}
               onOpenExisting={handleOpenExistingFromSuggestions}
             />
 
