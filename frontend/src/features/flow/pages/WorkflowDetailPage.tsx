@@ -8,7 +8,6 @@ import {
   Card,
   CardContent,
   Chip,
-  ClickAwayListener,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -69,7 +68,7 @@ export function WorkflowDetailPage() {
   const [trigger, setTrigger] = useState<TriggerDetail | null>(null);
   const [requirements, setRequirements] = useState<TriggerDetail[]>([]);
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
-  const [panelOpen, setPanelOpen] = useState(false);
+  const [stepHasRecordsById, setStepHasRecordsById] = useState<Record<string, boolean>>({});
   const [pendingCompleteDialogStepId, setPendingCompleteDialogStepId] = useState<string | null>(null);
   const [stepComments, setStepComments] = useState<StepComment[]>([]);
   const [stepHistory, setStepHistory] = useState<StepHistoryEntry[]>([]);
@@ -93,15 +92,9 @@ export function WorkflowDetailPage() {
     return trigger?.descripcion?.trim() || workflow?.objetivo_final?.trim() || "Flow sin proyecto";
   }
 
-  function pickRelevantStep(workflowData: WorkflowDetail) {
-    const byOrder = [...workflowData.steps].sort((a, b) => a.orden - b.orden);
-    return (
-      byOrder.find((step) => step.estado === "activo") ??
-      byOrder.find((step) => step.estado === "esperando_respuesta") ??
-      byOrder.find((step) => step.estado === "espera" || step.estado === "problema") ??
-      byOrder[0] ??
-      null
-    );
+  function getLastStepId(workflowData: WorkflowDetail): string | null {
+    const orderedSteps = [...workflowData.steps].sort((left, right) => right.orden - left.orden);
+    return orderedSteps[0]?.id ?? null;
   }
 
   useEffect(() => {
@@ -124,16 +117,33 @@ export function WorkflowDetailPage() {
       setLoading(true);
       setError(null);
       const [workflowData, requirementData] = await Promise.all([getWorkflow(workflowId), listTriggers()]);
+      const nextStepHasRecordsById = workflowData.steps.reduce<Record<string, boolean>>((accumulator, step) => {
+        accumulator[step.id] = Boolean(
+          step.ultimo_comentario_fecha || step.ultimo_comentario || step.resultado || step.observaciones
+        );
+        return accumulator;
+      }, {});
       setWorkflow(workflowData);
       setRequirements(requirementData);
-      const stepExistsInWorkflow = workflowData.steps.some((step) => step.id === selectedStepId);
-      const openStatuses = new Set(["activo", "espera", "problema", "esperando_respuesta"]);
+      setStepHasRecordsById((current) => {
+        const merged = { ...nextStepHasRecordsById };
+        for (const step of workflowData.steps) {
+          if (current[step.id] !== undefined) {
+            merged[step.id] = current[step.id] || nextStepHasRecordsById[step.id];
+          }
+        }
+        return merged;
+      });
+      const selectedStepStillExists = selectedStepId
+        ? workflowData.steps.some((step) => step.id === selectedStepId)
+        : false;
+      const preferredStepStillExists = preferredStepId
+        ? workflowData.steps.some((step) => step.id === preferredStepId)
+        : false;
       const nextSelectedStepId =
-        preferredStepId ??
-        (stepExistsInWorkflow ? selectedStepId : null) ??
-        workflowData.steps.find((step) => openStatuses.has(step.estado))?.id ??
-        workflowData.steps[0]?.id ??
-        null;
+        (preferredStepStillExists ? preferredStepId : null) ??
+        (selectedStepStillExists ? selectedStepId : null) ??
+        getLastStepId(workflowData);
       setSelectedStepId(nextSelectedStepId);
       const primaryRequirementId = workflowData.trigger_id ?? workflowData.requirement_ids[0] ?? null;
       setTrigger(primaryRequirementId ? requirementData.find((item) => item.id === primaryRequirementId) ?? null : null);
@@ -150,6 +160,13 @@ export function WorkflowDetailPage() {
       const [comments, history] = await Promise.all([getStepComments(stepId), getStepHistory(stepId)]);
       setStepComments(comments);
       setStepHistory(history);
+      const hasVisibleRecords = buildJournalItems(history, comments).some(
+        (item) => item.body.trim().length > 0 || item.attachments.length > 0
+      );
+      setStepHasRecordsById((current) => ({
+        ...current,
+        [stepId]: current[stepId] || hasVisibleRecords,
+      }));
     } catch (err) {
       setPanelError(err instanceof Error ? err.message : "No se pudo cargar los registros de la tarea");
     }
@@ -274,13 +291,8 @@ export function WorkflowDetailPage() {
     await refreshAfterStepChange(nextActiveStep?.id ?? stepId);
   }
 
-  function handleStepBodyClick(stepId: string) {
+  function handleStepSelect(stepId: string) {
     setSelectedStepId(stepId);
-    setPanelOpen(true);
-  }
-
-  function closeSidePanel() {
-    setPanelOpen(false);
   }
 
   function handleOpenCompleteStep(stepId: string) {
@@ -471,14 +483,9 @@ export function WorkflowDetailPage() {
     return <Alert severity="info">Flow no encontrado.</Alert>;
   }
 
-  const selectedStep: Step | null = workflow.steps.find((step) => step.id === selectedStepId) ?? pickRelevantStep(workflow);
+  const selectedStep: Step | null = workflow.steps.find((step) => step.id === selectedStepId) ?? null;
   const isWorkflowOperationalClosed = workflow.estado === "cancelado" || workflow.estado === "finalizado";
   const canCancelCurrent = ["en_proceso", "esperando_respuesta", "en_espera", "con_problema", "pendiente"].includes(workflow.estado);
-  const selectedStepJournalItems = buildJournalItems(stepHistory, stepComments).filter(
-    (item) => item.body.trim().length > 0 || item.attachments.length > 0
-  );
-  const selectedStepHasRecords = selectedStepJournalItems.length > 0;
-  const stepHasRecords = selectedStepId ? { [selectedStepId]: selectedStepHasRecords } : undefined;
   const linkedRequirementIds = new Set([...(workflow.requirement_ids ?? []), ...(workflow.trigger_id ? [workflow.trigger_id] : [])]);
   const linkedRequirements = requirements.filter(
     (item) => linkedRequirementIds.has(item.id) || item.workflow_ids.includes(workflow.id)
@@ -512,7 +519,7 @@ export function WorkflowDetailPage() {
           display: "grid",
           gap: 2,
           alignItems: "start",
-          gridTemplateColumns: panelOpen && selectedStep ? { xs: "1fr", xl: "minmax(0, 1fr) 420px" } : "1fr",
+          gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1fr) 420px" },
         }}
       >
         <Card sx={{ minWidth: 0 }}>
@@ -542,60 +549,72 @@ export function WorkflowDetailPage() {
                     alignSelf: { xs: "stretch", md: "flex-start" },
                   }}
                 >
-                  <Typography variant="caption" color="text.secondary">
-                    {linkedRequirements.length > 0 ? linkedRequirementLabel : "Sin proyectos asociados"}
-                  </Typography>
-                  <Stack spacing={1.05} sx={{ mt: 0.7 }}>
-                    <Stack
-                      direction="row"
-                      spacing={0.75}
-                      sx={{
-                        justifyContent: { md: "flex-end" },
-                        alignItems: "center",
-                        flexWrap: "wrap",
-                        rowGap: 0.75,
-                      }}
-                    >
-                      {linkedRequirements.slice(0, 2).map((item) => (
-                        <Chip
-                          key={item.id}
-                          size="small"
-                          variant="outlined"
-                          label={item.descripcion?.trim() || `Proyecto ${item.id.slice(0, 8)}`}
-                          sx={{
-                            maxWidth: { xs: "100%", md: 260 },
-                            "& .MuiChip-label": {
-                              display: "block",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                            },
-                          }}
-                        />
-                      ))}
-                      {linkedRequirements.length > 2 && (
-                        <Chip size="small" variant="outlined" label={`+${linkedRequirements.length - 2}`} />
-                      )}
-                    </Stack>
-                    <Stack
-                      direction="row"
-                      spacing={1}
-                      sx={{
-                        justifyContent: { md: "flex-end" },
-                        alignItems: "center",
-                      }}
-                    >
-                      <Button
-                        variant="text"
-                        size="small"
-                        color="inherit"
-                        onClick={handleOpenLinkRequirement}
-                        sx={{ px: 0.5 }}
+                  <Box
+                    sx={{
+                      border: "1px solid",
+                      borderColor: "outlineVariant",
+                      borderRadius: "10px",
+                      backgroundColor: "surfaceContainerLow",
+                      px: 1.5,
+                      py: 1.4,
+                    }}
+                  >
+                    <Stack spacing={1.15}>
+                      <Typography variant="caption" color="text.secondary">
+                        {linkedRequirements.length > 0 ? linkedRequirementLabel : "Sin proyectos asociados"}
+                      </Typography>
+                      <Stack
+                        direction={{ xs: "column", sm: "row" }}
+                        spacing={1}
+                        sx={{
+                          justifyContent: "space-between",
+                          alignItems: { xs: "stretch", sm: "center" },
+                          gap: 1,
+                        }}
                       >
-                        {linkedRequirements.length > 0 ? "Gestionar" : "Asociar"}
-                      </Button>
+                        <Stack
+                          direction="row"
+                          spacing={0.75}
+                          sx={{
+                            alignItems: "center",
+                            flexWrap: "wrap",
+                            rowGap: 0.75,
+                            minHeight: 32,
+                          }}
+                        >
+                          {linkedRequirements.slice(0, 2).map((item) => (
+                            <Chip
+                              key={item.id}
+                              size="small"
+                              variant="outlined"
+                              label={item.descripcion?.trim() || `Proyecto ${item.id.slice(0, 8)}`}
+                              sx={{
+                                maxWidth: { xs: "100%", md: 260 },
+                                "& .MuiChip-label": {
+                                  display: "block",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                },
+                              }}
+                            />
+                          ))}
+                          {linkedRequirements.length > 2 && (
+                            <Chip size="small" variant="outlined" label={`+${linkedRequirements.length - 2}`} />
+                          )}
+                        </Stack>
+                        <Button
+                          variant="text"
+                          size="small"
+                          color="inherit"
+                          onClick={handleOpenLinkRequirement}
+                          sx={{ px: 0.5, alignSelf: { xs: "flex-start", sm: "center" } }}
+                        >
+                          {linkedRequirements.length > 0 ? "Gestionar" : "Asociar"}
+                        </Button>
+                      </Stack>
                     </Stack>
-                  </Stack>
+                  </Box>
                 </Box>
               </Stack>
 
@@ -604,8 +623,8 @@ export function WorkflowDetailPage() {
                 steps={workflow.steps}
                 workflowClosed={isWorkflowOperationalClosed}
                 selectedStepId={selectedStepId}
-                stepHasRecords={stepHasRecords}
-                onStepBodyClick={handleStepBodyClick}
+                stepHasRecords={stepHasRecordsById}
+                onStepSelect={handleStepSelect}
                 onCompleteStepIntent={isWorkflowOperationalClosed ? undefined : handleOpenCompleteStep}
                 onRenameStep={isWorkflowOperationalClosed ? undefined : handleRenameStep}
               />
@@ -650,32 +669,31 @@ export function WorkflowDetailPage() {
           </CardContent>
         </Card>
 
-        {selectedStep && panelOpen && (
-          <ClickAwayListener mouseEvent="onMouseDown" touchEvent="onTouchStart" onClickAway={closeSidePanel}>
-            <Box>
-              <StepDetailPanel
-                workflowId={workflow.id}
-                step={selectedStep}
-                comments={stepComments}
-                history={stepHistory}
-                drawer
-                error={panelError}
-                onClose={closeSidePanel}
-                onStepUpdated={handleStepUpdated}
-                onSubmitJournal={handleSubmitJournal}
-                onCompleteTask={handleCompleteTask}
-                onRegisterExternalEvent={(input) => handleRegisterExternalEvent(selectedStep.id, input)}
-                onResolveExternalResponse={(stepId, input) => handleResolveExternalResponse(stepId, input)}
-                operationLocked={isWorkflowOperationalClosed}
-                operationLockMessage={
-                  workflow.estado === "cancelado"
-                    ? "Flow cancelado, reactivar para continuar."
-                    : "Flow finalizado, este paso queda en solo lectura operativa."
-                }
-              />
-            </Box>
-          </ClickAwayListener>
-        )}
+        <Box>
+          <StepDetailPanel
+            workflowId={workflow.id}
+            step={selectedStep}
+            comments={stepComments}
+            history={stepHistory}
+            drawer
+            error={panelError}
+            onStepUpdated={handleStepUpdated}
+            onSubmitJournal={handleSubmitJournal}
+            onCompleteTask={handleCompleteTask}
+            onRegisterExternalEvent={
+              selectedStep ? (input) => handleRegisterExternalEvent(selectedStep.id, input) : undefined
+            }
+            onResolveExternalResponse={
+              selectedStep ? (stepId, input) => handleResolveExternalResponse(stepId, input) : undefined
+            }
+            operationLocked={isWorkflowOperationalClosed}
+            operationLockMessage={
+              workflow.estado === "cancelado"
+                ? "Flow cancelado, reactivar para continuar."
+                : "Flow finalizado, este paso queda en solo lectura operativa."
+            }
+          />
+        </Box>
       </Box>
 
       <CompleteStepDialog

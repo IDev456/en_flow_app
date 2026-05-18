@@ -20,7 +20,7 @@ type WorkflowGraphProps = {
   workflowClosed: boolean;
   selectedStepId: string | null;
   stepHasRecords?: Record<string, boolean>;
-  onStepBodyClick: (stepId: string) => void;
+  onStepSelect: (stepId: string) => void;
   onCompleteStepIntent?: (stepId: string) => void;
   onRenameStep?: (step: Step, nextName: string) => Promise<void>;
 };
@@ -129,6 +129,8 @@ function renderStepRecordsIndicator(hasRecords: boolean): React.ReactElement {
         textAlign: "left",
         px: 0.9,
         py: 0.45,
+        cursor: "inherit",
+        pointerEvents: "none",
         backgroundColor: "surfaceContainerLow",
         border: "1px solid",
         borderColor: "outlineVariant",
@@ -170,6 +172,8 @@ function renderStepReminder(step: Step): React.ReactElement {
         width: "fit-content",
         px: 0.9,
         py: 0.45,
+        cursor: "inherit",
+        pointerEvents: "none",
         backgroundColor: (theme) => theme.palette.status.active.soft,
         border: "1px solid",
         borderColor: (theme) => theme.palette.status.active.border,
@@ -377,7 +381,7 @@ function VerticalWorkflowGraph({
   workflowClosed,
   selectedStepId,
   stepHasRecords,
-  onStepBodyClick,
+  onStepSelect,
   onCompleteStepIntent,
   onRenameStep,
 }: WorkflowGraphProps) {
@@ -523,12 +527,12 @@ function VerticalWorkflowGraph({
                   variant="outlined"
                   role="button"
                   tabIndex={0}
-                  aria-label={`Abrir registros de ${step.nombre}`}
-                  onClick={() => onStepBodyClick(step.id)}
+                  aria-label={`Seleccionar tarea ${step.nombre}`}
+                  onClick={() => onStepSelect(step.id)}
                   onKeyDown={(event) => {
                     if (event.key !== "Enter" && event.key !== " ") return;
                     event.preventDefault();
-                    onStepBodyClick(step.id);
+                    onStepSelect(step.id);
                   }}
                   sx={{
                     position: "relative",
@@ -607,7 +611,7 @@ function GitLogWorkflowGraph({
   steps,
   selectedStepId,
   stepHasRecords,
-  onStepBodyClick,
+  onStepSelect,
   onRenameStep,
 }: WorkflowGraphProps) {
   const theme = useTheme();
@@ -643,12 +647,12 @@ function GitLogWorkflowGraph({
               variant="outlined"
               role="button"
               tabIndex={0}
-              aria-label={`Abrir registros de ${step.nombre}`}
-              onClick={() => onStepBodyClick(step.id)}
+              aria-label={`Seleccionar tarea ${step.nombre}`}
+              onClick={() => onStepSelect(step.id)}
               onKeyDown={(event) => {
                 if (event.key !== "Enter" && event.key !== " ") return;
                 event.preventDefault();
-                onStepBodyClick(step.id);
+                onStepSelect(step.id);
               }}
               sx={{
                 borderColor: isSelected ? "primary.main" : "outlineVariant",

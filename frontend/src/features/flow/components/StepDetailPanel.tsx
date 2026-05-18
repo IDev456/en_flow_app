@@ -155,16 +155,14 @@ export function StepDetailPanel({
     return (
       <Card
         sx={{
-          ...(drawer ? { position: { xl: "sticky" }, top: { xl: 96 } } : {}),
+          ...(drawer ? { position: { lg: "sticky" }, top: { lg: 96 } } : {}),
           ...(standalone ? { maxWidth: 980, mx: "auto" } : {}),
         }}
       >
         <CardContent sx={{ p: { xs: 3, md: 4 } }}>
           <Stack spacing={1}>
             <Typography variant="h5">Sin tarea seleccionada</Typography>
-            <Typography color="text.secondary">
-              Selecciona una tarea del flow para revisar su registro, entender el contexto y decidir qué sigue.
-            </Typography>
+            <Typography color="text.secondary">Seleccioná un paso para ver sus registros y recordatorios.</Typography>
           </Stack>
         </CardContent>
       </Card>
@@ -453,7 +451,7 @@ export function StepDetailPanel({
     <Card
       sx={{
         minWidth: 0,
-        ...(drawer ? { position: { xl: "sticky" }, top: { xl: 96 } } : {}),
+        ...(drawer ? { position: { lg: "sticky" }, top: { lg: 96 } } : {}),
         ...(standalone ? { maxWidth: 980, mx: "auto" } : {}),
       }}
       onPointerDown={(event) => event.stopPropagation()}
@@ -470,16 +468,31 @@ export function StepDetailPanel({
             <Stack spacing={1.5}>
               <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", justifyContent: "space-between" }}>
                 <Typography variant="h6">Registro de la tarea</Typography>
-                <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
-                  <IconButton
-                    size="small"
-                    color="inherit"
-                    onClick={isReminderEditing ? () => void saveReminderEdit() : startReminderEdit}
-                    disabled={savingReminder || operationLocked}
-                    aria-label={step.fecha_vencimiento ? "Editar recordatorio" : "Agregar recordatorio"}
-                  >
-                    <EditCalendarRoundedIcon fontSize="small" />
-                  </IconButton>
+                <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Recordatorio
+                  </Typography>
+                  {step.fecha_vencimiento && !isReminderEditing ? (
+                    <Button
+                      variant="text"
+                      color="inherit"
+                      size="small"
+                      onClick={startReminderEdit}
+                      sx={{ minWidth: 0, px: 0.5, textTransform: "none" }}
+                    >
+                      {formatDateOnly(step.fecha_vencimiento)}
+                    </Button>
+                  ) : (
+                    <IconButton
+                      size="small"
+                      color="inherit"
+                      onClick={isReminderEditing ? () => void saveReminderEdit() : startReminderEdit}
+                      disabled={savingReminder || operationLocked}
+                      aria-label={step.fecha_vencimiento ? "Editar recordatorio" : "Agregar recordatorio"}
+                    >
+                      <EditCalendarRoundedIcon fontSize="small" />
+                    </IconButton>
+                  )}
                   {onClose ? (
                     <IconButton onClick={onClose} aria-label="Cerrar panel de registros">
                       <CloseRoundedIcon />
@@ -487,60 +500,30 @@ export function StepDetailPanel({
                   ) : null}
                 </Stack>
               </Stack>
-              <Card variant="outlined">
-                <CardContent sx={{ p: 1.75 }}>
-                  <Stack spacing={0.5}>
-                    <Typography variant="body2" color="text.secondary">
-                      Recordatorio
-                    </Typography>
-                    {isReminderEditing ? (
-                      <TextField
-                        type="date"
-                        size="small"
-                        value={reminderDraft}
-                        autoFocus
-                        disabled={savingReminder || operationLocked}
-                        slotProps={{ inputLabel: { shrink: true } }}
-                        onChange={(event) => setReminderDraft(event.target.value)}
-                        onBlur={() => {
-                          void saveReminderEdit();
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Escape") {
-                            cancelReminderEdit();
-                            (event.target as HTMLInputElement).blur();
-                          }
-                          if (event.key === "Enter") {
-                            (event.target as HTMLInputElement).blur();
-                          }
-                        }}
-                        sx={{ maxWidth: 210 }}
-                      />
-                    ) : (
-                      operationLocked ? (
-                        <Typography variant="body2" color={step.fecha_vencimiento ? "text.primary" : "text.secondary"}>
-                          {step.fecha_vencimiento
-                            ? `${formatRelativeCalendarDay(step.fecha_vencimiento) ?? formatCalendarDate(step.fecha_vencimiento)} · ${formatCalendarDate(step.fecha_vencimiento)}`
-                            : "Sin recordatorio"}
-                        </Typography>
-                      ) : (
-                        <Button
-                          variant="text"
-                          color="inherit"
-                          onClick={startReminderEdit}
-                          sx={{ justifyContent: "flex-start", px: 0, minWidth: 0, textTransform: "none" }}
-                        >
-                          <Typography variant="body2" color={step.fecha_vencimiento ? "text.primary" : "text.secondary"}>
-                            {step.fecha_vencimiento
-                              ? `${formatRelativeCalendarDay(step.fecha_vencimiento) ?? formatCalendarDate(step.fecha_vencimiento)} · ${formatCalendarDate(step.fecha_vencimiento)}`
-                              : "Sin recordatorio"}
-                          </Typography>
-                        </Button>
-                      )
-                    )}
-                  </Stack>
-                </CardContent>
-              </Card>
+              {isReminderEditing ? (
+                <TextField
+                  type="date"
+                  size="small"
+                  value={reminderDraft}
+                  autoFocus
+                  disabled={savingReminder || operationLocked}
+                  slotProps={{ inputLabel: { shrink: true } }}
+                  onChange={(event) => setReminderDraft(event.target.value)}
+                  onBlur={() => {
+                    void saveReminderEdit();
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      cancelReminderEdit();
+                      (event.target as HTMLInputElement).blur();
+                    }
+                    if (event.key === "Enter") {
+                      (event.target as HTMLInputElement).blur();
+                    }
+                  }}
+                  sx={{ maxWidth: 210 }}
+                />
+              ) : null}
               {operationLocked && operationLockMessage && <Alert severity="warning">{operationLockMessage}</Alert>}
               {stepEditError && <Alert severity="error">{stepEditError}</Alert>}
             </Stack>
@@ -638,7 +621,8 @@ export function StepDetailPanel({
               {stepEditError && <Alert severity="error">{stepEditError}</Alert>}
               {operationLocked && operationLockMessage && <Alert severity="warning">{operationLockMessage}</Alert>}
 
-              <Card variant="outlined">
+              {isReminderEditing ? (
+              <Card variant="outlined" sx={{ display: isReminderEditing ? undefined : "none" }}>
                 <CardContent sx={{ p: 1.75 }}>
                   <Stack spacing={1}>
                     <Typography variant="subtitle2" color="text.secondary">
@@ -674,6 +658,7 @@ export function StepDetailPanel({
                   </Stack>
                 </CardContent>
               </Card>
+              ) : null}
 
               {isWaitingExternal ? (
                 <Card variant="outlined">
