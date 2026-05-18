@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import PlayCircleOutlineRoundedIcon from "@mui/icons-material/PlayCircleOutlineRounded";
 import SchemaRoundedIcon from "@mui/icons-material/SchemaRounded";
 import { alpha } from "@mui/material/styles";
@@ -21,13 +21,26 @@ import {
 } from "@mui/material";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 
-import { deleteTrigger, getStepComments, getTrigger, getWorkflow, startWorkflow, updateTrigger } from "../api";
+import { deleteTrigger, getStepComments, getTrigger, getWorkflow, listTriggers, listWorkflows, startWorkflow, updateTrigger } from "../api";
+import { DuplicateFlowWarningDialog } from "../components/DuplicateFlowWarningDialog";
 import { StatusBadge } from "../components/StatusBadge";
-import type { TriggerDetail, WorkflowDetail } from "../types";
+import type { TriggerDetail, WorkflowDetail, WorkflowStartInput } from "../types";
 import { DEFAULT_ACTOR, formatElapsedTime } from "../utils";
+import {
+  buildRequirementByWorkflowId,
+  findSimilarFlows,
+  isOperationalWorkflowStatus,
+  type DuplicateCandidate,
+  type RequirementByWorkflowId,
+} from "../utils/duplicateDetection";
 
 const SOLICITANTE_MAX = 150;
 const TRIGGER_DESCRIPTION_MAX = 1000;
+
+type DuplicateCatalog = {
+  workflowsById: Record<string, WorkflowDetail>;
+  requirementByWorkflowId: RequirementByWorkflowId;
+};
 
 function SlideUp(props: SlideProps) {
   return <Slide {...props} direction="up" />;
@@ -43,6 +56,7 @@ export function TriggerDetailPage() {
   const [newWorkflowError, setNewWorkflowError] = useState<string | null>(null);
   const [newWorkflowSuccess, setNewWorkflowSuccess] = useState<string | null>(null);
   const [creatingWorkflow, setCreatingWorkflow] = useState(false);
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false);
   const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
   const [workflowLatestCommentById, setWorkflowLatestCommentById] = useState<Record<string, string | null>>({});
   const [workflowsError, setWorkflowsError] = useState<string | null>(null);
@@ -53,7 +67,10 @@ export function TriggerDetailPage() {
   const [editDescripcion, setEditDescripcion] = useState("");
   const [requirementError, setRequirementError] = useState<string | null>(null);
   const [requirementToastOpen, setRequirementToastOpen] = useState(false);
+  const [duplicateCandidates, setDuplicateCandidates] = useState<DuplicateCandidate[]>([]);
+  const [pendingWorkflowPayload, setPendingWorkflowPayload] = useState<WorkflowStartInput | null>(null);
   const navigate = useNavigate();
+  const duplicateCatalogRef = useRef<DuplicateCatalog | null>(null);
 
   function getPrimaryDetail(currentTrigger: TriggerDetail) {
     return currentTrigger.descripcion?.trim() || "Proyecto sin detalle";
@@ -73,8 +90,34 @@ export function TriggerDetailPage() {
     setEditDescripcion(trigger.descripcion ?? "");
   }, [trigger?.id, trigger?.solicitante, trigger?.descripcion]);
 
+  async function loadDuplicateCatalog(seedWorkflowsById?: Record<string, WorkflowDetail>) {
+    if (duplicateCatalogRef.current) {
+      return duplicateCatalogRef.current;
+    }
+
+    const [workflowSummaries, triggers] = await Promise.all([listWorkflows(), listTriggers()]);
+    const operationalIds = workflowSummaries.filter((workflow) => isOperationalWorkflowStatus(workflow.estado)).map((workflow) => workflow.id);
+
+    const cachedSeed = seedWorkflowsById ?? {};
+    const workflowsFromSeed = operationalIds
+      .map((workflowId) => cachedSeed[workflowId])
+      .filter((workflow): workflow is WorkflowDetail => Boolean(workflow));
+    const seededIds = new Set(workflowsFromSeed.map((workflow) => workflow.id));
+    const missingIds = operationalIds.filter((workflowId) => !seededIds.has(workflowId));
+    const fetchedDetails = await Promise.all(missingIds.map((workflowId) => getWorkflow(workflowId)));
+
+    const catalog = {
+      workflowsById: Object.fromEntries([...workflowsFromSeed, ...fetchedDetails].map((workflow) => [workflow.id, workflow])),
+      requirementByWorkflowId: buildRequirementByWorkflowId(triggers),
+    } satisfies DuplicateCatalog;
+
+    duplicateCatalogRef.current = catalog;
+    return catalog;
+  }
+
   async function loadTrigger() {
     try {
+      duplicateCatalogRef.current = null;
       setLoading(true);
       setError(null);
       setNewWorkflowError(null);
@@ -209,31 +252,30 @@ export function TriggerDetailPage() {
     }
   }
 
-  async function handleCreateWorkflow() {
-    if (!trigger) return;
+  function buildNewWorkflowPayload(currentTrigger: TriggerDetail): WorkflowStartInput {
+    const flowTitle = currentTrigger.descripcion?.trim() || "";
+    const firstStepName = flowTitle || "Tarea inicial";
 
-    if (!newWorkflowFirstDescription.trim()) {
-      setNewWorkflowError("Debes indicar la descripcion de la tarea inicial.");
-      return;
-    }
+    return {
+      objetivo_final: flowTitle || null,
+      resolucion_esperada: "Flujo completado con validacion final",
+      primer_paso: {
+        nombre: firstStepName,
+        descripcion: newWorkflowFirstDescription.trim(),
+        asignado_a: DEFAULT_ACTOR,
+        fecha_vencimiento: newWorkflowReminderDate ? `${newWorkflowReminderDate}T00:00:00Z` : null,
+      },
+    };
+  }
+
+  async function performCreateWorkflow(payload: WorkflowStartInput) {
+    if (!trigger) return;
 
     try {
       setCreatingWorkflow(true);
       setNewWorkflowError(null);
       setNewWorkflowSuccess(null);
-      const flowTitle = trigger.descripcion?.trim() || "";
-      const firstStepName = flowTitle || "Tarea inicial";
-
-      const newWorkflow = await startWorkflow(trigger.id, {
-        objetivo_final: flowTitle || null,
-        resolucion_esperada: "Flujo completado con validacion final",
-        primer_paso: {
-          nombre: firstStepName,
-          descripcion: newWorkflowFirstDescription.trim(),
-          asignado_a: DEFAULT_ACTOR,
-          fecha_vencimiento: newWorkflowReminderDate ? `${newWorkflowReminderDate}T00:00:00Z` : null,
-        },
-      });
+      const newWorkflow = await startWorkflow(trigger.id, payload);
       setNewWorkflowSuccess("Nuevo flow asociado creado.");
       setNewWorkflowFirstDescription("");
       setNewWorkflowReminderDate("");
@@ -244,6 +286,64 @@ export function TriggerDetailPage() {
     } finally {
       setCreatingWorkflow(false);
     }
+  }
+
+  async function handleCreateWorkflow() {
+    if (!trigger) return;
+
+    if (!newWorkflowFirstDescription.trim()) {
+      setNewWorkflowError("Debes indicar la descripcion de la tarea inicial.");
+      return;
+    }
+
+    const payload = buildNewWorkflowPayload(trigger);
+
+    try {
+      setCheckingDuplicates(true);
+      const catalog = await loadDuplicateCatalog(workflowsById);
+      const candidates = findSimilarFlows(
+        {
+          taskName: payload.primer_paso.nombre,
+          taskDescription: payload.primer_paso.descripcion,
+          workflowObjective: payload.objetivo_final,
+          requirementId: trigger.id,
+          requirementLabel: trigger.descripcion?.trim() || null,
+          reminderAt: payload.primer_paso.fecha_vencimiento ?? null,
+        },
+        catalog.workflowsById,
+        catalog.requirementByWorkflowId
+      );
+
+      if (candidates.length > 0) {
+        setPendingWorkflowPayload(payload);
+        setDuplicateCandidates(candidates);
+        return;
+      }
+    } catch (err) {
+      console.warn("No se pudo revisar duplicados antes de crear el flow.", err);
+    } finally {
+      setCheckingDuplicates(false);
+    }
+
+    await performCreateWorkflow(payload);
+  }
+
+  async function handleCreateWorkflowAnyway() {
+    if (!pendingWorkflowPayload) return;
+    setDuplicateCandidates([]);
+    setPendingWorkflowPayload(null);
+    await performCreateWorkflow(pendingWorkflowPayload);
+  }
+
+  function handleOpenExistingWorkflow(workflowId: string) {
+    setDuplicateCandidates([]);
+    setPendingWorkflowPayload(null);
+    navigate(`/workflows/${workflowId}`);
+  }
+
+  function handleCancelDuplicateWarning() {
+    setDuplicateCandidates([]);
+    setPendingWorkflowPayload(null);
   }
 
   function getWorkflowActiveStep(workflow: WorkflowDetail) {
@@ -473,7 +573,7 @@ export function TriggerDetailPage() {
                   minRows={3}
                   value={newWorkflowFirstDescription}
                   onChange={(event) => setNewWorkflowFirstDescription(event.target.value)}
-                  disabled={creatingWorkflow}
+                  disabled={creatingWorkflow || checkingDuplicates}
                 />
                 <TextField
                   label="Recordatorio"
@@ -481,7 +581,7 @@ export function TriggerDetailPage() {
                   value={newWorkflowReminderDate}
                   onChange={(event) => setNewWorkflowReminderDate(event.target.value)}
                   helperText="Fecha recordatorio"
-                  disabled={creatingWorkflow}
+                  disabled={creatingWorkflow || checkingDuplicates}
                   slotProps={{ inputLabel: { shrink: true } }}
                 />
                 <Button
@@ -489,9 +589,9 @@ export function TriggerDetailPage() {
                   color="inherit"
                   startIcon={<PlayCircleOutlineRoundedIcon />}
                   onClick={() => void handleCreateWorkflow()}
-                  disabled={creatingWorkflow}
+                  disabled={creatingWorkflow || checkingDuplicates}
                 >
-                  {creatingWorkflow ? "Creando flow..." : "Crear nuevo flow"}
+                  {checkingDuplicates ? "Revisando..." : creatingWorkflow ? "Creando flow..." : "Crear nuevo flow"}
                 </Button>
                 {newWorkflowError && <Alert severity="error">{newWorkflowError}</Alert>}
                 {newWorkflowSuccess && <Alert severity="success">{newWorkflowSuccess}</Alert>}
@@ -582,6 +682,15 @@ export function TriggerDetailPage() {
           </CardContent>
         </Card>
       </Box>
+
+      <DuplicateFlowWarningDialog
+        open={duplicateCandidates.length > 0}
+        candidates={duplicateCandidates}
+        busy={creatingWorkflow}
+        onOpenExisting={handleOpenExistingWorkflow}
+        onCreateAnyway={() => void handleCreateWorkflowAnyway()}
+        onCancel={handleCancelDuplicateWarning}
+      />
     </Stack>
   );
 }
