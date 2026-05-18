@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import AddTaskRoundedIcon from "@mui/icons-material/AddTaskRounded";
 import TuneRoundedIcon from "@mui/icons-material/TuneRounded";
 import { Alert, Box, Button, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography } from "@mui/material";
@@ -8,12 +8,15 @@ import { useNavigate } from "react-router-dom";
 import { useToastContext } from "../../../components/Toast";
 import { getWorkflow, listTriggers, listWorkflows, quickCaptureFlow } from "../api";
 import { DuplicateFlowWarningDialog } from "./DuplicateFlowWarningDialog";
-import type { QuickCaptureInput, TriggerDetail, WorkflowDetail } from "../types";
+import { LiveDuplicateSuggestions } from "./LiveDuplicateSuggestions";
+import type { QuickCaptureInput, WorkflowDetail } from "../types";
 import { DEFAULT_ACTOR } from "../utils";
 import {
   buildRequirementByWorkflowId,
   findSimilarFlows,
+  getSignificantTokens,
   isOperationalWorkflowStatus,
+  normalizeText,
   type DuplicateCandidate,
   type RequirementByWorkflowId,
 } from "../utils/duplicateDetection";
@@ -34,13 +37,17 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
   const [executionDate, setExecutionDate] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
+  const [checkingLiveDuplicates, setCheckingLiveDuplicates] = useState(false);
+  const [duplicateCatalogReady, setDuplicateCatalogReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showOptional, setShowOptional] = useState(false);
   const [duplicateCandidates, setDuplicateCandidates] = useState<DuplicateCandidate[]>([]);
+  const [liveDuplicateCandidates, setLiveDuplicateCandidates] = useState<DuplicateCandidate[]>([]);
   const [pendingPayload, setPendingPayload] = useState<QuickCaptureInput | null>(null);
   const navigate = useNavigate();
   const { showToast } = useToastContext();
   const duplicateCatalogRef = useRef<DuplicateCatalog | null>(null);
+  const liveRequestIdRef = useRef(0);
   const canSubmit = title.trim().length >= 3;
 
   function handleClose() {
@@ -54,6 +61,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
 
   async function loadDuplicateCatalog() {
     if (duplicateCatalogRef.current) {
+      setDuplicateCatalogReady(true);
       return duplicateCatalogRef.current;
     }
 
@@ -63,12 +71,73 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
 
     const catalog = {
       workflowsById: Object.fromEntries(workflowDetails.map((workflow) => [workflow.id, workflow])),
-      requirementByWorkflowId: buildRequirementByWorkflowId(triggers as TriggerDetail[]),
+      requirementByWorkflowId: buildRequirementByWorkflowId(triggers),
     } satisfies DuplicateCatalog;
 
     duplicateCatalogRef.current = catalog;
+    setDuplicateCatalogReady(true);
     return catalog;
   }
+
+  function buildPayload(): QuickCaptureInput {
+    return {
+      titulo: title.trim(),
+      detalle: detail.trim() || null,
+      asignado_a: assignee.trim() || DEFAULT_ACTOR,
+      fecha_ejecucion_estimada: executionDate ? `${executionDate}T00:00:00Z` : null,
+      creado_por: DEFAULT_ACTOR,
+    };
+  }
+
+  useEffect(() => {
+    const inputText = `${title} ${detail}`.trim();
+    const normalizedInput = normalizeText(inputText);
+    const significantTokens = getSignificantTokens(inputText);
+
+    if (significantTokens.length === 0 || normalizedInput.length < 3) {
+      liveRequestIdRef.current += 1;
+      setCheckingLiveDuplicates(false);
+      setLiveDuplicateCandidates([]);
+      return;
+    }
+
+    const requestId = liveRequestIdRef.current + 1;
+    liveRequestIdRef.current = requestId;
+
+    const timeoutId = window.setTimeout(async () => {
+      setCheckingLiveDuplicates(true);
+
+      try {
+        const catalog = await loadDuplicateCatalog();
+        if (liveRequestIdRef.current !== requestId) return;
+
+        const candidates = findSimilarFlows(
+          {
+            taskName: title.trim(),
+            taskDescription: detail.trim() || null,
+            reminderAt: executionDate ? `${executionDate}T00:00:00Z` : null,
+          },
+          catalog.workflowsById,
+          catalog.requirementByWorkflowId
+        );
+
+        if (liveRequestIdRef.current !== requestId) return;
+        setLiveDuplicateCandidates(candidates);
+      } catch (err) {
+        if (liveRequestIdRef.current !== requestId) return;
+        console.warn("No se pudieron cargar sugerencias de duplicados en vivo.", err);
+        setLiveDuplicateCandidates([]);
+      } finally {
+        if (liveRequestIdRef.current === requestId) {
+          setCheckingLiveDuplicates(false);
+        }
+      }
+    }, 400);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [title, detail, executionDate]);
 
   async function performCreate(payload: QuickCaptureInput) {
     try {
@@ -120,14 +189,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
       return;
     }
 
-    const payload = {
-      titulo: title.trim(),
-      detalle: detail.trim() || null,
-      asignado_a: assignee.trim() || DEFAULT_ACTOR,
-      fecha_ejecucion_estimada: executionDate ? `${executionDate}T00:00:00Z` : null,
-      creado_por: DEFAULT_ACTOR,
-    } satisfies QuickCaptureInput;
-
+    const payload = buildPayload();
     const shouldWarn = await maybeWarnDuplicates(payload);
     if (shouldWarn) return;
 
@@ -144,6 +206,10 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
   function handleOpenExisting(workflowId: string) {
     setDuplicateCandidates([]);
     setPendingPayload(null);
+    navigate(`/workflows/${workflowId}`);
+  }
+
+  function handleOpenExistingFromSuggestions(workflowId: string) {
     navigate(`/workflows/${workflowId}`);
   }
 
@@ -174,6 +240,12 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               placeholder="Ej. Pedir layout actualizado al proveedor"
+            />
+
+            <LiveDuplicateSuggestions
+              candidates={liveDuplicateCandidates}
+              checking={checkingLiveDuplicates && (duplicateCatalogReady || title.trim().length > 0 || detail.trim().length > 0)}
+              onOpenExisting={handleOpenExistingFromSuggestions}
             />
 
             <Button variant="text" color="inherit" onClick={() => setShowOptional((current) => !current)} sx={{ alignSelf: "flex-start", px: 0.5 }}>

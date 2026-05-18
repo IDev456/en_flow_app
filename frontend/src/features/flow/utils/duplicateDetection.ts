@@ -1,7 +1,28 @@
 import type { Step, StepStatus, TriggerDetail, WorkflowDetail, WorkflowStatus } from "../types";
 import { isNoisyAutomaticJournalText } from "../utils";
 
-const STOPWORDS = new Set(["de", "el", "la", "los", "las", "por", "para", "con", "en", "un", "una"]);
+const STOPWORDS = new Set([
+  "de",
+  "el",
+  "la",
+  "los",
+  "las",
+  "por",
+  "para",
+  "con",
+  "en",
+  "un",
+  "una",
+  "pedir",
+  "consultar",
+  "revisar",
+  "validar",
+  "enviar",
+  "hacer",
+  "tema",
+  "tarea",
+  "pendiente",
+]);
 
 const OPERATIONAL_WORKFLOW_STATUSES: WorkflowStatus[] = [
   "pendiente",
@@ -65,23 +86,88 @@ export function tokenizeText(text: string): string[] {
     .filter((token) => token.length > 2 || /\d/.test(token));
 }
 
+export function stemToken(token: string): string {
+  let stemmed = normalizeText(token);
+  if (stemmed.length < 3) return stemmed;
+
+  if (stemmed.endsWith("es") && stemmed.length > 4) {
+    stemmed = stemmed.slice(0, -2);
+  } else if (stemmed.endsWith("s") && stemmed.length > 4) {
+    stemmed = stemmed.slice(0, -1);
+  }
+
+  const suffixes = [
+    "ciones",
+    "cion",
+    "mientos",
+    "miento",
+    "adoras",
+    "adores",
+    "adora",
+    "ador",
+    "ados",
+    "adas",
+    "ado",
+    "ada",
+    "idos",
+    "idas",
+    "ido",
+    "ida",
+    "ar",
+    "er",
+    "ir",
+  ];
+
+  for (const suffix of suffixes) {
+    if (stemmed.endsWith(suffix) && stemmed.length - suffix.length >= 3) {
+      stemmed = stemmed.slice(0, -suffix.length);
+      break;
+    }
+  }
+
+  return stemmed.length >= 3 ? stemmed : normalizeText(token);
+}
+
+export function getSignificantTokens(text: string): string[] {
+  return [...new Set(tokenizeText(text).map((token) => stemToken(token)).filter((token) => token.length >= 3))];
+}
+
+export function calculateTokenOverlapScore(inputTokens: string[], candidateTokens: string[]): number {
+  if (inputTokens.length === 0 || candidateTokens.length === 0) return 0;
+
+  const inputSet = new Set(inputTokens);
+  const candidateSet = new Set(candidateTokens);
+  const matches = [...inputSet].filter((token) => candidateSet.has(token)).length;
+  return matches / inputSet.size;
+}
+
+function tokensPartiallyMatch(left: string, right: string): boolean {
+  if (!left || !right) return false;
+  if (left === right) return true;
+  if (left.length < 4 && right.length < 4) return false;
+  return left.startsWith(right) || right.startsWith(left);
+}
+
+export function calculatePartialTokenScore(inputTokens: string[], candidateTokens: string[]): number {
+  if (inputTokens.length === 0 || candidateTokens.length === 0) return 0;
+
+  const matchedCount = inputTokens.filter((inputToken) => candidateTokens.some((candidateToken) => tokensPartiallyMatch(inputToken, candidateToken))).length;
+  return matchedCount / inputTokens.length;
+}
+
 export function calculateTextSimilarity(a: string, b: string): number {
-  const leftTokens = tokenizeText(a);
-  const rightTokens = tokenizeText(b);
+  const leftTokens = getSignificantTokens(a);
+  const rightTokens = getSignificantTokens(b);
 
   if (leftTokens.length === 0 || rightTokens.length === 0) return 0;
 
-  const leftSet = new Set(leftTokens);
-  const rightSet = new Set(rightTokens);
-  const intersectionSize = [...leftSet].filter((token) => rightSet.has(token)).length;
-  const unionSize = new Set([...leftSet, ...rightSet]).size;
-  const shorterSize = Math.min(leftSet.size, rightSet.size);
+  const overlap = calculateTokenOverlapScore(leftTokens, rightTokens);
+  const partial = calculatePartialTokenScore(leftTokens, rightTokens);
+  const unionSize = new Set([...leftTokens, ...rightTokens]).size;
+  const intersectionSize = [...new Set(leftTokens)].filter((token) => new Set(rightTokens).has(token)).length;
+  const jaccard = unionSize > 0 ? intersectionSize / unionSize : 0;
 
-  if (unionSize === 0 || shorterSize === 0) return 0;
-
-  const jaccard = intersectionSize / unionSize;
-  const containment = intersectionSize / shorterSize;
-  return Math.max(0, Math.min(1, jaccard * 0.55 + containment * 0.45));
+  return Math.max(0, Math.min(1, overlap * 0.45 + partial * 0.35 + jaccard * 0.2));
 }
 
 export function pickRelevantStep(workflow: WorkflowDetail): Step | null {
@@ -99,6 +185,7 @@ export function pickRelevantStep(workflow: WorkflowDetail): Step | null {
   const openByRecentState = [...workflow.steps]
     .filter((step) => step.estado !== "completado" && step.estado !== "cancelada")
     .sort((a, b) => new Date(b.fecha_estado_actual).getTime() - new Date(a.fecha_estado_actual).getTime());
+
   if (openByRecentState.length > 0) {
     return openByRecentState[0] ?? null;
   }
@@ -164,14 +251,15 @@ function getDateBonus(inputDate: string | null | undefined, candidateDate: strin
   if (inputDate) {
     const inputTime = new Date(inputDate).getTime();
     if (!Number.isFinite(inputTime)) return 0;
+
     const diffDays = Math.abs(inputTime - candidateTime) / 86400000;
     if (diffDays <= 3) return 0.08;
-    if (diffDays <= 7) return 0.05;
-    if (diffDays <= 14) return 0.03;
+    if (diffDays <= 7) return 0.06;
+    if (diffDays <= 14) return 0.04;
     return 0;
   }
 
-  return candidateTime >= Date.now() ? 0.02 : 0;
+  return candidateTime >= Date.now() ? 0.05 : 0;
 }
 
 function hasContainmentMatch(a: string, b: string): boolean {
@@ -179,6 +267,17 @@ function hasContainmentMatch(a: string, b: string): boolean {
   const normalizedB = normalizeText(b);
   if (!normalizedA || !normalizedB) return false;
   return normalizedA.includes(normalizedB) || normalizedB.includes(normalizedA);
+}
+
+function calculateFieldCoverageScore(inputTokens: string[], candidateTokens: string[]): number {
+  if (inputTokens.length === 0 || candidateTokens.length === 0) return 0;
+
+  const matches = inputTokens.filter((inputToken) => candidateTokens.some((candidateToken) => tokensPartiallyMatch(inputToken, candidateToken))).length;
+  return matches / inputTokens.length;
+}
+
+function countMatchedTokens(inputTokens: string[], candidateTokens: string[]): number {
+  return inputTokens.filter((inputToken) => candidateTokens.some((candidateToken) => tokensPartiallyMatch(inputToken, candidateToken))).length;
 }
 
 export function findSimilarFlows(
@@ -189,9 +288,11 @@ export function findSimilarFlows(
   const inputName = input.taskName.trim();
   const inputDescription = input.taskDescription?.trim() ?? "";
   const inputObjective = input.workflowObjective?.trim() ?? "";
+  const inputPrimary = [inputName, inputDescription].filter(Boolean).join(" ");
   const inputSecondary = [inputDescription, inputObjective, input.requirementLabel?.trim() ?? ""].filter(Boolean).join(" ");
+  const inputTokens = getSignificantTokens([inputName, inputDescription, inputObjective].filter(Boolean).join(" "));
 
-  if (inputName.length < 3 && inputSecondary.length < 3) {
+  if (inputTokens.length === 0 && normalizeText(`${inputName} ${inputDescription}`).length < 3) {
     return [];
   }
 
@@ -209,7 +310,7 @@ export function findSimilarFlows(
 
     const requirementLabels = getRequirementLabels(requirementByWorkflowId[workflow.id] ?? []);
     const candidateName = relevantStep.nombre.trim();
-    const candidateSecondary = [
+    const candidateSecondaryText = [
       relevantStep.descripcion?.trim() ?? "",
       workflow.objetivo_final?.trim() ?? "",
       relevantStep.ultimo_comentario?.trim() ?? "",
@@ -217,36 +318,43 @@ export function findSimilarFlows(
     ]
       .filter(Boolean)
       .join(" ");
+    const candidateNameTokens = getSignificantTokens(candidateName);
+    const candidateSecondaryTokens = getSignificantTokens(candidateSecondaryText);
+    const candidateAllTokens = getSignificantTokens([candidateName, candidateSecondaryText].filter(Boolean).join(" "));
 
     const nameSimilarity = Math.max(
       calculateTextSimilarity(inputName, candidateName),
-      inputDescription ? calculateTextSimilarity(inputDescription, candidateName) : 0
+      inputDescription ? calculateTextSimilarity(inputDescription, candidateName) : 0,
+      inputObjective ? calculateTextSimilarity(inputObjective, candidateName) : 0
     );
-
-    if (nameSimilarity < 0.32) {
-      continue;
-    }
-
-    const secondarySimilarity = inputSecondary ? calculateTextSimilarity(inputSecondary, candidateSecondary) : 0;
+    const nameTokenOverlap = calculateTokenOverlapScore(inputTokens, candidateNameTokens);
+    const partialTokenScore = calculatePartialTokenScore(inputTokens, candidateAllTokens);
+    const fieldCoverageScore = calculateFieldCoverageScore(inputTokens, candidateAllTokens);
+    const secondaryOverlapScore = inputSecondary ? calculateTokenOverlapScore(inputTokens, candidateSecondaryTokens) : 0;
     const sameRequirement =
       Boolean(input.requirementId) &&
       (workflow.requirement_ids.includes(input.requirementId!) ||
         (requirementByWorkflowId[workflow.id] ?? []).some((trigger) => trigger.id === input.requirementId));
-    const operationalBonus = OPERATIONAL_STEP_STATUSES.includes(relevantStep.estado) ? 0.05 : 0;
-    const containmentBonus = hasContainmentMatch(inputName, candidateName) ? 0.08 : 0;
+    const operationalBonus = OPERATIONAL_STEP_STATUSES.includes(relevantStep.estado) ? 0.04 : 0;
+    const containmentBonus = hasContainmentMatch(inputPrimary, candidateName) ? 0.06 : 0;
     const dateBonus = getDateBonus(input.reminderAt, relevantStep.fecha_vencimiento ?? relevantStep.fecha_ejecucion_estimada);
+    const matchedTokenBonus = countMatchedTokens(inputTokens, candidateAllTokens) >= 2 ? 0.05 : 0;
 
     const score = Math.min(
       1,
-      nameSimilarity * 0.55 +
-        secondarySimilarity * 0.2 +
+      nameSimilarity * 0.22 +
+        nameTokenOverlap * 0.22 +
+        partialTokenScore * 0.18 +
+        fieldCoverageScore * 0.18 +
+        secondaryOverlapScore * 0.1 +
+        containmentBonus +
         (sameRequirement ? 0.12 : 0) +
         operationalBonus +
-        containmentBonus +
-        dateBonus
+        dateBonus +
+        matchedTokenBonus
     );
 
-    if (score < 0.65) {
+    if (score < 0.46) {
       continue;
     }
 
