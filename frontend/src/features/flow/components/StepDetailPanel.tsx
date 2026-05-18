@@ -38,7 +38,14 @@ import type {
   StepJournalEntryInput,
   StepTransitionType,
 } from "../types";
-import { buildJournalItems, DEFAULT_ACTOR, formatCalendarDate, formatDateOnly, formatRelativeCalendarDay } from "../utils";
+import {
+  buildJournalItems,
+  DEFAULT_ACTOR,
+  formatCalendarDate,
+  formatDateOnly,
+  formatRelativeCalendarDay,
+  getTodayLocalDateInput,
+} from "../utils";
 import { Journal } from "./Journal";
 import { StatusBadge } from "./StatusBadge";
 
@@ -182,6 +189,7 @@ export function StepDetailPanel({
     (step.orden === 1 && step.descripcion?.trim() ? step.descripcion.trim() : "Sin registros todavía");
   const displayStepName = stepDraftName.trim() || step.nombre;
   const displayStepDescription = stepDraftDescription.trim();
+  const todayLocalDateInput = getTodayLocalDateInput();
 
   async function handleSubmitJournal(input: StepJournalEntryInput) {
     if (operationLocked) {
@@ -362,6 +370,10 @@ export function StepDetailPanel({
       setStepEditError("Debes indicar el nombre de la tarea.");
       return;
     }
+    if (stepDraftReminderDate && stepDraftReminderDate < todayLocalDateInput) {
+      setStepEditError("El recordatorio no puede ser una fecha pasada.");
+      return;
+    }
 
     if (!hasMetadataChanges && !hasReminderChanges) {
       setEditingStep(false);
@@ -426,6 +438,10 @@ export function StepDetailPanel({
     const nextDraft = reminderDraft.trim();
     if (nextDraft === currentValue) {
       setIsReminderEditing(false);
+      return;
+    }
+    if (nextDraft && nextDraft < todayLocalDateInput) {
+      setStepEditError("El recordatorio no puede ser una fecha pasada.");
       return;
     }
 
@@ -507,7 +523,10 @@ export function StepDetailPanel({
                   value={reminderDraft}
                   autoFocus
                   disabled={savingReminder || operationLocked}
-                  slotProps={{ inputLabel: { shrink: true } }}
+                  slotProps={{
+                    inputLabel: { shrink: true },
+                    htmlInput: { min: todayLocalDateInput },
+                  }}
                   onChange={(event) => setReminderDraft(event.target.value)}
                   onBlur={() => {
                     void saveReminderEdit();
@@ -566,7 +585,10 @@ export function StepDetailPanel({
                         value={stepDraftReminderDate}
                         onChange={(event) => setStepDraftReminderDate(event.target.value)}
                         helperText="Fecha recordatorio"
-                        slotProps={{ inputLabel: { shrink: true } }}
+                        slotProps={{
+                          inputLabel: { shrink: true },
+                          htmlInput: { min: todayLocalDateInput },
+                        }}
                         disabled={savingStep}
                       />
                     </Stack>

@@ -11,7 +11,7 @@ import { Box, Button, Card, Chip, IconButton, Stack, TextField, Typography } fro
 
 import { getStatusToken } from "../../../theme";
 import type { Step } from "../types";
-import { formatCalendarDate, formatElapsedTime, formatRelativeCalendarDay, getStatusTone, humanizeStatus } from "../utils";
+import { formatDateOnly, formatElapsedTime, getStatusTone, humanizeStatus } from "../utils";
 import type { WorkflowVariant } from "./WorkflowVariantSwitcher";
 
 type WorkflowGraphProps = {
@@ -141,9 +141,6 @@ function renderStepRecordsIndicator(hasRecords: boolean): React.ReactElement {
       }}
     >
       <NotesRoundedIcon sx={{ fontSize: 14 }} />
-      <Typography className="records-label" variant="caption" color="text.secondary">
-        Registros
-      </Typography>
       <Typography className="records-value" variant="caption" color={hasRecords ? "text.primary" : "text.secondary"}>
         {hasRecords ? "Con registros" : "Sin registros"}
       </Typography>
@@ -153,13 +150,7 @@ function renderStepRecordsIndicator(hasRecords: boolean): React.ReactElement {
 
 function renderStepReminder(step: Step): React.ReactElement {
   const reminder = step.fecha_vencimiento;
-  const relativeLabel = reminder ? formatRelativeCalendarDay(reminder) : null;
-  const absoluteLabel = reminder ? formatCalendarDate(reminder) : null;
-  const valueLabel = reminder
-    ? relativeLabel && absoluteLabel
-      ? `${relativeLabel} · ${absoluteLabel}`
-      : relativeLabel ?? absoluteLabel ?? "Sin recordatorio"
-    : "Sin recordatorio";
+  const valueLabel = reminder ? formatDateOnly(reminder) : "Sin recordatorio";
 
   return (
     <Stack
@@ -180,9 +171,6 @@ function renderStepReminder(step: Step): React.ReactElement {
       }}
     >
       <EditCalendarRoundedIcon sx={{ fontSize: 14, color: reminder ? "primary.main" : "text.secondary" }} />
-      <Typography variant="caption" color="text.secondary">
-        Recordatorio
-      </Typography>
       <Typography variant="caption" color={reminder ? "text.primary" : "text.secondary"}>
         {valueLabel}
       </Typography>

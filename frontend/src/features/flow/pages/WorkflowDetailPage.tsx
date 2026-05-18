@@ -582,7 +582,7 @@ export function WorkflowDetailPage() {
                             minHeight: 32,
                           }}
                         >
-                          {linkedRequirements.slice(0, 2).map((item) => (
+                          {linkedRequirements.slice(0, 1).map((item) => (
                             <Chip
                               key={item.id}
                               size="small"
@@ -599,8 +599,8 @@ export function WorkflowDetailPage() {
                               }}
                             />
                           ))}
-                          {linkedRequirements.length > 2 && (
-                            <Chip size="small" variant="outlined" label={`+${linkedRequirements.length - 2}`} />
+                          {linkedRequirements.length > 1 && (
+                            <Chip size="small" variant="outlined" label={`+${linkedRequirements.length - 1}`} />
                           )}
                         </Stack>
                         <Button
