@@ -54,6 +54,7 @@ import {
 } from "@mui/x-data-grid";
 import { useLocation, useNavigate } from "react-router-dom";
 
+import { DataGridEmptyState } from "../../../components/feedback/DataGridEmptyState";
 import { PageContainer } from "../../../components/layout/PageContainer";
 import { useToastContext } from "../../../components/Toast";
 import { getStatusSemanticKey } from "../../../theme";
@@ -466,6 +467,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
   const today = getTodayLocalDateInput();
   const todaySortValue = toDateSortValue(today);
+  const resetFilterAction =
+    stateFilter !== "all" ? (
+      <Button size="small" variant="outlined" color="inherit" onClick={() => setStateFilter("all")}>
+        Ver todos
+      </Button>
+    ) : undefined;
   const flowRows = useMemo<FlowGridRow[]>(() => {
     return flowCards.map((item) => {
       const step = item.relevantStep;
@@ -1580,6 +1587,21 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                         }}
                       />
                     ),
+                    noRowsOverlay: () =>
+                      flowRows.length === 0 ? (
+                        <DataGridEmptyState
+                          icon={<InboxRoundedIcon color="action" />}
+                          title="No hay flows para este filtro"
+                          description="Probá con otro estado o capturá una nueva tarea para iniciar el flujo."
+                          action={resetFilterAction}
+                        />
+                      ) : (
+                        <DataGridEmptyState
+                          icon={<ScheduleRoundedIcon color="action" />}
+                          title="Sin flows pendientes en esta tabla"
+                          description="Todos los flows de este filtro están programados para más adelante. Revisalos en la sección superior."
+                        />
+                      ),
                   }}
                   initialState={{
                     sorting: {
@@ -1648,6 +1670,14 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                         }}
                       />
                     ),
+                    noRowsOverlay: () => (
+                      <DataGridEmptyState
+                        icon={<InboxRoundedIcon color="action" />}
+                        title="No hay proyectos para este filtro"
+                        description="Probá con otro estado o creá un nuevo proyecto para empezar."
+                        action={resetFilterAction}
+                      />
+                    ),
                   }}
                   initialState={{
                     sorting: {
@@ -1664,10 +1694,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             )}
           </Paper>
 
-          {!loading && isFlowsView && flowRows.length === 0 && <Alert severity="info">No hay flows para este filtro.</Alert>}
-          {!loading && !isFlowsView && requirementRows.length === 0 && (
-            <Alert severity="info">No hay proyectos para este filtro.</Alert>
-          )}
         </Stack>
       </PageContainer>
     </Stack>

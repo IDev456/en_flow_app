@@ -65,7 +65,7 @@ function SidebarBody({
         }}
         sx={{
           position: "relative",
-          borderRadius: "10px",
+          borderRadius: `${theme.appShape.lg}px`,
           py: 1,
           px: compact ? 1 : 1.35,
           minHeight: 48,
@@ -86,7 +86,7 @@ function SidebarBody({
             top: "50%",
             height: 18,
             width: 4,
-            borderRadius: 999,
+            borderRadius: theme.appShape.pill,
             backgroundColor: theme.palette.primary.main,
             transform: "translateY(-50%)",
           },

@@ -36,6 +36,8 @@ select {
   min-width: 0;
   will-change: opacity, transform;
   animation-name: page-enter;
+  animation-duration: var(--page-transition-duration, 240ms);
+  animation-timing-function: var(--page-transition-easing, cubic-bezier(0.2, 0, 0, 1));
   animation-fill-mode: both;
 }
 
@@ -168,7 +170,7 @@ select {
 @keyframes page-enter {
   from {
     opacity: 0;
-    transform: translate3d(0, 12px, 0);
+    transform: translate3d(0, var(--page-transition-offset-y, 12px), 0);
   }
   to {
     opacity: 1;

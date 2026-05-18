@@ -7,7 +7,7 @@ Evolucionar la interfaz hacia un criterio inspirado en Material Design 3 sin cam
 - Tokens visuales para superficies, bordes, estados y motion.
 - Jerarquía más clara entre contenedores, cards, chips y acciones.
 - Radios moderados y consistentes.
-- Elevaciones sobrias para diferenciar surface, raised y overlay.
+- Elevaciones sobrias para diferenciar `surface`, `raised` y `overlay`.
 - Motion corto y útil para continuidad visual.
 - Tipografía ordenada para dashboard operativo.
 
@@ -24,6 +24,21 @@ Evolucionar la interfaz hacia un criterio inspirado en Material Design 3 sin cam
 - `palette.outline` y `outlineVariant`: bordes y divisores.
 - `palette.onSurfaceVariant`: texto secundario de alta legibilidad.
 - `palette.status.*`: estados operativos semánticos.
+- `appMotion`: duraciones y desplazamientos del motion reusable.
+- `appShape`: escala de radios compartida.
+
+## Escala de radios
+- `appShape.xs = 4`: detalles compactos o superficies muy pequeñas.
+- `appShape.sm = 6`: pequeños contenedores o controles auxiliares.
+- `appShape.md = 8`: base operativa del sistema.
+- `appShape.lg = 10`: cards, dialogs, data grids y superficies destacadas.
+- `appShape.pill = 999`: chips, badges y controles tipo pill.
+
+## Reglas de forma
+- Layout, tablas, inputs, dialogs y cards deben verse sobrios y técnicos.
+- Evitar radios ad hoc cuando ya exista un token en `appShape`.
+- Reservar `pill` para chips, badges y estados compactos.
+- Mantener `50%` solo para indicadores realmente circulares.
 
 ## Estados operativos
 - `active`: azul operativo. Debe verse rápido sin competir con alertas.
@@ -41,17 +56,30 @@ Evolucionar la interfaz hacia un criterio inspirado en Material Design 3 sin cam
 - El motion debe percibirse, pero seguir siendo funcional.
 - Evitar loops permanentes y pulsos agresivos.
 
+## Motion reusable
+- `PageTransition` es el wrapper principal para entrada de pantallas.
+- El motion reusable debe tomar duración, easing y offset desde el theme.
+- No crear wrappers nuevos si no tienen al menos dos usos reales y claros.
+- Priorizar transiciones de opacidad, color, borde y desplazamientos cortos.
+
 ## Reduced Motion
 - Respetar `prefers-reduced-motion`.
 - Desactivar desplazamientos, escalas y animaciones decorativas.
 - Reducir al mínimo cambios animados de opacidad y transform.
 - Mantener feedback visual por color, contraste y jerarquía, no por movimiento.
+- No usar shimmer infinito ni loops cuando reduced motion esté activo.
 
 ## Densidad
 - La app es un dashboard operativo, no una landing ni una app mobile-first.
 - Mantener tablas legibles sin inflar alturas.
 - Priorizar información visible y acciones cercanas al contexto.
 - Evitar exceso de espacios vacíos entre controles.
+
+## Estados vacíos y carga
+- Reutilizar `DataGridEmptyState` para grillas y listados cuando el patrón sea el mismo.
+- Los estados vacíos deben tener título claro, descripción breve y CTA opcional solo si ayuda a destrabar la acción.
+- No crear placeholders llamativos si un `LinearProgress` o empty state sobrio ya resuelve bien el caso.
+- Mantener el loading alineado al layout existente; no introducir skeletons nuevos sin necesidad real.
 
 ## Reglas de componentes
 - Cards, tablas, inputs y layout: radios sobrios y estética operativa.

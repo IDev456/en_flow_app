@@ -11,14 +11,17 @@ type PageTransitionProps = {
 export function PageTransition({ children }: PageTransitionProps) {
   const theme = useTheme();
   const prefersReducedMotion = useReducedMotionPreference();
+  const duration = prefersReducedMotion ? 0 : theme.appMotion.medium;
+  const offsetY = prefersReducedMotion ? 0 : theme.appMotion.pageOffsetY;
 
   return (
     <Box
       className={prefersReducedMotion ? "page-transition-root page-transition-root--reduced" : "page-transition-root"}
       sx={{
         minWidth: 0,
-        animationDuration: prefersReducedMotion ? "0ms" : `${theme.appMotion.medium}ms`,
-        animationTimingFunction: theme.transitions.easing.easeInOut,
+        "--page-transition-duration": `${duration}ms`,
+        "--page-transition-easing": theme.transitions.easing.easeInOut,
+        "--page-transition-offset-y": `${offsetY}px`,
       }}
     >
       {children}
