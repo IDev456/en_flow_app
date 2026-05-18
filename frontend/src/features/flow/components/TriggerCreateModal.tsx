@@ -6,10 +6,10 @@ import { alpha } from "@mui/material/styles";
 import { useNavigate } from "react-router-dom";
 
 import { useToastContext } from "../../../components/Toast";
-import { getWorkflow, listTriggers, listWorkflows, quickCaptureFlow } from "../api";
+import { getWorkflow, listTriggers, listWorkflows, quickCaptureFlow, startWorkflow } from "../api";
 import { DuplicateFlowWarningDialog } from "./DuplicateFlowWarningDialog";
 import { LiveDuplicateSuggestions } from "./LiveDuplicateSuggestions";
-import type { QuickCaptureInput, WorkflowDetail } from "../types";
+import type { QuickCaptureInput, WorkflowDetail, WorkflowStartInput } from "../types";
 import { DEFAULT_ACTOR } from "../utils";
 import {
   buildRequirementByWorkflowId,
@@ -23,6 +23,8 @@ import {
 
 type TriggerCreateModalProps = {
   onClose: () => void;
+  defaultRequirementId?: string;
+  defaultRequirementLabel?: string;
 };
 
 type DuplicateCatalog = {
@@ -30,7 +32,19 @@ type DuplicateCatalog = {
   requirementByWorkflowId: RequirementByWorkflowId;
 };
 
-export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
+type PendingCreation =
+  | {
+      kind: "quick";
+      payload: QuickCaptureInput;
+    }
+  | {
+      kind: "linked";
+      requirementId: string;
+      requirementLabel: string | null;
+      payload: WorkflowStartInput;
+    };
+
+export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequirementLabel }: TriggerCreateModalProps) {
   const [title, setTitle] = useState("");
   const [detail, setDetail] = useState("");
   const [assignee, setAssignee] = useState("");
@@ -42,12 +56,14 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
   const [showOptional, setShowOptional] = useState(false);
   const [duplicateCandidates, setDuplicateCandidates] = useState<DuplicateCandidate[]>([]);
   const [liveDuplicateCandidates, setLiveDuplicateCandidates] = useState<DuplicateCandidate[]>([]);
-  const [pendingPayload, setPendingPayload] = useState<QuickCaptureInput | null>(null);
+  const [pendingCreation, setPendingCreation] = useState<PendingCreation | null>(null);
   const navigate = useNavigate();
   const { showToast } = useToastContext();
   const duplicateCatalogRef = useRef<DuplicateCatalog | null>(null);
   const liveRequestIdRef = useRef(0);
   const canSubmit = title.trim().length >= 3;
+  const linkedRequirementLabel = defaultRequirementLabel?.trim() || null;
+  const isLinkedCapture = Boolean(defaultRequirementId);
 
   function handleClose() {
     if (title.trim() || detail.trim() || assignee.trim() || executionDate) {
@@ -76,13 +92,53 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
     return catalog;
   }
 
-  function buildPayload(): QuickCaptureInput {
+  function buildCreation(): PendingCreation {
+    if (defaultRequirementId) {
+      return {
+        kind: "linked",
+        requirementId: defaultRequirementId,
+        requirementLabel: linkedRequirementLabel,
+        payload: {
+          objetivo_final: title.trim(),
+          resolucion_esperada: "Flujo completado con validacion final",
+          primer_paso: {
+            nombre: title.trim(),
+            descripcion: detail.trim() || null,
+            asignado_a: assignee.trim() || DEFAULT_ACTOR,
+            fecha_vencimiento: executionDate ? `${executionDate}T00:00:00Z` : null,
+          },
+        },
+      };
+    }
+
     return {
-      titulo: title.trim(),
-      detalle: detail.trim() || null,
-      asignado_a: assignee.trim() || DEFAULT_ACTOR,
-      fecha_ejecucion_estimada: executionDate ? `${executionDate}T00:00:00Z` : null,
-      creado_por: DEFAULT_ACTOR,
+      kind: "quick",
+      payload: {
+        titulo: title.trim(),
+        detalle: detail.trim() || null,
+        asignado_a: assignee.trim() || DEFAULT_ACTOR,
+        fecha_ejecucion_estimada: executionDate ? `${executionDate}T00:00:00Z` : null,
+        creado_por: DEFAULT_ACTOR,
+      },
+    };
+  }
+
+  function buildDuplicateInput(creation: PendingCreation) {
+    if (creation.kind === "linked") {
+      return {
+        taskName: creation.payload.primer_paso.nombre,
+        taskDescription: creation.payload.primer_paso.descripcion,
+        workflowObjective: creation.payload.objetivo_final,
+        requirementId: creation.requirementId,
+        requirementLabel: creation.requirementLabel,
+        reminderAt: creation.payload.primer_paso.fecha_vencimiento ?? creation.payload.primer_paso.fecha_ejecucion_estimada ?? null,
+      };
+    }
+
+    return {
+      taskName: creation.payload.titulo,
+      taskDescription: creation.payload.detalle,
+      reminderAt: creation.payload.fecha_ejecucion_estimada ?? creation.payload.fecha_vencimiento ?? null,
     };
   }
 
@@ -112,6 +168,9 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
           {
             taskName: title.trim(),
             taskDescription: detail.trim() || null,
+            workflowObjective: isLinkedCapture ? title.trim() : null,
+            requirementId: defaultRequirementId ?? null,
+            requirementLabel: linkedRequirementLabel,
             reminderAt: executionDate ? `${executionDate}T00:00:00Z` : null,
           },
           catalog.workflowsById,
@@ -136,37 +195,38 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
     };
   }, [title, detail, executionDate]);
 
-  async function performCreate(payload: QuickCaptureInput) {
+  async function performCreate(creation: PendingCreation) {
     try {
       setSubmitting(true);
       setError(null);
-      const workflow = await quickCaptureFlow(payload);
-      showToast("Tarea capturada.", "success");
+      const workflow =
+        creation.kind === "linked"
+          ? await startWorkflow(creation.requirementId, creation.payload)
+          : await quickCaptureFlow(creation.payload);
+      showToast(creation.kind === "linked" ? "Tarea vinculada al proyecto." : "Tarea capturada.", "success");
       onClose();
       navigate(`/workflows/${workflow.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo capturar la tarea");
+      setError(
+        err instanceof Error
+          ? err.message
+          : creation.kind === "linked"
+            ? "No se pudo crear la tarea vinculada"
+            : "No se pudo capturar la tarea"
+      );
     } finally {
       setSubmitting(false);
     }
   }
 
-  async function maybeWarnDuplicates(payload: QuickCaptureInput) {
+  async function maybeWarnDuplicates(creation: PendingCreation) {
     try {
       setCheckingDuplicates(true);
       const catalog = await loadDuplicateCatalog();
-      const candidates = findSimilarFlows(
-        {
-          taskName: payload.titulo,
-          taskDescription: payload.detalle,
-          reminderAt: payload.fecha_ejecucion_estimada ?? payload.fecha_vencimiento ?? null,
-        },
-        catalog.workflowsById,
-        catalog.requirementByWorkflowId
-      );
+      const candidates = findSimilarFlows(buildDuplicateInput(creation), catalog.workflowsById, catalog.requirementByWorkflowId);
 
       if (candidates.length > 0) {
-        setPendingPayload(payload);
+        setPendingCreation(creation);
         setDuplicateCandidates(candidates);
         return true;
       }
@@ -186,23 +246,23 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
       return;
     }
 
-    const payload = buildPayload();
-    const shouldWarn = await maybeWarnDuplicates(payload);
+    const creation = buildCreation();
+    const shouldWarn = await maybeWarnDuplicates(creation);
     if (shouldWarn) return;
 
-    await performCreate(payload);
+    await performCreate(creation);
   }
 
   async function handleCreateAnyway() {
-    if (!pendingPayload) return;
+    if (!pendingCreation) return;
     setDuplicateCandidates([]);
-    setPendingPayload(null);
-    await performCreate(pendingPayload);
+    setPendingCreation(null);
+    await performCreate(pendingCreation);
   }
 
   function handleOpenExisting(workflowId: string) {
     setDuplicateCandidates([]);
-    setPendingPayload(null);
+    setPendingCreation(null);
     navigate(`/workflows/${workflowId}`);
   }
 
@@ -212,7 +272,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
 
   function handleCancelDuplicateWarning() {
     setDuplicateCandidates([]);
-    setPendingPayload(null);
+    setPendingCreation(null);
   }
 
   return (
@@ -229,6 +289,11 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
 
         <DialogContent dividers sx={{ borderColor: "outlineVariant" }}>
           <Stack spacing={2.5}>
+            {isLinkedCapture && linkedRequirementLabel && (
+              <Alert severity="info" sx={{ py: 0.5 }}>
+                Proyecto vinculado: {linkedRequirementLabel}
+              </Alert>
+            )}
             <TextField
               autoFocus
               label="¿Qué tenés que hacer? *"
@@ -285,7 +350,7 @@ export function TriggerCreateModal({ onClose }: TriggerCreateModalProps) {
 
         <DialogActions sx={{ p: 3, justifyContent: "space-between", gap: 1.5, flexWrap: "wrap" }}>
           <Typography variant="body2" color="text.secondary">
-            Se crea un flow con una tarea activa inicial.
+            {isLinkedCapture ? "Se creará un flow vinculado a este proyecto." : "Se crea un flow con una tarea activa inicial."}
           </Typography>
           <Stack direction="row" spacing={1.25}>
             <Button variant="text" color="inherit" onClick={handleClose} disabled={submitting || checkingDuplicates}>

@@ -67,6 +67,8 @@ import {
   formatLocalDateInput,
   formatRelativeCalendarDay,
   getCalendarDayDiff,
+  getVisibleTriggerStatus,
+  getVisibleWorkflowStatus,
   isNoisyAutomaticJournalText,
   getStatusTone,
   getTodayLocalDateInput,
@@ -137,26 +139,17 @@ function getFilterIcon(filter: FlowFilter) {
   return <InboxRoundedIcon sx={{ fontSize: 14 }} />;
 }
 
-function getWorkflowDisplayStatus(workflow: WorkflowDetail) {
-  if (workflow.estado === "esperando_respuesta") return "esperando_respuesta";
-  if (workflow.estado === "en_espera") return "en_espera";
-  if (workflow.estado === "con_problema") return "con_problema";
-  if (workflow.estado === "finalizado" || workflow.estado === "cancelado") return workflow.estado;
-
-  const openSteps = workflow.steps.filter((step) => step.estado !== "completado");
-  if (openSteps.some((step) => step.estado === "esperando_respuesta")) return "esperando_respuesta";
-  if (openSteps.some((step) => step.estado === "problema")) return "con_problema";
-  if (openSteps.some((step) => step.estado === "espera")) return "en_espera";
-  if (openSteps.some((step) => step.estado === "activo")) return "en_proceso";
-
-  return workflow.estado;
-}
-
 function getFlowFilterFromStatus(statusValue: string): Exclude<FlowFilter, "all"> | null {
-  const tone = getStatusTone(statusValue);
-  if (tone === "cancelado") return null;
-  if (tone === "finalizado" || tone === "completado" || tone === "resuelto") return "finalized";
-  if (tone === "espera" || tone === "espera_externa" || statusValue === "en_espera") return "waiting";
+  const visibleStatus = getVisibleTriggerStatus(statusValue);
+  if (visibleStatus === "cancelado" || visibleStatus === "finalizado" || visibleStatus === "resuelto") {
+    return "finalized";
+  }
+  if (visibleStatus === "esperando_respuesta" || visibleStatus === "en_espera") {
+    return "waiting";
+  }
+  if (visibleStatus === "sin_flows") {
+    return "active";
+  }
   return "active";
 }
 
@@ -418,7 +411,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         const linkedRequirements = requirementByWorkflowId[workflow.id] ?? [];
         return {
           workflow,
-          displayStatus: getWorkflowDisplayStatus(workflow),
+          displayStatus: getVisibleWorkflowStatus(workflow),
           relevantStep: pickRelevantStep(workflow),
           latestMovementAt: getLatestMovementAt(workflow),
           linkedRequirements,
@@ -432,7 +425,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
   const flowCounts = useMemo(() => {
     return Object.values(workflowsById)
-      .map((workflow) => getWorkflowDisplayStatus(workflow))
+      .map((workflow) => getVisibleWorkflowStatus(workflow))
       .reduce<Record<Exclude<FlowFilter, "all">, number>>(
         (acc, status) => {
           const filter = getFlowFilterFromStatus(status);
@@ -599,21 +592,21 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         .filter((workflow): workflow is WorkflowDetail => Boolean(workflow));
 
       const openCount = linkedWorkflows.filter((workflow) => {
-        const filter = getFlowFilterFromStatus(getWorkflowDisplayStatus(workflow));
+        const filter = getFlowFilterFromStatus(getVisibleWorkflowStatus(workflow));
         return filter === "active" || filter === "waiting";
       }).length;
 
       const waitingCount = linkedWorkflows.filter(
-        (workflow) => getFlowFilterFromStatus(getWorkflowDisplayStatus(workflow)) === "waiting"
+        (workflow) => getFlowFilterFromStatus(getVisibleWorkflowStatus(workflow)) === "waiting"
       ).length;
 
-      return {
-        id: trigger.id,
-        description: trigger.descripcion?.trim() || "Proyecto sin detalle",
-        requester: trigger.solicitante?.trim() || "Sin solicitante",
-        status: trigger.estado_general,
-        flowsLabel:
-          linkedWorkflows.length === 0
+        return {
+          id: trigger.id,
+          description: trigger.descripcion?.trim() || "Proyecto sin detalle",
+          requester: trigger.solicitante?.trim() || "Sin solicitante",
+          status: getVisibleTriggerStatus(trigger.estado_general),
+          flowsLabel:
+            linkedWorkflows.length === 0
             ? "Sin flows"
             : openCount > 0
               ? `${linkedWorkflows.length} flows · ${openCount} abiertos`

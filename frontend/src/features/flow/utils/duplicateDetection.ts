@@ -1,5 +1,5 @@
 import type { Step, StepStatus, TriggerDetail, WorkflowDetail, WorkflowStatus } from "../types";
-import { isNoisyAutomaticJournalText } from "../utils";
+import { getVisibleWorkflowStatus, isNoisyAutomaticJournalText } from "../utils";
 
 const STOPWORDS = new Set([
   "de",
@@ -208,21 +208,6 @@ export function buildRequirementByWorkflowId(triggers: TriggerDetail[]): Require
   return index;
 }
 
-function getDisplayStatus(workflow: WorkflowDetail, step: Step | null): string {
-  if (workflow.estado === "esperando_respuesta") return "esperando_respuesta";
-  if (workflow.estado === "en_espera") return "en_espera";
-  if (workflow.estado === "con_problema") return "con_problema";
-  if (workflow.estado === "finalizado" || workflow.estado === "cancelado") return workflow.estado;
-
-  if (!step) return workflow.estado;
-  if (step.estado === "esperando_respuesta") return "esperando_respuesta";
-  if (step.estado === "problema") return "con_problema";
-  if (step.estado === "espera") return "en_espera";
-  if (step.estado === "activo") return "en_proceso";
-
-  return workflow.estado;
-}
-
 function getLatestMovementAt(workflow: WorkflowDetail): string | null {
   return workflow.steps.reduce<string | null>((latest, step) => {
     const candidate =
@@ -365,7 +350,7 @@ export function findSimilarFlows(
       score,
       taskName: candidateName,
       taskDescription: relevantStep.descripcion?.trim() || null,
-      displayStatus: getDisplayStatus(workflow, relevantStep),
+      displayStatus: getVisibleWorkflowStatus(workflow),
       workflowStatus: workflow.estado,
       stepStatus: relevantStep.estado,
       requirementLabels,

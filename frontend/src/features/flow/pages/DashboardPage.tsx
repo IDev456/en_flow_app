@@ -9,7 +9,7 @@ import { Link as RouterLink } from "react-router-dom";
 import { getDailyBoard } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
 import type { DailyBoardData, Step, WorkflowSummary } from "../types";
-import { formatElapsedTime } from "../utils";
+import { formatElapsedTime, getVisibleWorkflowStatusValue } from "../utils";
 
 export function DashboardPage() {
   const [board, setBoard] = useState<DailyBoardData | null>(null);
@@ -32,7 +32,7 @@ export function DashboardPage() {
     }
   }
 
-  const pausedAndBlocked = useMemo(
+  const waitingFollowUp = useMemo(
     () => [...(board?.tareas_en_pausa ?? []), ...(board?.tareas_con_problema ?? [])],
     [board?.tareas_en_pausa, board?.tareas_con_problema]
   );
@@ -93,11 +93,11 @@ export function DashboardPage() {
             emptyDescription="Los temas que dependan de una respuesta externa aparecerán acá."
           />
           <SectionCard
-            title="En pausa / problema"
-            subtitle="Temas que no pueden avanzar."
-            items={pausedAndBlocked}
-            emptyTitle="No hay temas pausados ni con problema"
-            emptyDescription="Cuando algo no pueda avanzar, quedará visible en esta sección."
+            title="En espera"
+            subtitle="Temas que necesitan seguimiento antes de avanzar."
+            items={waitingFollowUp}
+            emptyTitle="No hay temas en espera"
+            emptyDescription="Cuando algo quede trabado o pendiente de seguimiento, aparecerá en esta sección."
           />
         </Stack>
       </Box>
@@ -247,13 +247,11 @@ function FlowSection({ title, items, emptyTitle, emptyDescription }: FlowSection
                       {workflow.objetivo_final?.trim() || `Flow ${workflow.id.slice(0, 8)}`}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      {workflow.pasos_activos.length > 0
-                        ? `Tareas abiertas: ${workflow.pasos_activos.join(", ")}`
-                        : "Sin tareas abiertas"}
+                      {workflow.pasos_activos.length > 0 ? `Tareas abiertas: ${workflow.pasos_activos.join(", ")}` : "Sin tareas abiertas"}
                     </Typography>
                   </Box>
                   <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
-                    <StatusBadge value={workflow.estado} />
+                    <StatusBadge value={getVisibleWorkflowStatusValue(workflow.estado)} />
                     <PlaylistAddCheckRoundedIcon fontSize="small" />
                   </Stack>
                 </Button>

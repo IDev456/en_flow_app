@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import PlayCircleOutlineRoundedIcon from "@mui/icons-material/PlayCircleOutlineRounded";
 import SchemaRoundedIcon from "@mui/icons-material/SchemaRounded";
 import { alpha } from "@mui/material/styles";
@@ -13,37 +13,21 @@ import {
   CircularProgress,
   Link,
   Slide,
-  type SlideProps,
   Snackbar,
   Stack,
   TextField,
   Typography,
+  type SlideProps,
 } from "@mui/material";
-import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
+import { Link as RouterLink, useLocation, useNavigate, useParams } from "react-router-dom";
 
-import { deleteTrigger, getStepComments, getTrigger, getWorkflow, listTriggers, listWorkflows, startWorkflow, updateTrigger } from "../api";
-import { DuplicateFlowWarningDialog } from "../components/DuplicateFlowWarningDialog";
-import { LiveDuplicateSuggestions } from "../components/LiveDuplicateSuggestions";
+import { deleteTrigger, getStepComments, getTrigger, getWorkflow, updateTrigger } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
-import type { TriggerDetail, WorkflowDetail, WorkflowStartInput } from "../types";
-import { DEFAULT_ACTOR, formatElapsedTime } from "../utils";
-import {
-  buildRequirementByWorkflowId,
-  findSimilarFlows,
-  getSignificantTokens,
-  isOperationalWorkflowStatus,
-  normalizeText,
-  type DuplicateCandidate,
-  type RequirementByWorkflowId,
-} from "../utils/duplicateDetection";
+import type { TriggerDetail, WorkflowDetail } from "../types";
+import { formatElapsedTime, getVisibleTriggerStatus, getVisibleWorkflowStatus } from "../utils";
 
 const SOLICITANTE_MAX = 150;
 const TRIGGER_DESCRIPTION_MAX = 1000;
-
-type DuplicateCatalog = {
-  workflowsById: Record<string, WorkflowDetail>;
-  requirementByWorkflowId: RequirementByWorkflowId;
-};
 
 function SlideUp(props: SlideProps) {
   return <Slide {...props} direction="up" />;
@@ -54,14 +38,6 @@ export function TriggerDetailPage() {
   const [trigger, setTrigger] = useState<TriggerDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [newWorkflowFirstDescription, setNewWorkflowFirstDescription] = useState("");
-  const [newWorkflowReminderDate, setNewWorkflowReminderDate] = useState("");
-  const [newWorkflowError, setNewWorkflowError] = useState<string | null>(null);
-  const [newWorkflowSuccess, setNewWorkflowSuccess] = useState<string | null>(null);
-  const [creatingWorkflow, setCreatingWorkflow] = useState(false);
-  const [checkingDuplicates, setCheckingDuplicates] = useState(false);
-  const [checkingLiveDuplicates, setCheckingLiveDuplicates] = useState(false);
-  const [liveDuplicateCandidates, setLiveDuplicateCandidates] = useState<DuplicateCandidate[]>([]);
   const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
   const [workflowLatestCommentById, setWorkflowLatestCommentById] = useState<Record<string, string | null>>({});
   const [workflowsError, setWorkflowsError] = useState<string | null>(null);
@@ -72,11 +48,8 @@ export function TriggerDetailPage() {
   const [editDescripcion, setEditDescripcion] = useState("");
   const [requirementError, setRequirementError] = useState<string | null>(null);
   const [requirementToastOpen, setRequirementToastOpen] = useState(false);
-  const [duplicateCandidates, setDuplicateCandidates] = useState<DuplicateCandidate[]>([]);
-  const [pendingWorkflowPayload, setPendingWorkflowPayload] = useState<WorkflowStartInput | null>(null);
+  const location = useLocation();
   const navigate = useNavigate();
-  const duplicateCatalogRef = useRef<DuplicateCatalog | null>(null);
-  const liveRequestIdRef = useRef(0);
 
   function getPrimaryDetail(currentTrigger: TriggerDetail) {
     return currentTrigger.descripcion?.trim() || "Proyecto sin detalle";
@@ -96,98 +69,10 @@ export function TriggerDetailPage() {
     setEditDescripcion(trigger.descripcion ?? "");
   }, [trigger?.id, trigger?.solicitante, trigger?.descripcion]);
 
-  useEffect(() => {
-    if (!trigger) {
-      liveRequestIdRef.current += 1;
-      setCheckingLiveDuplicates(false);
-      setLiveDuplicateCandidates([]);
-      return;
-    }
-
-    const descriptionText = newWorkflowFirstDescription.trim();
-    const normalizedDescription = normalizeText(descriptionText);
-    const significantTokens = getSignificantTokens(descriptionText);
-
-    if (significantTokens.length === 0 || normalizedDescription.length < 3) {
-      liveRequestIdRef.current += 1;
-      setCheckingLiveDuplicates(false);
-      setLiveDuplicateCandidates([]);
-      return;
-    }
-
-    const requestId = liveRequestIdRef.current + 1;
-    liveRequestIdRef.current = requestId;
-
-    const timeoutId = window.setTimeout(async () => {
-      setCheckingLiveDuplicates(true);
-
-      try {
-        const catalog = await loadDuplicateCatalog(workflowsById);
-        if (liveRequestIdRef.current !== requestId) return;
-
-        const payload = buildNewWorkflowPayload(trigger);
-        const candidates = findSimilarFlows(
-          {
-            taskName: payload.primer_paso.nombre,
-            taskDescription: payload.primer_paso.descripcion,
-            workflowObjective: payload.objetivo_final,
-            requirementId: trigger.id,
-            requirementLabel: trigger.descripcion?.trim() || null,
-            reminderAt: payload.primer_paso.fecha_vencimiento ?? null,
-          },
-          catalog.workflowsById,
-          catalog.requirementByWorkflowId
-        );
-
-        if (liveRequestIdRef.current !== requestId) return;
-        setLiveDuplicateCandidates(candidates);
-      } catch (err) {
-        if (liveRequestIdRef.current !== requestId) return;
-        console.warn("No se pudieron cargar sugerencias de duplicados para el nuevo flow.", err);
-        setLiveDuplicateCandidates([]);
-      } finally {
-        if (liveRequestIdRef.current === requestId) {
-          setCheckingLiveDuplicates(false);
-        }
-      }
-    }, 400);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [newWorkflowFirstDescription, newWorkflowReminderDate, trigger, workflowsById]);
-
-  async function loadDuplicateCatalog(seedWorkflowsById?: Record<string, WorkflowDetail>) {
-    if (duplicateCatalogRef.current) {
-      return duplicateCatalogRef.current;
-    }
-
-    const [workflowSummaries, triggers] = await Promise.all([listWorkflows(), listTriggers()]);
-    const operationalIds = workflowSummaries.filter((workflow) => isOperationalWorkflowStatus(workflow.estado)).map((workflow) => workflow.id);
-
-    const cachedSeed = seedWorkflowsById ?? {};
-    const workflowsFromSeed = operationalIds
-      .map((workflowId) => cachedSeed[workflowId])
-      .filter((workflow): workflow is WorkflowDetail => Boolean(workflow));
-    const seededIds = new Set(workflowsFromSeed.map((workflow) => workflow.id));
-    const missingIds = operationalIds.filter((workflowId) => !seededIds.has(workflowId));
-    const fetchedDetails = await Promise.all(missingIds.map((workflowId) => getWorkflow(workflowId)));
-
-    const catalog = {
-      workflowsById: Object.fromEntries([...workflowsFromSeed, ...fetchedDetails].map((workflow) => [workflow.id, workflow])),
-      requirementByWorkflowId: buildRequirementByWorkflowId(triggers),
-    } satisfies DuplicateCatalog;
-
-    duplicateCatalogRef.current = catalog;
-    return catalog;
-  }
-
   async function loadTrigger() {
     try {
-      duplicateCatalogRef.current = null;
       setLoading(true);
       setError(null);
-      setNewWorkflowError(null);
       setWorkflowsError(null);
       const triggerData = await getTrigger(triggerId);
       setTrigger(triggerData);
@@ -272,7 +157,7 @@ export function TriggerDetailPage() {
       return;
     }
     if (editDescripcion.trim().length > TRIGGER_DESCRIPTION_MAX) {
-      setRequirementError(`Descripcion supera ${TRIGGER_DESCRIPTION_MAX} caracteres`);
+      setRequirementError(`Descripción supera ${TRIGGER_DESCRIPTION_MAX} caracteres`);
       return;
     }
 
@@ -297,7 +182,9 @@ export function TriggerDetailPage() {
     if (!trigger) return;
 
     if (trigger.workflow_ids.length > 0) {
-      setRequirementError("No se puede eliminar este proyecto porque tiene flows vinculados. Primero desvincula los flows o déjalo como agrupador.");
+      setRequirementError(
+        "No se puede eliminar este proyecto porque tiene flows vinculados. Primero desvinculá los flows o dejalo como agrupador."
+      );
       return;
     }
 
@@ -319,110 +206,21 @@ export function TriggerDetailPage() {
     }
   }
 
-  function buildNewWorkflowPayload(currentTrigger: TriggerDetail): WorkflowStartInput {
-    const flowTitle = currentTrigger.descripcion?.trim() || "";
-    const firstStepName = flowTitle || "Tarea inicial";
-
-    return {
-      objetivo_final: flowTitle || null,
-      resolucion_esperada: "Flujo completado con validacion final",
-      primer_paso: {
-        nombre: firstStepName,
-        descripcion: newWorkflowFirstDescription.trim(),
-        asignado_a: DEFAULT_ACTOR,
-        fecha_vencimiento: newWorkflowReminderDate ? `${newWorkflowReminderDate}T00:00:00Z` : null,
-      },
-    };
-  }
-
-  async function performCreateWorkflow(payload: WorkflowStartInput) {
+  function openLinkedCaptureModal() {
     if (!trigger) return;
-
-    try {
-      setCreatingWorkflow(true);
-      setNewWorkflowError(null);
-      setNewWorkflowSuccess(null);
-      const newWorkflow = await startWorkflow(trigger.id, payload);
-      setNewWorkflowSuccess("Nuevo flow asociado creado.");
-      setNewWorkflowFirstDescription("");
-      setNewWorkflowReminderDate("");
-      await loadTrigger();
-      navigate(`/workflows/${newWorkflow.id}`);
-    } catch (err) {
-      setNewWorkflowError(err instanceof Error ? err.message : "No se pudo crear el nuevo flow");
-    } finally {
-      setCreatingWorkflow(false);
-    }
-  }
-
-  async function handleCreateWorkflow() {
-    if (!trigger) return;
-
-    if (!newWorkflowFirstDescription.trim()) {
-      setNewWorkflowError("Debes indicar la descripcion de la tarea inicial.");
-      return;
-    }
-
-    const payload = buildNewWorkflowPayload(trigger);
-
-    try {
-      setCheckingDuplicates(true);
-      const catalog = await loadDuplicateCatalog(workflowsById);
-      const candidates = findSimilarFlows(
-        {
-          taskName: payload.primer_paso.nombre,
-          taskDescription: payload.primer_paso.descripcion,
-          workflowObjective: payload.objetivo_final,
-          requirementId: trigger.id,
-          requirementLabel: trigger.descripcion?.trim() || null,
-          reminderAt: payload.primer_paso.fecha_vencimiento ?? null,
-        },
-        catalog.workflowsById,
-        catalog.requirementByWorkflowId
-      );
-
-      if (candidates.length > 0) {
-        setPendingWorkflowPayload(payload);
-        setDuplicateCandidates(candidates);
-        return;
-      }
-    } catch (err) {
-      console.warn("No se pudo revisar duplicados antes de crear el flow.", err);
-    } finally {
-      setCheckingDuplicates(false);
-    }
-
-    await performCreateWorkflow(payload);
-  }
-
-  async function handleCreateWorkflowAnyway() {
-    if (!pendingWorkflowPayload) return;
-    setDuplicateCandidates([]);
-    setPendingWorkflowPayload(null);
-    await performCreateWorkflow(pendingWorkflowPayload);
-  }
-
-  function handleOpenExistingWorkflow(workflowId: string) {
-    setDuplicateCandidates([]);
-    setPendingWorkflowPayload(null);
-    navigate(`/workflows/${workflowId}`);
-  }
-
-  function handleOpenExistingWorkflowFromSuggestions(workflowId: string) {
-    navigate(`/workflows/${workflowId}`);
-  }
-
-  function handleCancelDuplicateWarning() {
-    setDuplicateCandidates([]);
-    setPendingWorkflowPayload(null);
+    const nextParams = new URLSearchParams(location.search);
+    nextParams.set("modal", "capture");
+    nextParams.set("requirementId", trigger.id);
+    nextParams.set("requirementLabel", getPrimaryDetail(trigger));
+    navigate(`${location.pathname}?${nextParams.toString()}`);
   }
 
   function getWorkflowActiveStep(workflow: WorkflowDetail) {
     if (workflow.paso_actual !== null) {
-      const byOrder = workflow.steps.find((s) => s.orden === workflow.paso_actual);
+      const byOrder = workflow.steps.find((step) => step.orden === workflow.paso_actual);
       if (byOrder) return byOrder;
     }
-    return workflow.steps.find((s) => !["completado", "cancelada"].includes(s.estado)) ?? null;
+    return workflow.steps.find((step) => !["completado", "cancelada"].includes(step.estado)) ?? null;
   }
 
   function getLatestWorkflowMovementAt(workflow: WorkflowDetail) {
@@ -431,7 +229,9 @@ export function TriggerDetailPage() {
       const stateAt = step.fecha_estado_actual;
       const candidate =
         commentAt && stateAt
-          ? (new Date(commentAt).getTime() > new Date(stateAt).getTime() ? commentAt : stateAt)
+          ? new Date(commentAt).getTime() > new Date(stateAt).getTime()
+            ? commentAt
+            : stateAt
           : (commentAt ?? stateAt);
       if (!candidate) return latest;
       if (!latest) return candidate;
@@ -445,25 +245,6 @@ export function TriggerDetailPage() {
     return byOrderDesc[0] ?? null;
   }
 
-  function getWorkflowDisplayStatus(workflow: WorkflowDetail) {
-    if (workflow.estado === "esperando_respuesta") {
-      return "esperando_respuesta";
-    }
-    if (workflow.estado === "en_espera") {
-      return "en_espera";
-    }
-    if (workflow.estado === "con_problema") {
-      return "con_problema";
-    }
-    if (workflow.estado === "finalizado" || workflow.estado === "cancelado") {
-      return workflow.estado;
-    }
-    if (workflow.steps.some((step) => step.estado === "espera" || step.estado === "problema")) {
-      return "espera";
-    }
-    return workflow.estado;
-  }
-
   function countExternalWaitingSteps(workflow: WorkflowDetail) {
     return workflow.steps.filter((step) => step.estado === "esperando_respuesta").length;
   }
@@ -473,10 +254,8 @@ export function TriggerDetailPage() {
     .filter((workflow): workflow is WorkflowDetail => Boolean(workflow));
   const canDeleteRequirement = (trigger?.workflow_ids.length ?? 0) === 0;
   const requirementStats = {
-    abiertos: linkedWorkflows.filter((workflow) =>
-      ["en_proceso", "en_espera", "con_problema", "pendiente"].includes(workflow.estado)
-    ).length,
-    esperando: linkedWorkflows.filter((workflow) => workflow.estado === "esperando_respuesta").length,
+    abiertos: linkedWorkflows.filter((workflow) => getVisibleWorkflowStatus(workflow) === "en_proceso").length,
+    esperando: linkedWorkflows.filter((workflow) => getVisibleWorkflowStatus(workflow) === "esperando_respuesta").length,
     finalizados: linkedWorkflows.filter((workflow) => ["finalizado", "cancelado"].includes(workflow.estado)).length,
   };
 
@@ -506,11 +285,14 @@ export function TriggerDetailPage() {
         message="Proyecto actualizado."
         slots={{ transition: SlideUp }}
       />
+
       <Breadcrumbs separator="›" aria-label="breadcrumb" sx={{ "& .MuiBreadcrumbs-separator": { mx: 0.75 } }}>
         <Link component={RouterLink} underline="hover" color="text.secondary" to="/requirements" sx={{ typography: "caption" }}>
           Proyectos
         </Link>
-        <Typography color="text.primary" variant="caption">Detalle</Typography>
+        <Typography color="text.primary" variant="caption">
+          Detalle
+        </Typography>
       </Breadcrumbs>
 
       <Box
@@ -540,7 +322,7 @@ export function TriggerDetailPage() {
                   {editingRequirement ? (
                     <Stack spacing={1.25} sx={{ mt: 1 }}>
                       <TextField
-                        label="Descripcion"
+                        label="Descripción"
                         multiline
                         minRows={3}
                         value={editDescripcion}
@@ -563,8 +345,9 @@ export function TriggerDetailPage() {
                     </>
                   )}
                 </Box>
+
                 <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                  <StatusBadge value={trigger.estado_general} />
+                  <StatusBadge value={getVisibleTriggerStatus(trigger.estado_general)} />
                   {editingRequirement ? (
                     <>
                       <Button variant="text" color="inherit" onClick={handleCancelEditRequirement} disabled={savingRequirement || deletingRequirement}>
@@ -591,6 +374,7 @@ export function TriggerDetailPage() {
                   )}
                 </Stack>
               </Stack>
+
               {requirementError && <Alert severity="error">{requirementError}</Alert>}
               {!editingRequirement && !canDeleteRequirement && (
                 <Typography variant="caption" color="text.secondary">
@@ -636,41 +420,19 @@ export function TriggerDetailPage() {
 
               <Stack spacing={1.25}>
                 <Typography variant="subtitle2" color="text.secondary">
-                  Crear nuevo flow asociado
+                  Captura vinculada
                 </Typography>
-                <TextField
-                  label="Descripción de la tarea inicial *"
-                  multiline
-                  minRows={3}
-                  value={newWorkflowFirstDescription}
-                  onChange={(event) => setNewWorkflowFirstDescription(event.target.value)}
-                  disabled={creatingWorkflow || checkingDuplicates}
-                />
-                <LiveDuplicateSuggestions
-                  candidates={liveDuplicateCandidates}
-                  checking={checkingLiveDuplicates}
-                  onOpenExisting={handleOpenExistingWorkflowFromSuggestions}
-                />
-                <TextField
-                  label="Recordatorio"
-                  type="date"
-                  value={newWorkflowReminderDate}
-                  onChange={(event) => setNewWorkflowReminderDate(event.target.value)}
-                  helperText="Fecha recordatorio"
-                  disabled={creatingWorkflow || checkingDuplicates}
-                  slotProps={{ inputLabel: { shrink: true } }}
-                />
+                <Typography color="text.secondary">
+                  Usá la misma captura rápida para crear una tarea ya vinculada a este proyecto.
+                </Typography>
                 <Button
                   variant="outlined"
                   color="inherit"
                   startIcon={<PlayCircleOutlineRoundedIcon />}
-                  onClick={() => void handleCreateWorkflow()}
-                  disabled={creatingWorkflow || checkingDuplicates}
+                  onClick={openLinkedCaptureModal}
                 >
-                  {checkingDuplicates ? "Revisando..." : creatingWorkflow ? "Creando flow..." : "Crear nuevo flow"}
+                  Capturar tarea para este proyecto
                 </Button>
-                {newWorkflowError && <Alert severity="error">{newWorkflowError}</Alert>}
-                {newWorkflowSuccess && <Alert severity="success">{newWorkflowSuccess}</Alert>}
               </Stack>
 
               {trigger.workflow_ids.length > 0 && (
@@ -685,6 +447,7 @@ export function TriggerDetailPage() {
                       const displayStep = activeStep ?? lastStep;
                       const totalSteps = workflow?.steps.length ?? 0;
                       const commentElapsed = formatElapsedTime(workflowLatestCommentById[workflowId] ?? null);
+
                       return (
                         <Button
                           key={workflowId}
@@ -713,10 +476,9 @@ export function TriggerDetailPage() {
                                 sx={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 1 }}
                               >
                                 <Typography sx={{ fontWeight: 700, fontSize: "0.875rem" }}>
-                                  {displayStep?.nombre ??
-                                    (workflow?.estado === "cancelado" ? "Flow cancelado" : "Sin tareas")}
+                                  {displayStep?.nombre ?? (workflow?.estado === "cancelado" ? "Flow cancelado" : "Sin tareas")}
                                 </Typography>
-                                {workflow && <StatusBadge value={getWorkflowDisplayStatus(workflow)} />}
+                                {workflow && <StatusBadge value={getVisibleWorkflowStatus(workflow)} />}
                               </Stack>
                               {workflow ? (
                                 <>
@@ -758,15 +520,6 @@ export function TriggerDetailPage() {
           </CardContent>
         </Card>
       </Box>
-
-      <DuplicateFlowWarningDialog
-        open={duplicateCandidates.length > 0}
-        candidates={duplicateCandidates}
-        busy={creatingWorkflow}
-        onOpenExisting={handleOpenExistingWorkflow}
-        onCreateAnyway={() => void handleCreateWorkflowAnyway()}
-        onCancel={handleCancelDuplicateWarning}
-      />
     </Stack>
   );
 }

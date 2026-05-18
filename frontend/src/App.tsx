@@ -70,10 +70,14 @@ function AppShell({ mode, onToggleMode }: AppShellProps) {
 
   const params = new URLSearchParams(location.search);
   const isCreateModalOpen = params.get("modal") === "capture";
+  const captureRequirementId = params.get("requirementId") || undefined;
+  const captureRequirementLabel = params.get("requirementLabel") || undefined;
 
   function closeCreateModal() {
     const nextParams = new URLSearchParams(location.search);
     nextParams.delete("modal");
+    nextParams.delete("requirementId");
+    nextParams.delete("requirementLabel");
     const nextSearch = nextParams.toString();
     navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ""}`);
   }
@@ -83,7 +87,13 @@ function AppShell({ mode, onToggleMode }: AppShellProps) {
       <PageTransition key={location.pathname}>
         <Outlet />
       </PageTransition>
-      {isCreateModalOpen && <TriggerCreateModal onClose={closeCreateModal} />}
+      {isCreateModalOpen && (
+        <TriggerCreateModal
+          onClose={closeCreateModal}
+          defaultRequirementId={captureRequirementId}
+          defaultRequirementLabel={captureRequirementLabel}
+        />
+      )}
     </DashboardLayout>
   );
 }
