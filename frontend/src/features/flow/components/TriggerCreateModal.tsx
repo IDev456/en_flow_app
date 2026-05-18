@@ -61,9 +61,20 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
   const { showToast } = useToastContext();
   const duplicateCatalogRef = useRef<DuplicateCatalog | null>(null);
   const liveRequestIdRef = useRef(0);
+  const titleInputRef = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
   const canSubmit = title.trim().length >= 3;
   const linkedRequirementLabel = defaultRequirementLabel?.trim() || null;
   const isLinkedCapture = Boolean(defaultRequirementId);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      titleInputRef.current?.focus();
+    }, 40);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, []);
 
   function handleClose() {
     if (title.trim() || detail.trim() || assignee.trim() || executionDate) {
@@ -296,6 +307,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
             )}
             <TextField
               autoFocus
+              inputRef={titleInputRef}
               label="¿Qué tenés que hacer? *"
               multiline
               minRows={3}
