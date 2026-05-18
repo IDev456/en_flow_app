@@ -76,7 +76,7 @@ import {
 } from "../utils";
 
 type ViewMode = "requirements" | "flows";
-type FlowFilter = "all" | "active" | "waiting" | "finalized";
+type FlowFilter = "all" | "active" | "waiting" | "cancelled" | "finalized";
 
 type TriggerListPageProps = {
   defaultView?: ViewMode;
@@ -128,6 +128,7 @@ type RequirementGridRow = {
 const flowFilterOptions: Array<{ value: FlowFilter; label: string }> = [
   { value: "active", label: "Activos" },
   { value: "waiting", label: "Esperando" },
+  { value: "cancelled", label: "Cancelados" },
   { value: "finalized", label: "Finalizados" },
   { value: "all", label: "Todos" },
 ];
@@ -135,19 +136,30 @@ const flowFilterOptions: Array<{ value: FlowFilter; label: string }> = [
 function getFilterIcon(filter: FlowFilter) {
   if (filter === "active") return <BoltRoundedIcon sx={{ fontSize: 14 }} />;
   if (filter === "waiting") return <HourglassTopRoundedIcon sx={{ fontSize: 14 }} />;
+  if (filter === "cancelled") return <CancelOutlinedIcon sx={{ fontSize: 14 }} />;
   if (filter === "finalized") return <CheckCircleRoundedIcon sx={{ fontSize: 14 }} />;
   return <InboxRoundedIcon sx={{ fontSize: 14 }} />;
 }
 
 function getFlowFilterFromStatus(statusValue: string): Exclude<FlowFilter, "all"> | null {
   const visibleStatus = getVisibleTriggerStatus(statusValue);
-  if (visibleStatus === "cancelado" || visibleStatus === "finalizado" || visibleStatus === "resuelto") {
+  if (visibleStatus === "cancelado") {
+    return "cancelled";
+  }
+  if (visibleStatus === "finalizado" || visibleStatus === "resuelto") {
     return "finalized";
   }
   if (visibleStatus === "esperando_respuesta" || visibleStatus === "en_espera") {
     return "waiting";
   }
-  if (visibleStatus === "sin_flows") {
+  if (
+    visibleStatus === "sin_flows" ||
+    visibleStatus === "con_problema" ||
+    visibleStatus === "problema" ||
+    visibleStatus === "pendiente" ||
+    visibleStatus === "activo" ||
+    visibleStatus === "en_proceso"
+  ) {
     return "active";
   }
   return "active";
@@ -433,7 +445,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
           acc[filter] += 1;
           return acc;
         },
-        { active: 0, waiting: 0, finalized: 0 }
+        { active: 0, waiting: 0, cancelled: 0, finalized: 0 }
       );
   }, [workflowsById]);
 
@@ -454,7 +466,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         acc[filter] += 1;
         return acc;
       },
-      { active: 0, waiting: 0, finalized: 0 }
+      { active: 0, waiting: 0, cancelled: 0, finalized: 0 }
     );
   }, [triggers]);
 
@@ -1424,6 +1436,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       ? theme.palette.status.active
                       : option.value === "waiting"
                         ? theme.palette.status.waiting
+                        : option.value === "cancelled"
+                          ? theme.palette.status.cancelled
                         : option.value === "finalized"
                           ? theme.palette.status.finalized
                           : theme.palette.status.neutral;

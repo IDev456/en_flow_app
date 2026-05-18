@@ -4,17 +4,17 @@ export const DEFAULT_ACTOR = "sistema";
 
 const statusPresentationMap: Record<string, { label: string; tone: string }> = {
   sin_flows: { label: "sin flows", tone: "espera" },
-  pendiente: { label: "pendiente", tone: "espera" },
+  pendiente: { label: "en proceso", tone: "en_proceso" },
   en_proceso: { label: "en proceso", tone: "en_proceso" },
   resuelto: { label: "finalizado", tone: "finalizado" },
   cancelado: { label: "cancelado", tone: "cancelado" },
-  con_problema: { label: "esperando respuesta", tone: "espera_externa" },
+  con_problema: { label: "en proceso", tone: "en_proceso" },
   en_espera: { label: "esperando respuesta", tone: "espera_externa" },
   activo: { label: "en proceso", tone: "en_proceso" },
-  espera: { label: "en espera", tone: "espera" },
+  espera: { label: "esperando respuesta", tone: "espera_externa" },
   esperando_respuesta: { label: "esperando respuesta", tone: "espera_externa" },
   completado: { label: "completada", tone: "completado" },
-  problema: { label: "con problema", tone: "problema" },
+  problema: { label: "en proceso", tone: "en_proceso" },
   cancelada: { label: "cancelada", tone: "cancelado" },
   finalizado: { label: "finalizado", tone: "finalizado" }
 };
@@ -213,11 +213,17 @@ export function getStatusTone(value: string) {
 export type VisibleFlowStatus = "en_proceso" | "esperando_respuesta" | "cancelado" | "finalizado";
 
 export function getVisibleTriggerStatus(status: TriggerStatus | string) {
-  if (status === "con_problema" || status === "esperando_respuesta") {
+  if (status === "esperando_respuesta" || status === "en_espera" || status === "espera") {
     return "esperando_respuesta";
+  }
+  if (status === "con_problema" || status === "problema") {
+    return "en_proceso";
   }
   if (status === "resuelto") {
     return "finalizado";
+  }
+  if (status === "pendiente" || status === "activo") {
+    return "en_proceso";
   }
   return status;
 }
@@ -229,7 +235,7 @@ export function getVisibleWorkflowStatusValue(status: string): VisibleFlowStatus
   if (status === "finalizado" || status === "resuelto") {
     return "finalizado";
   }
-  if (status === "esperando_respuesta" || status === "en_espera" || status === "con_problema") {
+  if (status === "esperando_respuesta" || status === "en_espera" || status === "espera") {
     return "esperando_respuesta";
   }
   return "en_proceso";
@@ -242,7 +248,7 @@ export function getVisibleWorkflowStatus(workflow: Pick<WorkflowDetail, "estado"
   }
 
   const openSteps = workflow.steps.filter((step) => step.estado !== "completado" && step.estado !== "cancelada");
-  if (openSteps.some((step) => step.estado === "esperando_respuesta" || step.estado === "espera" || step.estado === "problema")) {
+  if (openSteps.some((step) => step.estado === "esperando_respuesta" || step.estado === "espera")) {
     return "esperando_respuesta";
   }
 
