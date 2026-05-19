@@ -88,23 +88,23 @@ function renderStepTiming(step: Step): React.ReactElement | null {
           sx={{
             alignItems: "center",
             minWidth: 0,
-            ...(index > 0
-              ? {
-                  pl: 0.85,
-                  position: "relative",
-                  "&::before": {
-                    content: '""',
-                    position: "absolute",
-                    left: 0,
-                    top: "50%",
-                    width: 4,
-                    height: 4,
-                    borderRadius: "50%",
-                    backgroundColor: "divider",
-                    transform: "translateY(-50%)",
-                  },
-                }
-              : {}),
+              ...(index > 0
+                ? {
+                    pl: 0.85,
+                    position: "relative",
+                    "&::before": {
+                      content: '""',
+                      position: "absolute",
+                      left: 0,
+                      top: "50%",
+                      width: 4,
+                      height: 4,
+                      borderRadius: (theme: Theme) => theme.appShape.pill,
+                      backgroundColor: (theme: Theme) => theme.palette.divider,
+                      transform: "translateY(-50%)",
+                    },
+                  }
+                : {}),
           }}
         >
           <AccessTimeRoundedIcon sx={{ fontSize: 14, color: "text.secondary" }} />
@@ -124,14 +124,14 @@ function renderStepRecordsIndicator(hasRecords: boolean): React.ReactElement {
       spacing={0.6}
       sx={{
         alignItems: "center",
-        borderRadius: 999,
+          borderRadius: (theme: Theme) => theme.appShape.pill,
         width: "fit-content",
         textAlign: "left",
         px: 0.9,
         py: 0.45,
         cursor: "inherit",
         pointerEvents: "none",
-        backgroundColor: "surfaceContainerLow",
+          backgroundColor: (theme: Theme) => theme.palette.surfaceContainerLow,
         border: "1px solid",
         borderColor: "outlineVariant",
         transition: (theme) =>

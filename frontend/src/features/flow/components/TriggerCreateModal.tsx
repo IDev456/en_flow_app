@@ -16,7 +16,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
-import { alpha } from "@mui/material/styles";
+import { alpha, useTheme } from "@mui/material/styles";
 import { useNavigate } from "react-router-dom";
 
 import { useToastContext } from "../../../components/Toast";
@@ -61,6 +61,7 @@ type PendingCreation =
     };
 
 export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequirementLabel }: TriggerCreateModalProps) {
+  const theme = useTheme();
   const [title, setTitle] = useState("");
   const [detail, setDetail] = useState("");
   const [assignee, setAssignee] = useState("");
@@ -412,16 +413,15 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
               {showOptional ? "Ocultar datos opcionales" : "Agregar datos opcionales"}
             </Button>
 
-            <Collapse in={showOptional} timeout={220}>
+            <Collapse in={showOptional} timeout={theme.appMotion.short}>
               <Box
-                sx={{
+                sx={(theme) => ({
                   p: { xs: 2, md: 2.5 },
-                  borderRadius: "10px",
+                  borderRadius: theme.appShape.md,
                   border: "1px solid",
-                  borderColor: "outlineVariant",
-                  backgroundColor: (theme) =>
-                    alpha(theme.palette.surfaceContainerLow, theme.palette.mode === "dark" ? 0.84 : 0.98),
-                }}
+                  borderColor: theme.palette.outlineVariant,
+                  backgroundColor: alpha(theme.palette.surfaceContainerLow, theme.palette.mode === "dark" ? 0.84 : 0.98),
+                })}
               >
                 <Stack spacing={1.5}>
                   <Typography variant="subtitle2" color="text.secondary">

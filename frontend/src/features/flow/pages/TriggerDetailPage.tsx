@@ -512,17 +512,16 @@ export function TriggerDetailPage() {
                           to={`/workflows/${workflowId}`}
                           variant="outlined"
                           color="inherit"
-                          sx={{
-                            justifyContent: "flex-start",
-                            alignItems: "stretch",
-                            textTransform: "none",
-                            borderRadius: 2,
-                            py: 1.6,
-                            px: 1.8,
-                            borderColor: (theme) => alpha(theme.palette.primary.main, 0.25),
-                            backgroundColor: (theme) =>
-                              alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.22 : 0.7),
-                          }}
+                          sx={(theme) => ({
+                              justifyContent: "flex-start",
+                              alignItems: "stretch",
+                              textTransform: "none",
+                              borderRadius: theme.appShape.md,
+                              py: 1.6,
+                              px: 1.8,
+                              borderColor: alpha(theme.palette.primary.main, 0.25),
+                              backgroundColor: alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.22 : 0.7),
+                            })}
                         >
                           <Stack direction="row" spacing={1.4} sx={{ alignItems: "flex-start", minWidth: 0, width: "100%" }}>
                             <SchemaRoundedIcon sx={{ mt: 0.15, color: "primary.light" }} />

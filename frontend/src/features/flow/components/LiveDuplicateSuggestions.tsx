@@ -18,13 +18,13 @@ export function LiveDuplicateSuggestions({ candidates, checking, onOpenExisting 
 
   return (
     <Box
-      sx={{
+      sx={(theme) => ({
         p: { xs: 1.5, md: 1.75 },
         border: "1px solid",
-        borderColor: "outlineVariant",
-        borderRadius: "10px",
-        backgroundColor: "surfaceContainerLowest",
-      }}
+        borderColor: theme.palette.outlineVariant,
+        borderRadius: theme.appShape.md,
+        backgroundColor: theme.palette.surfaceContainerLowest,
+      })}
     >
       <Stack spacing={1.25}>
         <Stack spacing={0.35}>
@@ -48,13 +48,13 @@ export function LiveDuplicateSuggestions({ candidates, checking, onOpenExisting 
         {candidates.map((candidate) => (
           <Box
             key={candidate.workflowId}
-            sx={{
+            sx={(theme) => ({
               p: 1.25,
               border: "1px solid",
-              borderColor: "outlineVariant",
-              borderRadius: "10px",
-              backgroundColor: "surfaceContainerLow",
-            }}
+              borderColor: theme.palette.outlineVariant,
+              borderRadius: theme.appShape.md,
+              backgroundColor: theme.palette.surfaceContainerLow,
+            })}
           >
             <Stack spacing={0.85}>
               {candidate.requirementLabels.length > 0 ? (

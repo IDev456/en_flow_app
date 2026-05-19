@@ -42,13 +42,13 @@ export function DuplicateFlowWarningDialog({
           {candidates.map((candidate) => (
             <Box
               key={candidate.workflowId}
-              sx={{
+              sx={(theme) => ({
                 p: { xs: 1.5, md: 1.75 },
                 border: "1px solid",
-                borderColor: "outlineVariant",
-                borderRadius: "10px",
-                backgroundColor: "surfaceContainerLowest",
-              }}
+                borderColor: theme.palette.outlineVariant,
+                borderRadius: theme.appShape.md,
+                backgroundColor: theme.palette.surfaceContainerLowest,
+              })}
             >
               <Stack spacing={1.1}>
                 <Stack

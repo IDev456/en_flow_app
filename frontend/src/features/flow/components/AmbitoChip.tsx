@@ -8,14 +8,31 @@ type AmbitoChipProps = {
 };
 
 export function AmbitoChip({ ambito }: AmbitoChipProps) {
-  const color = ambito === "laboral" ? "primary" : ambito === "personal" ? "secondary" : "default";
   return (
     <Chip
       size="small"
       variant={ambito ? "filled" : "outlined"}
-      color={color}
       label={getAmbitoLabel(ambito)}
-      sx={{ height: 24, fontWeight: 500 }}
+      sx={(theme) => {
+        const isLaboral = ambito === "laboral";
+        const isPersonal = ambito === "personal";
+        const bg = isLaboral
+          ? theme.palette.primary.main
+          : isPersonal
+          ? theme.palette.secondary.main
+          : theme.palette.surfaceContainerLowest;
+        const colorText = (isLaboral || isPersonal)
+          ? theme.palette.getContrastText(bg)
+          : theme.palette.text.primary;
+        return {
+          height: 24,
+          fontWeight: 500,
+          borderRadius: theme.appShape.pill,
+          bgcolor: bg,
+          color: colorText,
+          borderColor: theme.palette.outlineVariant,
+        };
+      }}
     />
   );
 }

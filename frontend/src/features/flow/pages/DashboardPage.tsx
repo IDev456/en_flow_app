@@ -167,7 +167,7 @@ function WorkItemCard({ step }: { step: Step }) {
     <Card
       variant="outlined"
       sx={{
-        borderRadius: 2,
+        borderRadius: (theme) => theme.appShape.md,
         boxShadow: "none",
         "&:hover": {
           borderColor: "primary.main",
@@ -237,8 +237,8 @@ function FlowSection({ title, items, emptyTitle, emptyDescription }: FlowSection
                   sx={{
                     justifyContent: "space-between",
                     textTransform: "none",
-                    borderRadius: 2,
-                    borderColor: "divider",
+                    borderRadius: (theme) => theme.appShape.md,
+                    borderColor: (theme) => theme.palette.divider,
                     bgcolor: (theme) => alpha(theme.palette.background.paper, 0.55),
                   }}
                 >

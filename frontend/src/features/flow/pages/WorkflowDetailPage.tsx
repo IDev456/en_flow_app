@@ -696,14 +696,14 @@ export function WorkflowDetailPage() {
                   }}
                 >
                   <Box
-                    sx={{
+                    sx={(theme) => ({
                       border: "1px solid",
-                      borderColor: "outlineVariant",
-                      borderRadius: "10px",
-                      backgroundColor: "surfaceContainerLow",
+                      borderColor: theme.palette.outlineVariant,
+                      borderRadius: theme.appShape.md,
+                      backgroundColor: theme.palette.surfaceContainerLow,
                       px: 1.5,
                       py: 1.4,
-                    }}
+                    })}
                   >
                     <Stack spacing={1.15}>
                       <Typography variant="caption" color="text.secondary">
