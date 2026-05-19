@@ -958,7 +958,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
               const statusHighlight = getStatusHighlight(row.status, theme);
               return (
                 <Tooltip title={absoluteDateLabel}>
-                  <ButtonBase
+                    <ButtonBase
                     disabled={!row.stepId}
                     onClick={(event) => {
                       event.stopPropagation();
@@ -968,27 +968,27 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                         return next;
                       });
                     }}
-                    sx={{
-                      borderRadius: 1,
+                    sx={(theme) => ({
+                      borderRadius: theme.appShape.sm,
                       px: 0.5,
                       py: 0.25,
                       width: "100%",
                       justifyContent: "center",
-                    }}
+                    })}
                   >
-                    <Stack
+                        <Stack
                       spacing={0}
-                      sx={{
+                      sx={(theme) => ({
                         alignItems: "center",
                         minWidth: 134,
-                        borderRadius: 0.75,
+                        borderRadius: theme.appShape.sm,
                         px: shouldPulseToday ? 0.45 : 0,
                         backgroundColor: shouldPulseToday ? statusHighlight.soft : "transparent",
                         border: shouldPulseToday ? `1px solid ${statusHighlight.border}` : "1px solid transparent",
                         transition: theme.transitions.create(["background-color", "border-color"], {
                           duration: theme.appMotion.short,
                         }),
-                      }}
+                      })}
                     >
                       <Typography variant="body2" sx={{ fontSize: "0.82rem", lineHeight: 1.2 }}>
                         {dateLabel}
