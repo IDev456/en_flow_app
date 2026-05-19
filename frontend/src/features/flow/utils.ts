@@ -6,12 +6,6 @@ export const activeAmbitoOptions = [
   { value: "laboral", label: "Laboral" },
   { value: "personal", label: "Personal" },
 ] as const;
-export const ambitoFilterOptions = [
-  { value: "all", label: "Todos" },
-  { value: "laboral", label: "Laboral" },
-  { value: "personal", label: "Personal" },
-  { value: "undefined", label: "Sin definir" },
-] as const;
 export type ActiveAmbitoMode = (typeof activeAmbitoOptions)[number]["value"];
 
 export function getStoredActiveAmbito(): ActiveAmbitoMode {

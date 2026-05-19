@@ -11,7 +11,7 @@ import { AmbitoChip } from "./AmbitoChip";
 import { DuplicateFlowWarningDialog } from "./DuplicateFlowWarningDialog";
 import { LiveDuplicateSuggestions } from "./LiveDuplicateSuggestions";
 import type { Ambito, QuickCaptureInput, TriggerDetail, WorkflowDetail, WorkflowStartInput } from "../types";
-import { DEFAULT_ACTOR, getStoredActiveAmbito } from "../utils";
+import { DEFAULT_ACTOR, getAmbitoLabel, getStoredActiveAmbito } from "../utils";
 import {
   buildRequirementByWorkflowId,
   findSimilarFlows,
@@ -26,6 +26,7 @@ type TriggerCreateModalProps = {
   onClose: () => void;
   defaultRequirementId?: string;
   defaultRequirementLabel?: string;
+  defaultAmbito?: "laboral" | "personal";
 };
 
 type DuplicateCatalog = {
@@ -46,7 +47,7 @@ type PendingCreation =
       payload: WorkflowStartInput;
     };
 
-export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequirementLabel }: TriggerCreateModalProps) {
+export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequirementLabel, defaultAmbito }: TriggerCreateModalProps) {
   const [title, setTitle] = useState("");
   const [detail, setDetail] = useState("");
   const [assignee, setAssignee] = useState("");
@@ -56,7 +57,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
   const [checkingLiveDuplicates, setCheckingLiveDuplicates] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showOptional, setShowOptional] = useState(false);
-  const [ambito] = useState<Exclude<Ambito, null>>(() => getStoredActiveAmbito());
+  const [ambito] = useState<Exclude<Ambito, null>>(() => defaultAmbito ?? getStoredActiveAmbito());
   const [duplicateCandidates, setDuplicateCandidates] = useState<DuplicateCandidate[]>([]);
   const [liveDuplicateCandidates, setLiveDuplicateCandidates] = useState<DuplicateCandidate[]>([]);
   const [pendingCreation, setPendingCreation] = useState<PendingCreation | null>(null);
@@ -150,6 +151,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
         requirementId: creation.requirementId,
         requirementLabel: creation.requirementLabel,
         reminderAt: creation.payload.primer_paso.fecha_vencimiento ?? creation.payload.primer_paso.fecha_ejecucion_estimada ?? null,
+        ambito: creation.payload.ambito ?? null,
       };
     }
 
@@ -157,6 +159,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
       taskName: creation.payload.titulo,
       taskDescription: creation.payload.detalle,
       reminderAt: creation.payload.fecha_ejecucion_estimada ?? creation.payload.fecha_vencimiento ?? null,
+      ambito: creation.payload.ambito,
     };
   }
 
@@ -205,6 +208,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
             requirementId: defaultRequirementId ?? null,
             requirementLabel: linkedRequirementLabel,
             reminderAt: executionDate ? `${executionDate}T00:00:00Z` : null,
+            ambito: isLinkedCapture ? linkedRequirementAmbito : ambito,
           },
           catalog.workflowsById,
           catalog.requirementByWorkflowId
@@ -236,7 +240,16 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
         creation.kind === "linked"
           ? await startWorkflow(creation.requirementId, creation.payload)
           : await quickCaptureFlow(creation.payload);
-      showToast(creation.kind === "linked" ? "Tarea vinculada al proyecto." : "Tarea capturada.", "success");
+      if (creation.kind === "linked") {
+        showToast("Tarea vinculada al proyecto.", "success");
+      } else if (creation.payload.ambito !== getStoredActiveAmbito()) {
+        showToast(
+          `Tarea capturada como ${getAmbitoLabel(creation.payload.ambito)}. Cambiá a ${getAmbitoLabel(creation.payload.ambito)} para verla en la lista.`,
+          "info"
+        );
+      } else {
+        showToast("Tarea capturada.", "success");
+      }
       onClose();
       navigate(`/workflows/${workflow.id}`);
     } catch (err) {

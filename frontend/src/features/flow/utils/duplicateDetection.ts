@@ -41,6 +41,7 @@ export type DuplicateDetectionInput = {
   requirementId?: string | null;
   requirementLabel?: string | null;
   reminderAt?: string | null;
+  ambito?: "laboral" | "personal" | null;
 };
 
 export type DuplicateCandidate = {
@@ -286,6 +287,9 @@ export function findSimilarFlows(
 
   for (const workflow of Object.values(workflowsById)) {
     if (!isOperationalWorkflowStatus(workflow.estado)) {
+      continue;
+    }
+    if (input.ambito && workflow.ambito !== input.ambito) {
       continue;
     }
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FocusEvent } from "react";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
+import ArrowDropDownRoundedIcon from "@mui/icons-material/ArrowDropDownRounded";
 import BoltRoundedIcon from "@mui/icons-material/BoltRounded";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
@@ -25,6 +26,7 @@ import {
   Box,
   ButtonBase,
   Button,
+  ButtonGroup,
   Chip,
   Collapse,
   LinearProgress,
@@ -66,7 +68,6 @@ import { StatusBadge } from "../components/StatusBadge";
 import type { Ambito, Step, TriggerDetail, WorkflowDetail } from "../types";
 import {
   activeAmbitoOptions,
-  ambitoFilterOptions,
   getStoredActiveAmbito,
   formatCalendarDate,
   formatElapsedTime,
@@ -346,20 +347,19 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
   const [stateFilter, setStateFilter] = useState<FlowFilter>(() => getDefaultFilterForView(defaultView));
   const [activeAmbito, setActiveAmbito] = useState<ActiveAmbitoMode>(() => getStoredActiveAmbito());
-  const [ambitoFilter, setAmbitoFilter] = useState<(typeof ambitoFilterOptions)[number]["value"]>("all");
   const [loading, setLoading] = useState(true);
   const [deletingTriggerId, setDeletingTriggerId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [createRequirementOpen, setCreateRequirementOpen] = useState(false);
   const [newRequirementDescription, setNewRequirementDescription] = useState("");
   const [newRequirementContext, setNewRequirementContext] = useState("");
-  const [newRequirementAmbito, setNewRequirementAmbito] = useState<Exclude<Ambito, null>>("laboral");
   const [creatingRequirement, setCreatingRequirement] = useState(false);
   const [createRequirementError, setCreateRequirementError] = useState<string | null>(null);
   const [requirementToastOpen, setRequirementToastOpen] = useState(false);
   const [requirementToastMessage, setRequirementToastMessage] = useState<string | null>(null);
   const [flowToastOpen, setFlowToastOpen] = useState(false);
   const [flowToastMessage, setFlowToastMessage] = useState<string | null>(null);
+  const [captureMenuAnchor, setCaptureMenuAnchor] = useState<HTMLElement | null>(null);
   const [cancellingFlowId, setCancellingFlowId] = useState<string | null>(null);
   const [reactivatingFlowId, setReactivatingFlowId] = useState<string | null>(null);
   const [deletingFlowId, setDeletingFlowId] = useState<string | null>(null);
@@ -395,7 +395,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
   useEffect(() => {
     setStoredActiveAmbito(activeAmbito);
-    setNewRequirementAmbito(activeAmbito);
   }, [activeAmbito]);
 
   useEffect(() => {
@@ -849,10 +848,24 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     }
   }
 
-  function openCaptureModal() {
+  function openCaptureModal(ambitoOverride?: ActiveAmbitoMode) {
     const nextParams = new URLSearchParams(location.search);
     nextParams.set("modal", "capture");
+    nextParams.set("defaultAmbito", ambitoOverride ?? activeAmbito);
     navigate(`${location.pathname}?${nextParams.toString()}`);
+  }
+
+  function handleOpenCaptureMenu(event: React.MouseEvent<HTMLElement>) {
+    setCaptureMenuAnchor(event.currentTarget);
+  }
+
+  function handleCloseCaptureMenu() {
+    setCaptureMenuAnchor(null);
+  }
+
+  function handleCaptureAs(ambito: ActiveAmbitoMode) {
+    handleCloseCaptureMenu();
+    openCaptureModal(ambito);
   }
 
   const isFlowsView = viewMode === "flows";
@@ -1440,9 +1453,45 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             </Tooltip>
 
             {isFlowsView ? (
-              <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={openCaptureModal}>
-                Capturar tarea
-              </Button>
+              <>
+                <ButtonGroup variant="contained" aria-label="Capturar tarea por ámbito">
+                  <Button startIcon={<AddRoundedIcon />} onClick={() => openCaptureModal()}>
+                    Capturar tarea
+                  </Button>
+                  <Button
+                    size="small"
+                    aria-label="Elegir ámbito de captura"
+                    aria-controls={captureMenuAnchor ? "capture-ambito-menu" : undefined}
+                    aria-expanded={captureMenuAnchor ? "true" : undefined}
+                    aria-haspopup="menu"
+                    onClick={handleOpenCaptureMenu}
+                    sx={{ minWidth: 42, px: 0.5 }}
+                  >
+                    <ArrowDropDownRoundedIcon />
+                  </Button>
+                </ButtonGroup>
+                <Menu
+                  id="capture-ambito-menu"
+                  anchorEl={captureMenuAnchor}
+                  open={Boolean(captureMenuAnchor)}
+                  onClose={handleCloseCaptureMenu}
+                  anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                  transformOrigin={{ vertical: "top", horizontal: "right" }}
+                >
+                  <MenuItem onClick={() => handleCaptureAs("laboral")}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <WorkOutlineRoundedIcon sx={{ fontSize: 18, color: "text.secondary" }} />
+                      Capturar como Laboral
+                    </Box>
+                  </MenuItem>
+                  <MenuItem onClick={() => handleCaptureAs("personal")}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <PersonOutlineRoundedIcon sx={{ fontSize: 18, color: "text.secondary" }} />
+                      Capturar como Personal
+                    </Box>
+                  </MenuItem>
+                </Menu>
+              </>
             ) : (
               <Button
                 variant="contained"
@@ -1617,23 +1666,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   onChange={(event) => setNewRequirementDescription(event.target.value)}
                   disabled={creatingRequirement}
                 />
-                {false && (
-                <><TextField
-                  label="Solicitante"
-                  value={newRequirementContext}
-                  onChange={(event) => setNewRequirementContext(event.target.value)}
-                  disabled={creatingRequirement}
-                />
-                <TextField
-                  select
-                  label="Ámbito *"
-                  value={newRequirementAmbito}
-                  onChange={(event) => setNewRequirementAmbito(event.target.value as Exclude<Ambito, null>)}
-                  disabled={creatingRequirement}
-                >
-                  <MenuItem value="laboral">{getAmbitoLabel("laboral")}</MenuItem>
-                  <MenuItem value="personal">{getAmbitoLabel("personal")}</MenuItem>
-                </TextField></>)}
                 <TextField
                   label="Solicitante"
                   value={newRequirementContext}
@@ -1810,21 +1842,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
               </Paper>
             </Box>
           </Box>
-
-          {false && <TextField
-            select
-            size="small"
-            label="Ámbito"
-            value={ambitoFilter}
-            onChange={(event) => setAmbitoFilter(event.target.value as (typeof ambitoFilterOptions)[number]["value"])}
-            sx={{ width: { xs: "100%", sm: 220 } }}
-          >
-            {ambitoFilterOptions.map((option) => (
-              <MenuItem key={option.value} value={option.value}>
-                {option.label}
-              </MenuItem>
-            ))}
-          </TextField>}
 
           {isFlowsView && !loading && futureRows.length > 0 && (
             <Paper variant="outlined" sx={{ overflow: "hidden" }}>
