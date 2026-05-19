@@ -19,6 +19,7 @@ from app.db.models import (
 )
 from app.db.session import session_scope
 from app.schemas.workflow import (
+    Ambito,
     AttachmentBase,
     AttachmentPublic,
     CommentCreate,
@@ -395,6 +396,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
             solicitante=payload.solicitante,
             descripcion=payload.descripcion,
             tipo=payload.tipo,
+            ambito=payload.ambito,
             estado_general=TriggerStatus.SIN_FLOWS,
             fecha_creacion=now,
             fecha_actualizacion=now,
@@ -517,6 +519,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
             fecha_fin=None,
             objetivo_final=payload.objetivo_final,
             resolucion_esperada=payload.resolucion_esperada,
+            ambito=payload.ambito,
         )
         self._workflows[workflow.id] = workflow
         self._step_ids_by_workflow[workflow.id] = []
@@ -553,6 +556,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
             fecha_cierre=None,
             resultado=None,
             observaciones=None,
+            ambito=workflow.ambito,
         )
         self._steps[step.id] = step
         self._step_ids_by_workflow[workflow.id].append(step.id)
@@ -651,6 +655,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
             fecha_cierre=None,
             resultado=None,
             observaciones=None,
+            ambito=self._workflows[workflow_id].ambito,
         )
         self._steps[step.id] = step
         self._step_ids_by_workflow.setdefault(workflow_id, []).append(step.id)
@@ -961,6 +966,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             solicitante=payload.solicitante,
             descripcion=payload.descripcion,
             tipo=payload.tipo,
+            ambito=payload.ambito.value if payload.ambito else None,
             estado_general=TriggerStatus.SIN_FLOWS.value,
             fecha_creacion=now,
             fecha_actualizacion=now,
@@ -1003,6 +1009,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             existing.descripcion = trigger.descripcion
             existing.tipo = trigger.tipo
             existing.metadata_payload = trigger.metadata
+            existing.ambito = trigger.ambito.value if trigger.ambito else None
             existing.estado_general = trigger.estado_general.value
             existing.fecha_creacion = trigger.fecha_creacion
             existing.fecha_actualizacion = trigger.fecha_actualizacion
@@ -1058,6 +1065,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             fecha_fin=None,
             objetivo_final=payload.objetivo_final,
             resolucion_esperada=payload.resolucion_esperada,
+            ambito=payload.ambito.value if payload.ambito else None,
         )
 
         workflow.steps.append(
@@ -1089,6 +1097,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
                 fecha_cierre=None,
                 resultado=None,
                 observaciones=None,
+                ambito=payload.ambito.value if payload.ambito else None,
             )
         )
 
@@ -1173,6 +1182,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             existing.fecha_fin = workflow.fecha_fin
             existing.objetivo_final = workflow.objetivo_final
             existing.resolucion_esperada = workflow.resolucion_esperada
+            existing.ambito = workflow.ambito.value if workflow.ambito else None
 
             session.flush()
             session.refresh(existing)
@@ -1211,6 +1221,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
         depends_on: list[str] | None = None,
     ) -> StepInstancePublic:
         now = utc_now()
+        workflow = self.get_workflow(workflow_id)
         step = StepModel(
             id=str(uuid4()),
             workflow_id=workflow_id,
@@ -1240,6 +1251,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             fecha_cierre=None,
             resultado=None,
             observaciones=None,
+            ambito=workflow.ambito.value if workflow and workflow.ambito else None,
         )
         with session_scope() as session:
             session.add(step)
@@ -1284,6 +1296,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             existing.fecha_cierre = step.fecha_cierre
             existing.resultado = step.resultado
             existing.observaciones = step.observaciones
+            existing.ambito = step.ambito.value if step.ambito else None
 
             session.flush()
             step_with_relations = session.scalar(
@@ -1583,6 +1596,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             descripcion=trigger.descripcion,
             tipo=trigger.tipo,
             metadata=trigger.metadata_payload,
+            ambito=Ambito(trigger.ambito) if trigger.ambito else None,
             estado_general=TriggerStatus(trigger.estado_general),
             fecha_creacion=trigger.fecha_creacion,
             fecha_actualizacion=trigger.fecha_actualizacion,
@@ -1615,6 +1629,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             fecha_fin=workflow.fecha_fin,
             objetivo_final=workflow.objetivo_final,
             resolucion_esperada=workflow.resolucion_esperada,
+            ambito=Ambito(workflow.ambito) if workflow.ambito else None,
         )
 
     def _workflow_to_detail(self, workflow: WorkflowModel) -> WorkflowDetail:
@@ -1679,6 +1694,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             fecha_cierre=step.fecha_cierre,
             resultado=step.resultado,
             observaciones=step.observaciones,
+            ambito=Ambito(step.ambito) if step.ambito else None,
             ultimo_comentario=latest_snapshot["text"],
             ultimo_comentario_fecha=latest_snapshot["timestamp"],
             ultimo_comentario_tipo=latest_snapshot["kind"],

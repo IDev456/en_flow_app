@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import AddTaskRoundedIcon from "@mui/icons-material/AddTaskRounded";
 import TuneRoundedIcon from "@mui/icons-material/TuneRounded";
-import { Alert, Box, Button, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import { useNavigate } from "react-router-dom";
 
 import { useToastContext } from "../../../components/Toast";
 import { getWorkflow, listTriggers, listWorkflows, quickCaptureFlow, startWorkflow } from "../api";
+import { AmbitoChip } from "./AmbitoChip";
 import { DuplicateFlowWarningDialog } from "./DuplicateFlowWarningDialog";
 import { LiveDuplicateSuggestions } from "./LiveDuplicateSuggestions";
-import type { QuickCaptureInput, WorkflowDetail, WorkflowStartInput } from "../types";
-import { DEFAULT_ACTOR } from "../utils";
+import type { Ambito, QuickCaptureInput, TriggerDetail, WorkflowDetail, WorkflowStartInput } from "../types";
+import { DEFAULT_ACTOR, getAmbitoLabel } from "../utils";
 import {
   buildRequirementByWorkflowId,
   findSimilarFlows,
@@ -30,6 +31,7 @@ type TriggerCreateModalProps = {
 type DuplicateCatalog = {
   workflowsById: Record<string, WorkflowDetail>;
   requirementByWorkflowId: RequirementByWorkflowId;
+  triggersById: Record<string, TriggerDetail>;
 };
 
 type PendingCreation =
@@ -54,9 +56,11 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
   const [checkingLiveDuplicates, setCheckingLiveDuplicates] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showOptional, setShowOptional] = useState(false);
+  const [ambito, setAmbito] = useState<Exclude<Ambito, null>>("laboral");
   const [duplicateCandidates, setDuplicateCandidates] = useState<DuplicateCandidate[]>([]);
   const [liveDuplicateCandidates, setLiveDuplicateCandidates] = useState<DuplicateCandidate[]>([]);
   const [pendingCreation, setPendingCreation] = useState<PendingCreation | null>(null);
+  const [linkedRequirementAmbito, setLinkedRequirementAmbito] = useState<Ambito>(null);
   const navigate = useNavigate();
   const { showToast } = useToastContext();
   const duplicateCatalogRef = useRef<DuplicateCatalog | null>(null);
@@ -97,6 +101,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
     const catalog = {
       workflowsById: Object.fromEntries(workflowDetails.map((workflow) => [workflow.id, workflow])),
       requirementByWorkflowId: buildRequirementByWorkflowId(triggers),
+      triggersById: Object.fromEntries(triggers.map((trigger) => [trigger.id, trigger])),
     } satisfies DuplicateCatalog;
 
     duplicateCatalogRef.current = catalog;
@@ -112,6 +117,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
         payload: {
           objetivo_final: title.trim(),
           resolucion_esperada: "Flujo completado con validacion final",
+          ambito: linkedRequirementAmbito,
           primer_paso: {
             nombre: title.trim(),
             descripcion: detail.trim() || null,
@@ -130,6 +136,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
         asignado_a: assignee.trim() || DEFAULT_ACTOR,
         fecha_ejecucion_estimada: executionDate ? `${executionDate}T00:00:00Z` : null,
         creado_por: DEFAULT_ACTOR,
+        ambito,
       },
     };
   }
@@ -154,11 +161,26 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
   }
 
   useEffect(() => {
+    if (!defaultRequirementId) {
+      setLinkedRequirementAmbito(null);
+      return;
+    }
+
+    void loadDuplicateCatalog()
+      .then((catalog) => {
+        setLinkedRequirementAmbito(catalog.triggersById[defaultRequirementId]?.ambito ?? null);
+      })
+      .catch(() => {
+        setLinkedRequirementAmbito(null);
+      });
+  }, [defaultRequirementId]);
+
+  useEffect(() => {
     const inputText = `${title} ${detail}`.trim();
     const normalizedInput = normalizeText(inputText);
     const significantTokens = getSignificantTokens(inputText);
 
-    if (significantTokens.length === 0 || normalizedInput.length < 3) {
+    if (significantTokens.length === 0 || normalizedInput.length < 3 || (isLinkedCapture && linkedRequirementAmbito === null)) {
       liveRequestIdRef.current += 1;
       setCheckingLiveDuplicates(false);
       setLiveDuplicateCandidates([]);
@@ -204,7 +226,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [title, detail, executionDate]);
+  }, [title, detail, executionDate, isLinkedCapture, linkedRequirementAmbito, defaultRequirementId, linkedRequirementLabel]);
 
   async function performCreate(creation: PendingCreation) {
     try {
@@ -256,6 +278,10 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
       setError("Escribe la tarea principal para capturar el flow.");
       return;
     }
+    if (isLinkedCapture && linkedRequirementAmbito === null) {
+      setError("Debes definir el ámbito del proyecto antes de crear un flow vinculado.");
+      return;
+    }
 
     const creation = buildCreation();
     const shouldWarn = await maybeWarnDuplicates(creation);
@@ -301,9 +327,18 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
         <DialogContent dividers sx={{ borderColor: "outlineVariant" }}>
           <Stack spacing={2.5}>
             {isLinkedCapture && linkedRequirementLabel && (
-              <Alert severity="info" sx={{ py: 0.5 }}>
-                Proyecto vinculado: {linkedRequirementLabel}
+              <Alert severity={linkedRequirementAmbito ? "info" : "warning"} sx={{ py: 0.5 }}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
+                  <Typography component="span">Proyecto vinculado: {linkedRequirementLabel}</Typography>
+                  <AmbitoChip ambito={linkedRequirementAmbito} />
+                </Stack>
               </Alert>
+            )}
+            {!isLinkedCapture && (
+              <TextField select label="Ámbito *" value={ambito} onChange={(event) => setAmbito(event.target.value as Exclude<Ambito, null>)}>
+                <MenuItem value="laboral">{getAmbitoLabel("laboral")}</MenuItem>
+                <MenuItem value="personal">{getAmbitoLabel("personal")}</MenuItem>
+              </TextField>
             )}
             <TextField
               autoFocus
@@ -314,6 +349,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               placeholder="Ej. Pedir layout actualizado al proveedor"
+              disabled={isLinkedCapture && linkedRequirementAmbito === null}
             />
 
             <LiveDuplicateSuggestions
@@ -371,7 +407,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
             <Button
               variant="contained"
               onClick={() => void handleSubmit()}
-              disabled={submitting || checkingDuplicates || !canSubmit}
+              disabled={submitting || checkingDuplicates || !canSubmit || (isLinkedCapture && linkedRequirementAmbito === null)}
               startIcon={<AddTaskRoundedIcon />}
             >
               {checkingDuplicates ? "Revisando..." : submitting ? "Guardando..." : "Capturar tarea"}

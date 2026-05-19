@@ -46,6 +46,7 @@ import {
   formatRelativeCalendarDay,
   getTodayLocalDateInput,
 } from "../utils";
+import { AmbitoChip } from "./AmbitoChip";
 import { Journal } from "./Journal";
 import { StatusBadge } from "./StatusBadge";
 
@@ -515,6 +516,12 @@ export function StepDetailPanel({
                     </IconButton>
                   ) : null}
                 </Stack>
+              </Stack>
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
+                <Typography variant="body2" color="text.secondary">
+                  Ámbito
+                </Typography>
+                <AmbitoChip ambito={step.ambito} />
               </Stack>
               {isReminderEditing ? (
                 <TextField

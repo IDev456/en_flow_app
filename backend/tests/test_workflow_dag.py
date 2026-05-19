@@ -22,15 +22,18 @@ from app.db.models import (
 )
 from app.repositories.workflow_repository import InMemoryWorkflowRepository
 from app.schemas.workflow import (
+    Ambito,
     CommentCreate,
     ExternalResponseDecisionPayload,
     ExternalEventCreate,
     ExternalWaitInput,
     FinishFlowInput,
+    QuickCaptureRequest,
     InitialStepOverride,
     NextTaskInput,
     StepDateUpdate,
     StepCompletePayload,
+    StepCreate,
     StepHistoryPublic,
     StepUpdate,
     StepStatus,
@@ -39,10 +42,12 @@ from app.schemas.workflow import (
     StepTransitionType,
     TriggerCreate,
     TriggerStatus,
+    TriggerUpdate,
     WorkLogEntryType,
     WorkflowStartRequest,
     WorkflowStatus,
     WorkflowTemplatePublic,
+    WorkflowUpdate,
 )
 from app.services.workflow_service import WorkflowService
 
@@ -182,6 +187,7 @@ class WorkflowDagTestCase(unittest.TestCase):
                 solicitante="QA",
                 descripcion="Caso de prueba DAG",
                 tipo="requerimiento",
+                ambito=Ambito.LABORAL,
                 creado_por="tester",
                 metadata=None,
             )
@@ -292,6 +298,7 @@ class WorkflowDagTestCase(unittest.TestCase):
                 solicitante="QA",
                 descripcion="Caso workflows paralelos",
                 tipo="requerimiento",
+                ambito=Ambito.LABORAL,
                 creado_por="tester",
                 metadata=None,
             )
@@ -330,6 +337,120 @@ class WorkflowDagTestCase(unittest.TestCase):
         self.assertEqual(trigger_closed.estado_general, TriggerStatus.RESUELTO)
         self.assertIsNone(trigger_closed.workflow_activo_id)
 
+    def test_quick_capture_assigns_ambito_to_workflow_and_first_step(self) -> None:
+        workflow = self.service.quick_capture_flow(
+            QuickCaptureRequest(
+                titulo="Comprar repuesto",
+                detalle="Validar modelo",
+                asignado_a="tester",
+                creado_por="tester",
+                ambito=Ambito.PERSONAL,
+            )
+        )
+
+        self.assertEqual(workflow.ambito, Ambito.PERSONAL)
+        self.assertEqual(workflow.steps[0].ambito, Ambito.PERSONAL)
+
+    def test_start_workflow_inherits_trigger_ambito(self) -> None:
+        template = build_linear_template()
+        self.repository._workflow_templates = {template.id: template}  # type: ignore[attr-defined]
+        trigger = self.service.create_trigger(
+            TriggerCreate(
+                solicitante="QA",
+                descripcion="Proyecto laboral",
+                tipo="requerimiento",
+                ambito=Ambito.LABORAL,
+                creado_por="tester",
+                metadata=None,
+            )
+        )
+
+        workflow = self.service.start_workflow(
+            trigger.id,
+            WorkflowStartRequest(
+                workflow_template_id=template.id,
+                primer_paso=InitialStepOverride(nombre="Paso inicial"),
+            ),
+        )
+
+        self.assertEqual(workflow.ambito, Ambito.LABORAL)
+        self.assertTrue(all(step.ambito == Ambito.LABORAL for step in workflow.steps))
+
+    def test_create_step_inherits_workflow_ambito(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+
+        created_step = self.service.create_workflow_step(
+            workflow_id,
+            StepCreate(
+                nombre="Nueva tarea manual",
+                descripcion="Seguimiento",
+                asignado_a="tester",
+                fecha_vencimiento=None,
+                fecha_ejecucion_estimada=None,
+            ),
+        )
+
+        self.assertEqual(created_step.ambito, Ambito.LABORAL)
+
+    def test_link_workflow_rejects_mismatched_ambito(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        incompatible_trigger = self.service.create_trigger(
+            TriggerCreate(
+                solicitante="QA",
+                descripcion="Proyecto personal",
+                tipo="requerimiento",
+                ambito=Ambito.PERSONAL,
+                creado_por="tester",
+                metadata=None,
+            )
+        )
+
+        with self.assertRaises(BusinessRuleError):
+            self.service.link_workflow_to_requirement(workflow_id, incompatible_trigger.id)
+
+    def test_update_trigger_can_propagate_ambito_to_workflows_and_steps(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        workflow = self.service.get_workflow(workflow_id)
+        self.assertIsNotNone(workflow.trigger_id)
+
+        updated_trigger = self.service.update_trigger(
+            workflow.trigger_id,
+            TriggerUpdate(ambito=Ambito.PERSONAL, propagate_ambito=True),
+        )
+
+        updated_workflow = self.service.get_workflow(workflow_id)
+        self.assertEqual(updated_trigger.ambito, Ambito.PERSONAL)
+        self.assertEqual(updated_workflow.ambito, Ambito.PERSONAL)
+        self.assertTrue(all(step.ambito == Ambito.PERSONAL for step in updated_workflow.steps))
+
+    def test_update_workflow_rejects_ambito_if_linked_project_is_incompatible(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+
+        with self.assertRaises(BusinessRuleError):
+            self.service.update_workflow(
+                workflow_id,
+                WorkflowUpdate(ambito=Ambito.PERSONAL, propagate_ambito=True),
+            )
+
+    def test_update_workflow_can_propagate_ambito_to_steps_when_unlinked(self) -> None:
+        workflow = self.service.quick_capture_flow(
+            QuickCaptureRequest(
+                titulo="Organizar papeles",
+                detalle=None,
+                asignado_a="tester",
+                creado_por="tester",
+                ambito=Ambito.LABORAL,
+            )
+        )
+
+        updated_workflow = self.service.update_workflow(
+            workflow.id,
+            WorkflowUpdate(ambito=Ambito.PERSONAL, propagate_ambito=True),
+        )
+
+        self.assertEqual(updated_workflow.ambito, Ambito.PERSONAL)
+        self.assertTrue(all(step.ambito == Ambito.PERSONAL for step in updated_workflow.steps))
+
     def test_cannot_delete_open_workflow(self) -> None:
         workflow_id = self._start_workflow(build_linear_template())
         with self.assertRaises(BusinessRuleError):
@@ -344,6 +465,7 @@ class WorkflowDagTestCase(unittest.TestCase):
                 solicitante="QA",
                 descripcion="Flujo esperando respuesta",
                 tipo="requerimiento",
+                ambito=Ambito.LABORAL,
                 creado_por="tester",
                 metadata=None,
             )
@@ -670,6 +792,7 @@ class WorkflowDagTestCase(unittest.TestCase):
                     solicitante="QA",
                     descripcion="Trigger SQL delete test",
                     tipo="requerimiento",
+                    ambito=Ambito.LABORAL,
                     creado_por="tester",
                     metadata=None,
                 )

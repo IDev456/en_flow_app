@@ -31,6 +31,7 @@ class TriggerModel(Base):
     descripcion: Mapped[str | None] = mapped_column(Text)
     tipo: Mapped[str] = mapped_column(String(80), nullable=False)
     metadata_payload: Mapped[dict | None] = mapped_column("metadata", JSON)
+    ambito: Mapped[str | None] = mapped_column(String(20), nullable=True)
     estado_general: Mapped[str] = mapped_column(String(40), nullable=False)
     fecha_creacion: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     fecha_actualizacion: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -111,6 +112,7 @@ class WorkflowModel(Base):
     fecha_fin: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     objetivo_final: Mapped[str | None] = mapped_column(String(200))
     resolucion_esperada: Mapped[str | None] = mapped_column(String(500))
+    ambito: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     trigger: Mapped["TriggerModel | None"] = relationship(back_populates="legacy_workflows")
     requirements: Mapped[list["TriggerModel"]] = relationship(
@@ -163,6 +165,7 @@ class StepModel(Base):
     fecha_cierre: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     resultado: Mapped[str | None] = mapped_column(Text)
     observaciones: Mapped[str | None] = mapped_column(Text)
+    ambito: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     workflow: Mapped["WorkflowModel"] = relationship(back_populates="steps")
     comments: Mapped[list["CommentModel"]] = relationship(

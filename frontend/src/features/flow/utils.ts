@@ -1,6 +1,27 @@
-import type { Attachment, StepComment, StepHistoryEntry, StepStatus, TriggerStatus, WorkflowDetail } from "./types";
+import type { Ambito, Attachment, StepComment, StepHistoryEntry, StepStatus, TriggerStatus, WorkflowDetail } from "./types";
 
 export const DEFAULT_ACTOR = "sistema";
+export const ambitoFilterOptions = [
+  { value: "all", label: "Todos" },
+  { value: "laboral", label: "Laboral" },
+  { value: "personal", label: "Personal" },
+  { value: "undefined", label: "Sin definir" },
+] as const;
+
+export function getAmbitoLabel(ambito: Ambito) {
+  if (ambito === "laboral") return "Laboral";
+  if (ambito === "personal") return "Personal";
+  return "Sin definir";
+}
+
+export function matchesAmbitoFilter(
+  ambito: Ambito,
+  filter: (typeof ambitoFilterOptions)[number]["value"]
+) {
+  if (filter === "all") return true;
+  if (filter === "undefined") return ambito === null;
+  return ambito === filter;
+}
 
 const statusPresentationMap: Record<string, { label: string; tone: string }> = {
   sin_flows: { label: "sin flows", tone: "espera" },

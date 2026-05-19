@@ -59,17 +59,21 @@ import { PageContainer } from "../../../components/layout/PageContainer";
 import { useToastContext } from "../../../components/Toast";
 import { getStatusSemanticKey } from "../../../theme";
 import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, getWorkflow, listTriggers, listWorkflows, reactivateWorkflow, updateStepDate } from "../api";
+import { AmbitoChip } from "../components/AmbitoChip";
 import { StatusBadge } from "../components/StatusBadge";
-import type { Step, TriggerDetail, WorkflowDetail } from "../types";
+import type { Ambito, Step, TriggerDetail, WorkflowDetail } from "../types";
 import {
+  ambitoFilterOptions,
   formatCalendarDate,
   formatElapsedTime,
   formatLocalDateInput,
   formatRelativeCalendarDay,
   getCalendarDayDiff,
+  getAmbitoLabel,
   getVisibleTriggerStatus,
   getVisibleWorkflowStatus,
   isNoisyAutomaticJournalText,
+  matchesAmbitoFilter,
   getStatusTone,
   getTodayLocalDateInput,
   toCalendarDayValue,
@@ -95,6 +99,7 @@ type FlowCardData = {
 type FlowGridRow = {
   id: string;
   stepId: string | null;
+  ambito: Ambito;
   status: string;
   taskName: string;
   stepLabel: string;
@@ -114,6 +119,7 @@ type FlowGridRow = {
 
 type RequirementGridRow = {
   id: string;
+  ambito: Ambito;
   description: string;
   requester: string;
   status: string;
@@ -328,12 +334,14 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
   const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
   const [stateFilter, setStateFilter] = useState<FlowFilter>(() => getDefaultFilterForView(defaultView));
+  const [ambitoFilter, setAmbitoFilter] = useState<(typeof ambitoFilterOptions)[number]["value"]>("all");
   const [loading, setLoading] = useState(true);
   const [deletingTriggerId, setDeletingTriggerId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [createRequirementOpen, setCreateRequirementOpen] = useState(false);
   const [newRequirementDescription, setNewRequirementDescription] = useState("");
   const [newRequirementContext, setNewRequirementContext] = useState("");
+  const [newRequirementAmbito, setNewRequirementAmbito] = useState<Exclude<Ambito, null>>("laboral");
   const [creatingRequirement, setCreatingRequirement] = useState(false);
   const [createRequirementError, setCreateRequirementError] = useState<string | null>(null);
   const [requirementToastOpen, setRequirementToastOpen] = useState(false);
@@ -423,6 +431,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         const linkedRequirements = requirementByWorkflowId[workflow.id] ?? [];
         return {
           workflow,
+          ambito: workflow.ambito,
           displayStatus: getVisibleWorkflowStatus(workflow),
           relevantStep: pickRelevantStep(workflow),
           latestMovementAt: getLatestMovementAt(workflow),
@@ -430,10 +439,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         };
       })
       .filter((item) => {
+        if (!matchesAmbitoFilter(item.workflow.ambito, ambitoFilter)) return false;
         if (stateFilter === "all") return true;
         return getFlowFilterFromStatus(item.displayStatus) === stateFilter;
       });
-  }, [requirementByWorkflowId, stateFilter, workflowsById]);
+  }, [ambitoFilter, requirementByWorkflowId, stateFilter, workflowsById]);
 
   const flowCounts = useMemo(() => {
     return Object.values(workflowsById)
@@ -452,10 +462,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const filteredRequirements = useMemo(
     () =>
       triggers.filter((trigger) => {
+        if (!matchesAmbitoFilter(trigger.ambito, ambitoFilter)) return false;
         if (stateFilter === "all") return true;
         return getFlowFilterFromStatus(trigger.estado_general) === stateFilter;
       }),
-    [triggers, stateFilter]
+    [triggers, stateFilter, ambitoFilter]
   );
 
   const requirementCounts = useMemo(() => {
@@ -491,10 +502,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       const movementDateInput = movementAtValue === null ? null : formatLocalDateInput(new Date(movementAtValue));
       const movementDayDiff = getCalendarDayDiff(movementDateInput, today);
       const movementDays = movementDayDiff === null ? null : Math.max(0, -movementDayDiff);
-      return {
-        id: item.workflow.id,
-        stepId: step?.id ?? null,
-        status: item.displayStatus,
+        return {
+          id: item.workflow.id,
+          stepId: step?.id ?? null,
+          ambito: item.workflow.ambito,
+          status: item.displayStatus,
         taskName: step?.nombre ?? "Sin tarea registrada",
         stepLabel,
         executionDateInput,
@@ -614,6 +626,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
         return {
           id: trigger.id,
+          ambito: trigger.ambito,
           description: trigger.descripcion?.trim() || "Proyecto sin detalle",
           requester: trigger.solicitante?.trim() || "Sin solicitante",
           status: getVisibleTriggerStatus(trigger.estado_general),
@@ -671,11 +684,13 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         descripcion: newRequirementDescription.trim(),
         solicitante: newRequirementContext.trim() || null,
         tipo: "requerimiento",
+        ambito: newRequirementAmbito,
         metadata: null,
       });
       setCreateRequirementOpen(false);
       setNewRequirementDescription("");
       setNewRequirementContext("");
+      setNewRequirementAmbito("laboral");
       await loadData();
       setRequirementToastMessage("Proyecto creado.");
       setRequirementToastOpen(true);
@@ -782,6 +797,14 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             <StatusBadge value={params.value} />
           </Box>
         ),
+      },
+      {
+        field: "ambito",
+        headerName: "Ámbito",
+        width: 128,
+        minWidth: 120,
+        sortable: false,
+        renderCell: (params) => <AmbitoChip ambito={params.row.ambito} />,
       },
       {
         field: "taskName",
@@ -1177,6 +1200,14 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         ),
       },
       {
+        field: "ambito",
+        headerName: "Ámbito",
+        width: 128,
+        minWidth: 120,
+        sortable: false,
+        renderCell: (params) => <AmbitoChip ambito={params.row.ambito} />,
+      },
+      {
         field: "flowsLabel",
         headerName: "Flows",
         flex: 1,
@@ -1390,6 +1421,16 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   onChange={(event) => setNewRequirementContext(event.target.value)}
                   disabled={creatingRequirement}
                 />
+                <TextField
+                  select
+                  label="Ámbito *"
+                  value={newRequirementAmbito}
+                  onChange={(event) => setNewRequirementAmbito(event.target.value as Exclude<Ambito, null>)}
+                  disabled={creatingRequirement}
+                >
+                  <MenuItem value="laboral">{getAmbitoLabel("laboral")}</MenuItem>
+                  <MenuItem value="personal">{getAmbitoLabel("personal")}</MenuItem>
+                </TextField>
                 {createRequirementError && <Alert severity="error">{createRequirementError}</Alert>}
                 <Stack direction="row" spacing={1}>
                   <Button variant="contained" onClick={() => void handleCreateRequirement()} disabled={creatingRequirement}>
@@ -1403,6 +1444,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       setCreateRequirementError(null);
                       setNewRequirementDescription("");
                       setNewRequirementContext("");
+                      setNewRequirementAmbito("laboral");
                     }}
                     disabled={creatingRequirement}
                   >
@@ -1482,6 +1524,21 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
               </Tabs>
             </Paper>
           </Box>
+
+          <TextField
+            select
+            size="small"
+            label="Ámbito"
+            value={ambitoFilter}
+            onChange={(event) => setAmbitoFilter(event.target.value as (typeof ambitoFilterOptions)[number]["value"])}
+            sx={{ width: { xs: "100%", sm: 220 } }}
+          >
+            {ambitoFilterOptions.map((option) => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuItem>
+            ))}
+          </TextField>
 
           {isFlowsView && !loading && futureRows.length > 0 && (
             <Paper variant="outlined" sx={{ overflow: "hidden" }}>

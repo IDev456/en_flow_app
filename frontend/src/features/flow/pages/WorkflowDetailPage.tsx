@@ -40,13 +40,16 @@ import {
   registerExternalEvent,
   resolveExternalResponse,
   unlinkWorkflowRequirement,
+  updateWorkflow,
   updateStep,
   updateStepStatus,
 } from "../api";
+import { AmbitoChip } from "../components/AmbitoChip";
 import { StepDetailPanel } from "../components/StepDetailPanel";
 import { CompleteStepDialog } from "../components/CompleteStepDialog";
 import { WorkflowGraph } from "../components/WorkflowGraph";
 import type {
+  Ambito,
   ExternalEventCreateInput,
   ExternalResponseDecisionInput,
   Step,
@@ -57,7 +60,7 @@ import type {
   TriggerDetail,
   WorkflowDetail,
 } from "../types";
-import { buildJournalItems, DEFAULT_ACTOR } from "../utils";
+import { buildJournalItems, DEFAULT_ACTOR, getAmbitoLabel } from "../utils";
 
 export function WorkflowDetailPage() {
   const { workflowId = "" } = useParams();
@@ -87,6 +90,10 @@ export function WorkflowDetailPage() {
   const [cancellingFlow, setCancellingFlow] = useState(false);
   const [toastOpen, setToastOpen] = useState(Boolean(initialToastMessage));
   const [toastMessage, setToastMessage] = useState<string | null>(initialToastMessage);
+  const [workflowAmbitoDraft, setWorkflowAmbitoDraft] = useState<Ambito>(null);
+  const [editingWorkflowAmbito, setEditingWorkflowAmbito] = useState(false);
+  const [workflowAmbitoConfirmOpen, setWorkflowAmbitoConfirmOpen] = useState(false);
+  const [savingWorkflowAmbito, setSavingWorkflowAmbito] = useState(false);
 
   function getPrimaryRequirementLabel() {
     return trigger?.descripcion?.trim() || workflow?.objetivo_final?.trim() || "Flow sin proyecto";
@@ -111,6 +118,12 @@ export function WorkflowDetailPage() {
       setStepHistory([]);
     }
   }, [selectedStepId]);
+
+  useEffect(() => {
+    setWorkflowAmbitoDraft(workflow?.ambito ?? null);
+    setEditingWorkflowAmbito(false);
+    setWorkflowAmbitoConfirmOpen(false);
+  }, [workflow?.id, workflow?.ambito]);
 
   async function loadWorkflow(preferredStepId?: string) {
     try {
@@ -304,6 +317,55 @@ export function WorkflowDetailPage() {
     await refreshAfterStepChange(step.id);
   }
 
+  function handleStartWorkflowAmbitoEdit() {
+    if (!workflow) return;
+    setWorkflowAmbitoDraft(workflow.ambito);
+    setWorkflowAmbitoConfirmOpen(false);
+    setEditingWorkflowAmbito(true);
+  }
+
+  function handleCancelWorkflowAmbitoEdit() {
+    if (!workflow) return;
+    setWorkflowAmbitoDraft(workflow.ambito);
+    setWorkflowAmbitoConfirmOpen(false);
+    setEditingWorkflowAmbito(false);
+  }
+
+  async function performSaveWorkflowAmbito(propagateAmbito: boolean) {
+    if (!workflow) return;
+
+    try {
+      setSavingWorkflowAmbito(true);
+      const updated = await updateWorkflow(workflow.id, {
+        ambito: workflowAmbitoDraft,
+        propagate_ambito: propagateAmbito,
+      });
+      setWorkflow(updated);
+      setWorkflowAmbitoDraft(updated.ambito);
+      setEditingWorkflowAmbito(false);
+      setWorkflowAmbitoConfirmOpen(false);
+      setToastMessage(propagateAmbito ? "Ámbito del flow y tareas actualizado." : "Ámbito del flow actualizado.");
+      setToastOpen(true);
+      showToast(propagateAmbito ? "Ámbito propagado a las tareas." : "Ámbito del flow actualizado.", "success");
+      await loadWorkflow(selectedStepId ?? undefined);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudo actualizar el ámbito del flow";
+      setLinkRequirementError(message);
+      showToast(message, "error");
+    } finally {
+      setSavingWorkflowAmbito(false);
+    }
+  }
+
+  function handleSaveWorkflowAmbito() {
+    if (!workflow) return;
+    if (workflowAmbitoDraft === workflow.ambito) {
+      setEditingWorkflowAmbito(false);
+      return;
+    }
+    setWorkflowAmbitoConfirmOpen(true);
+  }
+
   async function handleRenameStep(step: Step, nextName: string) {
     const previousName = step.nombre.trim();
     const sanitizedName = nextName.trim();
@@ -341,11 +403,19 @@ export function WorkflowDetailPage() {
 
   function handleOpenLinkRequirement() {
     if (!workflow) return;
+    if (workflow.ambito === null) {
+      setLinkRequirementError("Debes definir primero el ámbito del flow.");
+      showToast("Debes definir primero el ámbito del flow.", "info");
+      return;
+    }
     const linkedRequirementIds = new Set([
       ...(workflow.requirement_ids ?? []),
       ...(workflow.trigger_id ? [workflow.trigger_id] : []),
     ]);
-    const nextRequirementId = requirements.find((item) => !linkedRequirementIds.has(item.id))?.id ?? "";
+    const compatibleRequirements = requirements.filter(
+      (item) => !linkedRequirementIds.has(item.id) && item.ambito === workflow.ambito
+    );
+    const nextRequirementId = compatibleRequirements[0]?.id ?? "";
     const hasAvailableRequirements = Boolean(nextRequirementId);
     setLinkRequirementError(null);
     setLinkRequirementMode(hasAvailableRequirements ? "existing" : "new");
@@ -369,6 +439,10 @@ export function WorkflowDetailPage() {
       setLinkRequirementError("Selecciona un proyecto para vincular.");
       return;
     }
+    if (workflow.ambito === null) {
+      setLinkRequirementError("Debes definir primero el ámbito del flow.");
+      return;
+    }
 
     try {
       setLinkingRequirement(true);
@@ -387,6 +461,10 @@ export function WorkflowDetailPage() {
 
   async function handleCreateAndLinkRequirement() {
     if (!workflow) return;
+    if (workflow.ambito === null) {
+      setLinkRequirementError("Debes definir primero el ámbito del flow.");
+      return;
+    }
 
     const description = newRequirementDescription.trim();
     if (!description) {
@@ -490,7 +568,12 @@ export function WorkflowDetailPage() {
   const linkedRequirements = requirements.filter(
     (item) => linkedRequirementIds.has(item.id) || item.workflow_ids.includes(workflow.id)
   );
-  const availableRequirements = requirements.filter((item) => !linkedRequirements.some((linked) => linked.id === item.id));
+  const availableRequirements =
+    workflow.ambito === null
+      ? []
+      : requirements.filter(
+          (item) => !linkedRequirements.some((linked) => linked.id === item.id) && item.ambito === workflow.ambito
+        );
   const linkedRequirementLabel = linkedRequirements.length === 1 ? "Proyecto asociado" : "Proyectos asociados";
   const managingRequirementsBusy = linkingRequirement || creatingRequirement || unlinkingRequirementId !== null;
 
@@ -502,6 +585,28 @@ export function WorkflowDetailPage() {
         onClose={() => setToastOpen(false)}
         message={toastMessage}
       />
+      <Dialog
+        open={workflowAmbitoConfirmOpen}
+        onClose={savingWorkflowAmbito ? undefined : () => setWorkflowAmbitoConfirmOpen(false)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Cambiar ámbito del flow</DialogTitle>
+        <DialogContent dividers>
+          ¿Querés aplicar este cambio también a las tareas?
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button color="inherit" onClick={() => setWorkflowAmbitoConfirmOpen(false)} disabled={savingWorkflowAmbito}>
+            Cancelar
+          </Button>
+          <Button onClick={() => void performSaveWorkflowAmbito(false)} disabled={savingWorkflowAmbito}>
+            Solo flow
+          </Button>
+          <Button variant="contained" onClick={() => void performSaveWorkflowAmbito(true)} disabled={savingWorkflowAmbito}>
+            Aplicar a tareas
+          </Button>
+        </DialogActions>
+      </Dialog>
       <Breadcrumbs>
         <Link component={RouterLink} underline="hover" color="inherit" to="/flows">
           Flows
@@ -535,6 +640,47 @@ export function WorkflowDetailPage() {
                   <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                     Continuidad del flow de principio a fin.
                   </Typography>
+                  <Stack direction="row" spacing={1} sx={{ mt: 1.5, alignItems: "center", flexWrap: "wrap" }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Ámbito del flow
+                    </Typography>
+                    {editingWorkflowAmbito ? (
+                      <>
+                        <TextField
+                          select
+                          size="small"
+                          value={workflowAmbitoDraft ?? ""}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setWorkflowAmbitoDraft(value === "" ? null : (value as Exclude<Ambito, null>));
+                          }}
+                          sx={{ minWidth: 180 }}
+                        >
+                          <MenuItem value="laboral">{getAmbitoLabel("laboral")}</MenuItem>
+                          <MenuItem value="personal">{getAmbitoLabel("personal")}</MenuItem>
+                          <MenuItem value="">Sin definir</MenuItem>
+                        </TextField>
+                        <Button size="small" onClick={handleCancelWorkflowAmbitoEdit} disabled={savingWorkflowAmbito}>
+                          Cancelar
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          onClick={handleSaveWorkflowAmbito}
+                          disabled={savingWorkflowAmbito}
+                        >
+                          Guardar
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <AmbitoChip ambito={workflow.ambito} />
+                        <Button size="small" color="inherit" onClick={handleStartWorkflowAmbitoEdit}>
+                          Editar
+                        </Button>
+                      </>
+                    )}
+                  </Stack>
                   {workflow.estado === "cancelado" && (
                     <Alert severity="warning" sx={{ mt: 1.5 }}>
                       Flow cancelado, reactivar para continuar.
@@ -563,6 +709,11 @@ export function WorkflowDetailPage() {
                       <Typography variant="caption" color="text.secondary">
                         {linkedRequirements.length > 0 ? linkedRequirementLabel : "Sin proyectos asociados"}
                       </Typography>
+                      {workflow.ambito === null && (
+                        <Typography variant="caption" color="warning.main">
+                          Define el ámbito del flow para asociarlo con proyectos.
+                        </Typography>
+                      )}
                       <Stack
                         direction={{ xs: "column", sm: "row" }}
                         spacing={1}
@@ -608,6 +759,7 @@ export function WorkflowDetailPage() {
                           size="small"
                           color="inherit"
                           onClick={handleOpenLinkRequirement}
+                          disabled={workflow.ambito === null}
                           sx={{ px: 0.5, alignSelf: { xs: "flex-start", sm: "center" } }}
                         >
                           {linkedRequirements.length > 0 ? "Gestionar" : "Asociar"}
@@ -749,6 +901,11 @@ export function WorkflowDetailPage() {
             )}
 
             <Stack spacing={1.25}>
+              {workflow.ambito === null && (
+                <Alert severity="warning">
+                  Debes definir primero el ámbito del flow para asociarlo con proyectos.
+                </Alert>
+              )}
               <ToggleButtonGroup
                 exclusive
                 size="small"
@@ -771,9 +928,13 @@ export function WorkflowDetailPage() {
                   <Typography variant="subtitle2" color="text.secondary">
                     Asociar proyecto existente
                   </Typography>
-                  {availableRequirements.length === 0 ? (
+                  {workflow.ambito === null ? (
                     <Alert severity="info">
-                      No hay proyectos disponibles para asociar. Podés crear uno nuevo.
+                      Define primero el ámbito del flow para ver proyectos compatibles.
+                    </Alert>
+                  ) : availableRequirements.length === 0 ? (
+                    <Alert severity="info">
+                      No hay proyectos del mismo ámbito para asociar.
                     </Alert>
                   ) : (
                     <TextField
@@ -796,6 +957,11 @@ export function WorkflowDetailPage() {
                   <Typography variant="subtitle2" color="text.secondary">
                     Crear proyecto nuevo
                   </Typography>
+                  {workflow.ambito === null && (
+                    <Alert severity="info">
+                      El proyecto nuevo heredará el ámbito del flow una vez que lo definas.
+                    </Alert>
+                  )}
                   <TextField
                     fullWidth
                     required
@@ -828,7 +994,7 @@ export function WorkflowDetailPage() {
             disabled={
               managingRequirementsBusy ||
               (linkRequirementMode === "existing"
-                ? availableRequirements.length === 0 || !linkRequirementId
+                ? workflow.ambito === null || availableRequirements.length === 0 || !linkRequirementId
                 : !newRequirementDescription.trim())
             }
           >

@@ -4,6 +4,7 @@ from uuid import uuid4
 from app.core.errors import BusinessRuleError, EntityNotFoundError
 from app.repositories.workflow_repository import WorkflowRepository, utc_now
 from app.schemas.workflow import (
+    Ambito,
     AttachmentBase,
     CommentCreate,
     CommentPublic,
@@ -51,6 +52,50 @@ class WorkflowService:
     def __init__(self, repository: WorkflowRepository) -> None:
         self.repository = repository
 
+    def _ensure_matching_ambito(self, workflow_ambito: Ambito | None, trigger_ambito: Ambito | None) -> None:
+        if workflow_ambito is None or trigger_ambito is None or workflow_ambito != trigger_ambito:
+            raise BusinessRuleError("No se puede asociar un flow con un proyecto de distinto ámbito.")
+
+    def _ensure_workflow_links_allow_ambito(self, workflow: WorkflowDetail | WorkflowSummary, next_ambito: Ambito | None) -> list[TriggerDetail]:
+        requirement_ids = self._collect_requirement_ids(workflow)
+        requirements = [self.get_trigger(requirement_id) for requirement_id in requirement_ids]
+        if not requirements:
+            return requirements
+        if next_ambito is None:
+            raise BusinessRuleError("No se puede dejar un flow asociado sin ámbito definido.")
+        for requirement in requirements:
+            if requirement.ambito is None or requirement.ambito != next_ambito:
+                raise BusinessRuleError("No se puede asociar un flow con un proyecto de distinto ámbito.")
+        return requirements
+
+    def _ensure_trigger_links_allow_ambito(self, trigger: TriggerDetail, next_ambito: Ambito | None) -> list[WorkflowDetail]:
+        workflows = [self.get_workflow(workflow_id) for workflow_id in trigger.workflow_ids]
+        if not workflows:
+            return workflows
+        if next_ambito is None:
+            raise BusinessRuleError("No se puede dejar un proyecto asociado sin ámbito definido.")
+        for workflow in workflows:
+            if workflow.ambito is None or workflow.ambito != next_ambito:
+                raise BusinessRuleError("No se puede asociar un flow con un proyecto de distinto ámbito.")
+        return workflows
+
+    def _ensure_trigger_propagation_safe(self, trigger_id: str, next_ambito: Ambito | None, workflows: list[WorkflowDetail]) -> None:
+        if next_ambito is None and workflows:
+            raise BusinessRuleError("No se puede dejar un proyecto asociado sin ámbito definido.")
+        for workflow in workflows:
+            for requirement_id in self._collect_requirement_ids(workflow):
+                if requirement_id == trigger_id:
+                    continue
+                requirement = self.get_trigger(requirement_id)
+                if requirement.ambito is None or requirement.ambito != next_ambito:
+                    raise BusinessRuleError("No se puede asociar un flow con un proyecto de distinto ámbito.")
+
+    def _propagate_workflow_ambito_to_steps(self, workflow_id: str, ambito: Ambito | None) -> None:
+        for step in self.get_workflow_steps(workflow_id):
+            if step.ambito == ambito:
+                continue
+            self.repository.save_step(step.model_copy(update={"ambito": ambito}))
+
     def list_triggers(self) -> list[TriggerDetail]:
         return self.repository.list_triggers()
 
@@ -79,6 +124,15 @@ class WorkflowService:
 
         patch_data = payload.model_dump(exclude_unset=True)
         update_data: dict[str, object] = {"fecha_actualizacion": utc_now()}
+        next_ambito = trigger.ambito
+        ambito_changed = "ambito" in patch_data and patch_data["ambito"] != trigger.ambito
+        if ambito_changed:
+            next_ambito = patch_data["ambito"]
+            linked_workflows = self._ensure_trigger_links_allow_ambito(trigger, next_ambito) if not payload.propagate_ambito else [
+                self.get_workflow(workflow_id) for workflow_id in trigger.workflow_ids
+            ]
+            if payload.propagate_ambito:
+                self._ensure_trigger_propagation_safe(trigger_id, next_ambito, linked_workflows)
         if "solicitante" in patch_data:
             update_data["solicitante"] = patch_data["solicitante"]
         if "descripcion" in patch_data:
@@ -87,11 +141,18 @@ class WorkflowService:
             update_data["tipo"] = patch_data["tipo"]
         if "metadata" in patch_data:
             update_data["metadata"] = patch_data["metadata"]
+        if ambito_changed:
+            update_data["ambito"] = next_ambito
 
         updated_trigger = trigger.model_copy(
             update=update_data
         )
         self.repository.save_trigger(updated_trigger)
+        if ambito_changed and payload.propagate_ambito:
+            for workflow_id in trigger.workflow_ids:
+                workflow = self.get_workflow(workflow_id)
+                self.repository.save_workflow(workflow.model_copy(update={"ambito": next_ambito}))
+                self._propagate_workflow_ambito_to_steps(workflow.id, next_ambito)
         refreshed = self.repository.get_trigger(trigger_id)
         if refreshed is None:
             raise EntityNotFoundError("Trigger not found")
@@ -136,6 +197,10 @@ class WorkflowService:
         trigger = self.repository.get_trigger(trigger_id)
         if trigger is None:
             raise EntityNotFoundError("Trigger not found")
+        if trigger.ambito is None:
+            raise BusinessRuleError("Debes definir el ámbito del proyecto antes de crear un flow.")
+        if payload.ambito is not None and payload.ambito != trigger.ambito:
+            raise BusinessRuleError("No se puede asociar un flow con un proyecto de distinto ámbito.")
 
         if not payload.primer_paso.nombre.strip():
             raise BusinessRuleError("La tarea inicial es obligatoria para iniciar el flow")
@@ -148,7 +213,7 @@ class WorkflowService:
         if template is None:
             raise EntityNotFoundError("Workflow template not found")
 
-        workflow = self.repository.create_workflow(trigger_id, template, payload)
+        workflow = self.repository.create_workflow(trigger_id, template, payload.model_copy(update={"ambito": trigger.ambito}))
         self._reconcile_trigger_status(trigger_id, utc_now(), preferred_workflow_id=workflow.id)
         return workflow
 
@@ -161,6 +226,7 @@ class WorkflowService:
                 workflow_template_id=template.id,
                 objetivo_final=payload.titulo.strip(),
                 resolucion_esperada=None,
+                ambito=payload.ambito,
                 primer_paso={
                     "nombre": payload.titulo.strip(),
                     "descripcion": payload.detalle,
@@ -188,18 +254,25 @@ class WorkflowService:
         workflow = self.get_workflow(workflow_id)
         patch_data = payload.model_dump(exclude_unset=True)
         update_data: dict[str, object] = {}
+        ambito_changed = "ambito" in patch_data and patch_data["ambito"] != workflow.ambito
+        next_ambito = patch_data.get("ambito", workflow.ambito)
 
         if "objetivo_final" in patch_data:
             next_title = (patch_data["objetivo_final"] or "").strip()
             if not next_title:
                 raise BusinessRuleError("El nombre del flow es obligatorio")
             update_data["objetivo_final"] = next_title
+        if ambito_changed:
+            self._ensure_workflow_links_allow_ambito(workflow, next_ambito)
+            update_data["ambito"] = next_ambito
 
         if not update_data:
             raise BusinessRuleError("No hay cambios para guardar")
 
         updated_workflow = workflow.model_copy(update=update_data)
         self.repository.save_workflow(updated_workflow)
+        if ambito_changed and payload.propagate_ambito:
+            self._propagate_workflow_ambito_to_steps(workflow_id, next_ambito)
         return self.get_workflow(workflow_id)
 
     def cancel_workflow(self, workflow_id: str) -> WorkflowDetail:
@@ -282,6 +355,7 @@ class WorkflowService:
     def link_workflow_to_requirement(self, workflow_id: str, requirement_id: str) -> WorkflowDetail:
         workflow = self.get_workflow(workflow_id)
         requirement = self.get_trigger(requirement_id)
+        self._ensure_matching_ambito(workflow.ambito, requirement.ambito)
         self.repository.link_requirement_to_workflow(requirement.id, workflow.id)
         self._reconcile_trigger_status(requirement.id, utc_now(), preferred_workflow_id=workflow.id)
         refreshed = self.repository.get_workflow(workflow.id)
@@ -301,6 +375,8 @@ class WorkflowService:
 
     def create_requirement_from_flow(self, workflow_id: str, payload: RequirementCreateFromFlowPayload) -> TriggerDetail:
         workflow = self.get_workflow(workflow_id)
+        if workflow.ambito is None:
+            raise BusinessRuleError("Debes definir el ámbito del flow antes de crear un proyecto.")
         requirement = self.create_trigger(
             TriggerCreate(
                 solicitante=payload.solicitante,
@@ -308,6 +384,7 @@ class WorkflowService:
                 tipo="requerimiento",
                 creado_por=payload.creado_por,
                 metadata=None,
+                ambito=workflow.ambito,
             )
         )
         self.repository.link_requirement_to_workflow(requirement.id, workflow.id)

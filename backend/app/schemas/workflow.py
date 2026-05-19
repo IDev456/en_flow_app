@@ -39,6 +39,11 @@ class StepTransitionType(StrEnum):
     FINISH_FLOW = "finish_flow"
 
 
+class Ambito(StrEnum):
+    LABORAL = "laboral"
+    PERSONAL = "personal"
+
+
 class WorkLogEntryType(StrEnum):
     COMMENT = "comment"
     STATUS_CHANGE = "status_change"
@@ -51,10 +56,12 @@ class TriggerBase(BaseModel):
     descripcion: str | None = Field(default=None, max_length=1000)
     tipo: str = Field(default="requerimiento", min_length=1, max_length=80)
     metadata: dict[str, Any] | None = None
+    ambito: Ambito | None = None
 
 
 class TriggerCreate(TriggerBase):
     creado_por: str = Field(default="sistema", min_length=1, max_length=120)
+    ambito: Ambito
 
 
 class TriggerUpdate(BaseModel):
@@ -62,6 +69,8 @@ class TriggerUpdate(BaseModel):
     descripcion: str | None = Field(default=None, max_length=1000)
     tipo: str | None = Field(default=None, min_length=1, max_length=80)
     metadata: dict[str, Any] | None = None
+    ambito: Ambito | None = None
+    propagate_ambito: bool = False
 
 
 class TriggerPublic(TriggerBase):
@@ -111,6 +120,7 @@ class WorkflowTemplatePublic(BaseModel):
 class WorkflowInstanceBase(BaseModel):
     objetivo_final: str | None = Field(default=None, max_length=200)
     resolucion_esperada: str | None = Field(default=None, max_length=500)
+    ambito: Ambito | None = None
 
 
 class InitialStepOverride(BaseModel):
@@ -128,6 +138,8 @@ class WorkflowStartRequest(WorkflowInstanceBase):
 
 class WorkflowUpdate(BaseModel):
     objetivo_final: str | None = Field(default=None, min_length=1, max_length=200)
+    ambito: Ambito | None = None
+    propagate_ambito: bool = False
 
 
 class WorkflowSummary(WorkflowInstanceBase):
@@ -176,6 +188,7 @@ class StepInstancePublic(StepInstanceBase):
     fecha_cierre: datetime | None = None
     resultado: str | None = None
     observaciones: str | None = None
+    ambito: Ambito | None = None
     ultimo_comentario: str | None = None
     ultimo_comentario_fecha: datetime | None = None
     ultimo_comentario_tipo: str | None = None
@@ -311,6 +324,7 @@ class QuickCaptureRequest(BaseModel):
     fecha_vencimiento: datetime | None = None
     fecha_ejecucion_estimada: datetime | None = None
     creado_por: str = Field(default="sistema", min_length=1, max_length=120)
+    ambito: Ambito
 
 
 class RequirementLinkPayload(BaseModel):

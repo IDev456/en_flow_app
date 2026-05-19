@@ -3,6 +3,7 @@ export type WorkflowStatus = "pendiente" | "en_proceso" | "esperando_respuesta" 
 export type StepStatus = "activo" | "espera" | "problema" | "esperando_respuesta" | "completado" | "cancelada";
 export type StepTransitionType = "next_task" | "wait_external" | "finish_flow";
 export type WorkLogEntryType = "comment" | "status_change" | "field_change" | "external_event";
+export type Ambito = "laboral" | "personal" | null;
 
 export type Attachment = {
   id: string;
@@ -24,6 +25,7 @@ export type Trigger = {
   solicitante: string | null;
   descripcion: string | null;
   tipo: string;
+  ambito: Ambito;
   estado_general: TriggerStatus;
   fecha_creacion: string;
   fecha_actualizacion: string;
@@ -42,6 +44,7 @@ export type WorkflowSummary = {
   requirement_ids: string[];
   workflow_template_id: string;
   workflow_template_nombre: string;
+  ambito: Ambito;
   estado: WorkflowStatus;
   pasos_activos: number[];
   paso_actual: number | null;
@@ -81,6 +84,7 @@ export type Step = {
   fecha_cierre: string | null;
   resultado: string | null;
   observaciones: string | null;
+  ambito: Ambito;
   ultimo_comentario: string | null;
   ultimo_comentario_fecha: string | null;
   ultimo_comentario_tipo: "texto" | "adjunto" | "imagen" | null;
@@ -155,6 +159,7 @@ export type TriggerCreateInput = {
   solicitante: string | null;
   descripcion: string | null;
   tipo: string;
+  ambito: Exclude<Ambito, null>;
   creado_por?: string;
   metadata: Record<string, unknown> | null;
 };
@@ -163,6 +168,8 @@ export type TriggerUpdateInput = {
   solicitante: string | null;
   descripcion: string | null;
   tipo?: string | null;
+  ambito?: Ambito;
+  propagate_ambito?: boolean;
   metadata?: Record<string, unknown> | null;
 };
 
@@ -170,6 +177,7 @@ export type WorkflowStartInput = {
   workflow_template_id?: string;
   objetivo_final?: string | null;
   resolucion_esperada?: string | null;
+  ambito?: Ambito;
   primer_paso: {
     nombre: string;
     descripcion?: string | null;
@@ -262,6 +270,7 @@ export type QuickCaptureInput = {
   fecha_vencimiento?: string | null;
   fecha_ejecucion_estimada?: string | null;
   creado_por?: string;
+  ambito: Exclude<Ambito, null>;
 };
 
 export type LinkRequirementInput = {
@@ -272,4 +281,10 @@ export type CreateRequirementFromFlowInput = {
   descripcion: string;
   solicitante?: string | null;
   creado_por?: string;
+};
+
+export type WorkflowUpdateInput = {
+  objetivo_final?: string | null;
+  ambito?: Ambito;
+  propagate_ambito?: boolean;
 };

@@ -11,7 +11,12 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Link,
+  MenuItem,
   Slide,
   Snackbar,
   Stack,
@@ -22,9 +27,10 @@ import {
 import { Link as RouterLink, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { deleteTrigger, getStepComments, getTrigger, getWorkflow, updateTrigger } from "../api";
+import { AmbitoChip } from "../components/AmbitoChip";
 import { StatusBadge } from "../components/StatusBadge";
-import type { TriggerDetail, WorkflowDetail } from "../types";
-import { formatElapsedTime, getVisibleTriggerStatus, getVisibleWorkflowStatus } from "../utils";
+import type { Ambito, TriggerDetail, WorkflowDetail } from "../types";
+import { formatElapsedTime, getAmbitoLabel, getVisibleTriggerStatus, getVisibleWorkflowStatus } from "../utils";
 
 const SOLICITANTE_MAX = 150;
 const TRIGGER_DESCRIPTION_MAX = 1000;
@@ -46,8 +52,10 @@ export function TriggerDetailPage() {
   const [deletingRequirement, setDeletingRequirement] = useState(false);
   const [editSolicitante, setEditSolicitante] = useState("");
   const [editDescripcion, setEditDescripcion] = useState("");
+  const [editAmbito, setEditAmbito] = useState<Ambito>(null);
   const [requirementError, setRequirementError] = useState<string | null>(null);
   const [requirementToastOpen, setRequirementToastOpen] = useState(false);
+  const [ambitoConfirmOpen, setAmbitoConfirmOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -67,7 +75,8 @@ export function TriggerDetailPage() {
     if (!trigger) return;
     setEditSolicitante(trigger.solicitante ?? "");
     setEditDescripcion(trigger.descripcion ?? "");
-  }, [trigger?.id, trigger?.solicitante, trigger?.descripcion]);
+    setEditAmbito(trigger.ambito);
+  }, [trigger?.id, trigger?.solicitante, trigger?.descripcion, trigger?.ambito]);
 
   async function loadTrigger() {
     try {
@@ -137,6 +146,7 @@ export function TriggerDetailPage() {
     if (!trigger) return;
     setEditSolicitante(trigger.solicitante ?? "");
     setEditDescripcion(trigger.descripcion ?? "");
+    setEditAmbito(trigger.ambito);
     setRequirementError(null);
     setEditingRequirement(true);
   }
@@ -145,11 +155,12 @@ export function TriggerDetailPage() {
     if (!trigger) return;
     setEditSolicitante(trigger.solicitante ?? "");
     setEditDescripcion(trigger.descripcion ?? "");
+    setEditAmbito(trigger.ambito);
     setRequirementError(null);
     setEditingRequirement(false);
   }
 
-  async function handleSaveRequirement() {
+  async function performSaveRequirement(propagateAmbito: boolean) {
     if (!trigger) return;
 
     if (editSolicitante.trim().length > SOLICITANTE_MAX) {
@@ -167,15 +178,27 @@ export function TriggerDetailPage() {
       const updatedTrigger = await updateTrigger(trigger.id, {
         solicitante: editSolicitante.trim() || null,
         descripcion: editDescripcion.trim() || null,
+        ambito: editAmbito,
+        propagate_ambito: propagateAmbito,
       });
       setTrigger(updatedTrigger);
       setEditingRequirement(false);
+      setAmbitoConfirmOpen(false);
       setRequirementToastOpen(true);
     } catch (err) {
       setRequirementError(err instanceof Error ? err.message : "No se pudo actualizar el proyecto");
     } finally {
       setSavingRequirement(false);
     }
+  }
+
+  async function handleSaveRequirement() {
+    if (!trigger) return;
+    if (editAmbito !== trigger.ambito) {
+      setAmbitoConfirmOpen(true);
+      return;
+    }
+    await performSaveRequirement(false);
   }
 
   async function handleDeleteRequirement() {
@@ -286,6 +309,22 @@ export function TriggerDetailPage() {
         slots={{ transition: SlideUp }}
       />
 
+      <Dialog open={ambitoConfirmOpen} onClose={savingRequirement ? undefined : () => setAmbitoConfirmOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle>Cambiar ámbito del proyecto</DialogTitle>
+        <DialogContent dividers>¿Querés aplicar este cambio también a los flows y tareas asociados?</DialogContent>
+        <DialogActions>
+          <Button color="inherit" onClick={() => setAmbitoConfirmOpen(false)} disabled={savingRequirement}>
+            Cancelar
+          </Button>
+          <Button onClick={() => void performSaveRequirement(false)} disabled={savingRequirement}>
+            Solo proyecto
+          </Button>
+          <Button variant="contained" onClick={() => void performSaveRequirement(true)} disabled={savingRequirement}>
+            Aplicar a flows y tareas
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Breadcrumbs separator="›" aria-label="breadcrumb" sx={{ "& .MuiBreadcrumbs-separator": { mx: 0.75 } }}>
         <Link component={RouterLink} underline="hover" color="text.secondary" to="/requirements" sx={{ typography: "caption" }}>
           Proyectos
@@ -335,6 +374,17 @@ export function TriggerDetailPage() {
                         onChange={(event) => setEditSolicitante(event.target.value.slice(0, SOLICITANTE_MAX))}
                         disabled={savingRequirement}
                       />
+                      <TextField
+                        select
+                        label="Ámbito"
+                        value={editAmbito ?? ""}
+                        onChange={(event) => setEditAmbito((event.target.value || null) as Ambito)}
+                        disabled={savingRequirement}
+                      >
+                        <MenuItem value="laboral">{getAmbitoLabel("laboral")}</MenuItem>
+                        <MenuItem value="personal">{getAmbitoLabel("personal")}</MenuItem>
+                        <MenuItem value="">Sin definir</MenuItem>
+                      </TextField>
                     </Stack>
                   ) : (
                     <>
@@ -347,6 +397,7 @@ export function TriggerDetailPage() {
                 </Box>
 
                 <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <AmbitoChip ambito={editingRequirement ? editAmbito : trigger.ambito} />
                   <StatusBadge value={getVisibleTriggerStatus(trigger.estado_general)} />
                   {editingRequirement ? (
                     <>
@@ -430,9 +481,15 @@ export function TriggerDetailPage() {
                   color="inherit"
                   startIcon={<PlayCircleOutlineRoundedIcon />}
                   onClick={openLinkedCaptureModal}
+                  disabled={trigger.ambito === null}
                 >
                   Capturar tarea para este proyecto
                 </Button>
+                {trigger.ambito === null && (
+                  <Typography variant="caption" color="text.secondary">
+                    Define el ámbito del proyecto antes de crear un flow vinculado.
+                  </Typography>
+                )}
               </Stack>
 
               {trigger.workflow_ids.length > 0 && (

@@ -21,7 +21,8 @@ import type {
   WorkLogEntry,
   WorkflowDetail,
   WorkflowStartInput,
-  WorkflowSummary
+  WorkflowSummary,
+  WorkflowUpdateInput,
 } from "./types";
 
 export function listTriggers() {
@@ -72,7 +73,7 @@ export function getWorkflow(workflowId: string) {
   return apiGet<WorkflowDetail>(`/workflows/${workflowId}`);
 }
 
-export function updateWorkflow(workflowId: string, input: { objetivo_final?: string | null }) {
+export function updateWorkflow(workflowId: string, input: WorkflowUpdateInput) {
   return apiPatch<WorkflowDetail>(`/workflows/${workflowId}`, input);
 }
 
