@@ -94,3 +94,10 @@ Evolucionar la interfaz hacia un criterio inspirado en Material Design 3 sin cam
 - `Cancelados` no debe competir como filtro principal.
 - Los estados críticos deben leerse primero desde color, luego desde texto.
 - Recordatorios, registros y acciones rápidas deben compartir un lenguaje visual consistente.
+
+## Componentes nuevos y ámbitos
+
+- `AmbitoChip`: mantener formato pill; usar `theme.palette` y `theme.appShape.pill` para forma y contraste. Evitar depender de `color="primary"/"secondary"` directamente; aplicar background/border con `surfaceContainer*` y `outlineVariant` cuando corresponda.
+- Reemplazar radios hardcodeados por `appShape.*` y duraciones literales por `appMotion.*`.
+- Preferir `surfaceContainerLow` / `surfaceContainerLowest` para tarjetas y listados de sugerencias en duplicados.
+- No cambiar la lógica de ámbitos: `laboral`, `personal`, `todos/null` deben seguir comportándose igual, solo cambiar la presentación visual.
