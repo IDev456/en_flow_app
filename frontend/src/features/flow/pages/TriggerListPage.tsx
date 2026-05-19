@@ -13,11 +13,13 @@ import InboxRoundedIcon from "@mui/icons-material/InboxRounded";
 import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
 import LocalFireDepartmentRoundedIcon from "@mui/icons-material/LocalFireDepartmentRounded";
 import MoreVertRoundedIcon from "@mui/icons-material/MoreVertRounded";
+import PersonOutlineRoundedIcon from "@mui/icons-material/PersonOutlineRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import ScheduleRoundedIcon from "@mui/icons-material/ScheduleRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import ViewColumnRoundedIcon from "@mui/icons-material/ViewColumnRounded";
-import { type Theme, useTheme } from "@mui/material/styles";
+import WorkOutlineRoundedIcon from "@mui/icons-material/WorkOutlineRounded";
+import { alpha, type Theme, useTheme } from "@mui/material/styles";
 import {
   Alert,
   Box,
@@ -58,12 +60,14 @@ import { DataGridEmptyState } from "../../../components/feedback/DataGridEmptySt
 import { PageContainer } from "../../../components/layout/PageContainer";
 import { useToastContext } from "../../../components/Toast";
 import { getStatusSemanticKey } from "../../../theme";
-import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, getWorkflow, listTriggers, listWorkflows, reactivateWorkflow, updateStepDate } from "../api";
+import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, getWorkflow, listTriggers, listWorkflows, reactivateWorkflow, updateStepDate, updateTrigger, updateWorkflow } from "../api";
 import { AmbitoChip } from "../components/AmbitoChip";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Ambito, Step, TriggerDetail, WorkflowDetail } from "../types";
 import {
+  activeAmbitoOptions,
   ambitoFilterOptions,
+  getStoredActiveAmbito,
   formatCalendarDate,
   formatElapsedTime,
   formatLocalDateInput,
@@ -73,10 +77,12 @@ import {
   getVisibleTriggerStatus,
   getVisibleWorkflowStatus,
   isNoisyAutomaticJournalText,
-  matchesAmbitoFilter,
+  matchesActiveAmbito,
   getStatusTone,
+  setStoredActiveAmbito,
   getTodayLocalDateInput,
   toCalendarDayValue,
+  type ActiveAmbitoMode,
 } from "../utils";
 
 type ViewMode = "requirements" | "flows";
@@ -145,6 +151,11 @@ function getFilterIcon(filter: FlowFilter) {
   if (filter === "cancelled") return <CancelOutlinedIcon sx={{ fontSize: 14 }} />;
   if (filter === "finalized") return <CheckCircleRoundedIcon sx={{ fontSize: 14 }} />;
   return <InboxRoundedIcon sx={{ fontSize: 14 }} />;
+}
+
+function getAmbitoModeIcon(ambito: ActiveAmbitoMode) {
+  if (ambito === "laboral") return <WorkOutlineRoundedIcon sx={{ fontSize: 14 }} />;
+  return <PersonOutlineRoundedIcon sx={{ fontSize: 14 }} />;
 }
 
 function getFlowFilterFromStatus(statusValue: string): Exclude<FlowFilter, "all"> | null {
@@ -334,6 +345,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
   const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
   const [stateFilter, setStateFilter] = useState<FlowFilter>(() => getDefaultFilterForView(defaultView));
+  const [activeAmbito, setActiveAmbito] = useState<ActiveAmbitoMode>(() => getStoredActiveAmbito());
   const [ambitoFilter, setAmbitoFilter] = useState<(typeof ambitoFilterOptions)[number]["value"]>("all");
   const [loading, setLoading] = useState(true);
   const [deletingTriggerId, setDeletingTriggerId] = useState<string | null>(null);
@@ -366,8 +378,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     items: [],
     quickFilterValues: [],
   });
+  const [classifyingItemId, setClassifyingItemId] = useState<string | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
+  const searchParams = new URLSearchParams(location.search);
+  const isAmbitoAdminView = defaultView === "requirements" && searchParams.get("admin") === "ambito";
 
   useEffect(() => {
     void loadData();
@@ -377,6 +392,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     setViewMode(defaultView);
     setStateFilter(getDefaultFilterForView(defaultView));
   }, [defaultView]);
+
+  useEffect(() => {
+    setStoredActiveAmbito(activeAmbito);
+    setNewRequirementAmbito(activeAmbito);
+  }, [activeAmbito]);
 
   useEffect(() => {
     const state = location.state as { openCreateRequirement?: boolean; toast?: string } | null;
@@ -439,14 +459,15 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         };
       })
       .filter((item) => {
-        if (!matchesAmbitoFilter(item.workflow.ambito, ambitoFilter)) return false;
+        if (!matchesActiveAmbito(item.workflow.ambito, activeAmbito)) return false;
         if (stateFilter === "all") return true;
         return getFlowFilterFromStatus(item.displayStatus) === stateFilter;
       });
-  }, [ambitoFilter, requirementByWorkflowId, stateFilter, workflowsById]);
+  }, [activeAmbito, requirementByWorkflowId, stateFilter, workflowsById]);
 
   const flowCounts = useMemo(() => {
     return Object.values(workflowsById)
+      .filter((workflow) => matchesActiveAmbito(workflow.ambito, activeAmbito))
       .map((workflow) => getVisibleWorkflowStatus(workflow))
       .reduce<Record<Exclude<FlowFilter, "all">, number>>(
         (acc, status) => {
@@ -457,20 +478,22 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         },
         { active: 0, waiting: 0, cancelled: 0, finalized: 0 }
       );
-  }, [workflowsById]);
+  }, [activeAmbito, workflowsById]);
 
   const filteredRequirements = useMemo(
     () =>
       triggers.filter((trigger) => {
-        if (!matchesAmbitoFilter(trigger.ambito, ambitoFilter)) return false;
+        if (!matchesActiveAmbito(trigger.ambito, activeAmbito)) return false;
         if (stateFilter === "all") return true;
         return getFlowFilterFromStatus(trigger.estado_general) === stateFilter;
       }),
-    [triggers, stateFilter, ambitoFilter]
+    [triggers, stateFilter, activeAmbito]
   );
 
   const requirementCounts = useMemo(() => {
-    return triggers.reduce<Record<Exclude<FlowFilter, "all">, number>>(
+    return triggers
+      .filter((trigger) => matchesActiveAmbito(trigger.ambito, activeAmbito))
+      .reduce<Record<Exclude<FlowFilter, "all">, number>>(
       (acc, trigger) => {
         const filter = getFlowFilterFromStatus(trigger.estado_general);
         if (!filter) return acc;
@@ -479,7 +502,19 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       },
       { active: 0, waiting: 0, cancelled: 0, finalized: 0 }
     );
-  }, [triggers]);
+  }, [activeAmbito, triggers]);
+
+  const unclassifiedTriggers = useMemo(() => triggers.filter((trigger) => trigger.ambito === null), [triggers]);
+  const unclassifiedWorkflowCards = useMemo(
+    () =>
+      Object.values(workflowsById)
+        .filter((workflow) => workflow.ambito === null)
+        .map((workflow) => ({
+          workflow,
+          linkedRequirements: requirementByWorkflowId[workflow.id] ?? [],
+        })),
+    [requirementByWorkflowId, workflowsById]
+  );
 
   const today = getTodayLocalDateInput();
   const todaySortValue = toDateSortValue(today);
@@ -684,13 +719,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         descripcion: newRequirementDescription.trim(),
         solicitante: newRequirementContext.trim() || null,
         tipo: "requerimiento",
-        ambito: newRequirementAmbito,
+        ambito: activeAmbito,
         metadata: null,
       });
       setCreateRequirementOpen(false);
       setNewRequirementDescription("");
       setNewRequirementContext("");
-      setNewRequirementAmbito("laboral");
       await loadData();
       setRequirementToastMessage("Proyecto creado.");
       setRequirementToastOpen(true);
@@ -698,6 +732,49 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       setCreateRequirementError(err instanceof Error ? err.message : "No se pudo guardar el proyecto");
     } finally {
       setCreatingRequirement(false);
+    }
+  }
+
+  function handleChangeActiveAmbito(nextAmbito: ActiveAmbitoMode | null) {
+    if (!nextAmbito) return;
+    setActiveAmbito(nextAmbito);
+  }
+
+  function openAmbitoAdminView() {
+    navigate("/requirements?admin=ambito");
+  }
+
+  function closeAmbitoAdminView() {
+    navigate("/requirements");
+  }
+
+  async function handleClassifyTrigger(triggerId: string, ambito: ActiveAmbitoMode) {
+    try {
+      setClassifyingItemId(`trigger:${triggerId}:${ambito}`);
+      setError(null);
+      await updateTrigger(triggerId, { ambito, propagate_ambito: true });
+      await loadData();
+      setRequirementToastMessage(`Proyecto clasificado como ${getAmbitoLabel(ambito)}.`);
+      setRequirementToastOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo clasificar el proyecto");
+    } finally {
+      setClassifyingItemId(null);
+    }
+  }
+
+  async function handleClassifyWorkflow(workflowId: string, ambito: ActiveAmbitoMode) {
+    try {
+      setClassifyingItemId(`workflow:${workflowId}:${ambito}`);
+      setError(null);
+      await updateWorkflow(workflowId, { ambito, propagate_ambito: true });
+      await loadData();
+      setFlowToastMessage(`Flow clasificado como ${getAmbitoLabel(ambito)}.`);
+      setFlowToastOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo clasificar el flow");
+    } finally {
+      setClassifyingItemId(null);
     }
   }
 
@@ -1401,6 +1478,131 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             </ToggleButtonGroup>
           )}
 
+          {(unclassifiedTriggers.length > 0 || unclassifiedWorkflowCards.length > 0) && (
+            <Alert
+              severity="info"
+              action={
+                isAmbitoAdminView ? (
+                  <Button color="inherit" size="small" onClick={closeAmbitoAdminView}>
+                    Cerrar vista
+                  </Button>
+                ) : (
+                  <Button color="inherit" size="small" onClick={openAmbitoAdminView}>
+                    Clasificar
+                  </Button>
+                )
+              }
+            >
+              {`Hay ${unclassifiedTriggers.length + unclassifiedWorkflowCards.length} elemento(s) sin ámbito definido fuera del modo ${getAmbitoLabel(activeAmbito)}.`}
+            </Alert>
+          )}
+
+          {isAmbitoAdminView && (
+            <Paper sx={{ p: { xs: 1.5, md: 1.8 } }}>
+              <Stack spacing={2}>
+                <Box>
+                  <Typography variant="subtitle1">Clasificar elementos sin ámbito</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
+                    Estos registros legacy no aparecen en la operación principal hasta asignarles Laboral o Personal.
+                  </Typography>
+                </Box>
+                <Stack spacing={1}>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Proyectos sin definir
+                  </Typography>
+                  {unclassifiedTriggers.length === 0 ? (
+                    <Alert severity="success">No hay proyectos pendientes de clasificar.</Alert>
+                  ) : (
+                    unclassifiedTriggers.map((trigger) => (
+                      <Paper key={trigger.id} variant="outlined" sx={{ p: 1.5 }}>
+                        <Stack
+                          direction={{ xs: "column", md: "row" }}
+                          spacing={1}
+                          sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", md: "center" } }}
+                        >
+                          <Box>
+                            <Typography variant="body1">{trigger.descripcion?.trim() || "Proyecto sin descripción"}</Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {trigger.solicitante?.trim() || "Sin solicitante"} · {trigger.workflow_ids.length} flow(s) vinculado(s)
+                            </Typography>
+                          </Box>
+                          <Stack direction="row" spacing={1}>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => void handleClassifyTrigger(trigger.id, "laboral")}
+                              disabled={classifyingItemId !== null}
+                            >
+                              {classifyingItemId === `trigger:${trigger.id}:laboral` ? "Guardando..." : "Laboral"}
+                            </Button>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => void handleClassifyTrigger(trigger.id, "personal")}
+                              disabled={classifyingItemId !== null}
+                            >
+                              {classifyingItemId === `trigger:${trigger.id}:personal` ? "Guardando..." : "Personal"}
+                            </Button>
+                          </Stack>
+                        </Stack>
+                      </Paper>
+                    ))
+                  )}
+                </Stack>
+                <Stack spacing={1}>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Flows sin definir
+                  </Typography>
+                  {unclassifiedWorkflowCards.length === 0 ? (
+                    <Alert severity="success">No hay flows pendientes de clasificar.</Alert>
+                  ) : (
+                    unclassifiedWorkflowCards.map(({ workflow, linkedRequirements }) => {
+                      const requiresProjectClassification = linkedRequirements.length > 0;
+                      return (
+                        <Paper key={workflow.id} variant="outlined" sx={{ p: 1.5 }}>
+                          <Stack
+                            direction={{ xs: "column", md: "row" }}
+                            spacing={1}
+                            sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", md: "center" } }}
+                          >
+                            <Box>
+                              <Typography variant="body1">{workflow.objetivo_final?.trim() || "Flow sin título"}</Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                {linkedRequirements.length > 0
+                                  ? `Clasificar desde el proyecto asociado: ${linkedRequirements
+                                      .map((item) => item.descripcion?.trim() || `Proyecto ${item.id.slice(0, 8)}`)
+                                      .join(" · ")}`
+                                  : "Sin proyecto asociado"}
+                              </Typography>
+                            </Box>
+                            <Stack direction="row" spacing={1}>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => void handleClassifyWorkflow(workflow.id, "laboral")}
+                                disabled={classifyingItemId !== null || requiresProjectClassification}
+                              >
+                                {classifyingItemId === `workflow:${workflow.id}:laboral` ? "Guardando..." : "Laboral"}
+                              </Button>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => void handleClassifyWorkflow(workflow.id, "personal")}
+                                disabled={classifyingItemId !== null || requiresProjectClassification}
+                              >
+                                {classifyingItemId === `workflow:${workflow.id}:personal` ? "Guardando..." : "Personal"}
+                              </Button>
+                            </Stack>
+                          </Stack>
+                        </Paper>
+                      );
+                    })
+                  )}
+                </Stack>
+              </Stack>
+            </Paper>
+          )}
+
           {!isFlowsView && createRequirementOpen && (
             <Paper sx={{ p: { xs: 1.5, md: 1.8 } }}>
               <Stack spacing={1.25}>
@@ -1415,7 +1617,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   onChange={(event) => setNewRequirementDescription(event.target.value)}
                   disabled={creatingRequirement}
                 />
-                <TextField
+                {false && (
+                <><TextField
                   label="Solicitante"
                   value={newRequirementContext}
                   onChange={(event) => setNewRequirementContext(event.target.value)}
@@ -1430,7 +1633,16 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 >
                   <MenuItem value="laboral">{getAmbitoLabel("laboral")}</MenuItem>
                   <MenuItem value="personal">{getAmbitoLabel("personal")}</MenuItem>
-                </TextField>
+                </TextField></>)}
+                <TextField
+                  label="Solicitante"
+                  value={newRequirementContext}
+                  onChange={(event) => setNewRequirementContext(event.target.value)}
+                  disabled={creatingRequirement}
+                />
+                <Alert severity="info" sx={{ py: 0.5 }}>
+                  Se creará como: {getAmbitoLabel(activeAmbito)}
+                </Alert>
                 {createRequirementError && <Alert severity="error">{createRequirementError}</Alert>}
                 <Stack direction="row" spacing={1}>
                   <Button variant="contained" onClick={() => void handleCreateRequirement()} disabled={creatingRequirement}>
@@ -1444,7 +1656,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       setCreateRequirementError(null);
                       setNewRequirementDescription("");
                       setNewRequirementContext("");
-                      setNewRequirementAmbito("laboral");
                     }}
                     disabled={creatingRequirement}
                   >
@@ -1457,75 +1668,150 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
           {error && <Alert severity="error">{error}</Alert>}
 
-          <Box sx={{ width: "100%", maxWidth: 560 }}>
-            <Paper variant="outlined" sx={{ overflow: "hidden" }}>
-              <Tabs
-                value={stateFilter}
-                onChange={(_, value: FlowFilter) => setStateFilter(value)}
-                variant="fullWidth"
-                aria-label="Filtros de estado"
-                sx={{
-                  minHeight: 64,
-                  "& .MuiTabs-indicator": {
-                    height: 3,
-                  },
-                }}
-              >
-                {flowFilterOptions.map((option) => {
-                  const count = option.value !== "all" ? (currentCounts[option.value] ?? 0) : null;
-                  const filterToken =
-                    option.value === "active"
-                      ? theme.palette.status.active
-                      : option.value === "waiting"
-                        ? theme.palette.status.waiting
-                        : option.value === "cancelled"
-                          ? theme.palette.status.cancelled
-                        : option.value === "finalized"
-                          ? theme.palette.status.finalized
-                          : theme.palette.status.neutral;
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: { xs: "column", lg: "row" },
+              alignItems: { xs: "stretch", lg: "flex-start" },
+              gap: 1.5,
+              width: "100%",
+            }}
+          >
+            <Box sx={{ width: "100%", maxWidth: 560 }}>
+              <Paper variant="outlined" sx={{ overflow: "hidden" }}>
+                <Tabs
+                  value={stateFilter}
+                  onChange={(_, value: FlowFilter) => setStateFilter(value)}
+                  variant="fullWidth"
+                  aria-label="Filtros de estado"
+                  sx={{
+                    minHeight: 64,
+                    "& .MuiTabs-indicator": {
+                      height: 3,
+                    },
+                  }}
+                >
+                  {flowFilterOptions.map((option) => {
+                    const count = option.value !== "all" ? (currentCounts[option.value] ?? 0) : null;
+                    const filterToken =
+                      option.value === "active"
+                        ? theme.palette.status.active
+                        : option.value === "waiting"
+                          ? theme.palette.status.waiting
+                          : option.value === "cancelled"
+                            ? theme.palette.status.cancelled
+                            : option.value === "finalized"
+                              ? theme.palette.status.finalized
+                              : theme.palette.status.neutral;
 
-                  return (
-                    <Tab
-                      key={option.value}
-                      value={option.value}
-                      icon={getFilterIcon(option.value)}
-                      iconPosition="top"
-                      label={count !== null ? `${option.label} (${count})` : option.label}
-                      sx={{
-                        minWidth: 0,
-                        minHeight: 64,
-                        px: 0.75,
-                        py: 0.5,
-                        textTransform: "none",
-                        fontWeight: 500,
-                        fontSize: "0.73rem",
-                        letterSpacing: "0.01em",
-                        lineHeight: 1.15,
-                        whiteSpace: "nowrap",
-                        color: "text.secondary",
-                        "& .MuiTab-iconWrapper": {
-                          marginBottom: 0.25,
-                        },
-                        "& .MuiSvgIcon-root": {
-                          fontSize: 16,
+                    return (
+                      <Tab
+                        key={option.value}
+                        value={option.value}
+                        icon={getFilterIcon(option.value)}
+                        iconPosition="top"
+                        label={count !== null ? `${option.label} (${count})` : option.label}
+                        sx={{
+                          minWidth: 0,
+                          minHeight: 64,
+                          px: 0.75,
+                          py: 0.5,
+                          textTransform: "none",
+                          fontWeight: 500,
+                          fontSize: "0.73rem",
+                          letterSpacing: "0.01em",
+                          lineHeight: 1.15,
+                          whiteSpace: "nowrap",
                           color: "text.secondary",
-                        },
-                        "&.Mui-selected": {
-                          color: filterToken.onContainer,
-                          backgroundColor: filterToken.container,
-                        },
-                        "&.Mui-selected .MuiSvgIcon-root": {
-                          color: filterToken.accent,
-                        },
-                      }}
-                    />
-                  );
-                })}
-              </Tabs>
-            </Paper>
+                          "& .MuiTab-iconWrapper": {
+                            marginBottom: 0.25,
+                          },
+                          "& .MuiSvgIcon-root": {
+                            fontSize: 16,
+                            color: "text.secondary",
+                          },
+                          "&.Mui-selected": {
+                            color: filterToken.onContainer,
+                            backgroundColor: filterToken.container,
+                          },
+                          "&.Mui-selected .MuiSvgIcon-root": {
+                            color: filterToken.accent,
+                          },
+                        }}
+                      />
+                    );
+                  })}
+                </Tabs>
+              </Paper>
+            </Box>
+
+            <Box
+              sx={{
+                width: { xs: "100%", sm: 260 },
+                maxWidth: { xs: "100%", sm: 260 },
+                ml: { lg: "auto" },
+                flexShrink: 0,
+              }}
+            >
+              <Paper variant="outlined" sx={{ overflow: "hidden" }}>
+                <Tabs
+                  value={activeAmbito}
+                  onChange={(_, value: ActiveAmbitoMode | null) => handleChangeActiveAmbito(value)}
+                  variant="fullWidth"
+                  aria-label="Modo de ámbito"
+                  sx={{
+                    minHeight: 64,
+                    "& .MuiTabs-indicator": {
+                      height: 3,
+                    },
+                  }}
+                >
+                  {activeAmbitoOptions.map((option) => {
+                    const isLaboral = option.value === "laboral";
+                    const accent = isLaboral ? theme.palette.primary : theme.palette.secondary;
+                    return (
+                      <Tab
+                        key={option.value}
+                        value={option.value}
+                        icon={getAmbitoModeIcon(option.value)}
+                        iconPosition="top"
+                        label={option.label}
+                        sx={{
+                          minWidth: 0,
+                          minHeight: 64,
+                          px: 0.75,
+                          py: 0.5,
+                          textTransform: "none",
+                          fontWeight: 500,
+                          fontSize: "0.73rem",
+                          letterSpacing: "0.01em",
+                          lineHeight: 1.15,
+                          whiteSpace: "nowrap",
+                          color: "text.secondary",
+                          "& .MuiTab-iconWrapper": {
+                            marginBottom: 0.25,
+                          },
+                          "& .MuiSvgIcon-root": {
+                            fontSize: 16,
+                            color: "text.secondary",
+                          },
+                          "&.Mui-selected": {
+                            color: accent.main,
+                            backgroundColor: alpha(accent.main, 0.1),
+                          },
+                          "&.Mui-selected .MuiSvgIcon-root": {
+                            color: accent.main,
+                          },
+                        }}
+                      />
+                    );
+                  })}
+                </Tabs>
+              </Paper>
+            </Box>
           </Box>
 
-          <TextField
+          {false && <TextField
             select
             size="small"
             label="Ámbito"
@@ -1538,7 +1824,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 {option.label}
               </MenuItem>
             ))}
-          </TextField>
+          </TextField>}
 
           {isFlowsView && !loading && futureRows.length > 0 && (
             <Paper variant="outlined" sx={{ overflow: "hidden" }}>

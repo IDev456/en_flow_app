@@ -1,12 +1,33 @@
 import type { Ambito, Attachment, StepComment, StepHistoryEntry, StepStatus, TriggerStatus, WorkflowDetail } from "./types";
 
 export const DEFAULT_ACTOR = "sistema";
+export const ACTIVE_AMBITO_STORAGE_KEY = "enflow_active_ambito";
+export const activeAmbitoOptions = [
+  { value: "laboral", label: "Laboral" },
+  { value: "personal", label: "Personal" },
+] as const;
 export const ambitoFilterOptions = [
   { value: "all", label: "Todos" },
   { value: "laboral", label: "Laboral" },
   { value: "personal", label: "Personal" },
   { value: "undefined", label: "Sin definir" },
 ] as const;
+export type ActiveAmbitoMode = (typeof activeAmbitoOptions)[number]["value"];
+
+export function getStoredActiveAmbito(): ActiveAmbitoMode {
+  if (typeof window === "undefined") {
+    return "laboral";
+  }
+  const stored = window.localStorage.getItem(ACTIVE_AMBITO_STORAGE_KEY);
+  return stored === "personal" ? "personal" : "laboral";
+}
+
+export function setStoredActiveAmbito(ambito: ActiveAmbitoMode) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(ACTIVE_AMBITO_STORAGE_KEY, ambito);
+}
 
 export function getAmbitoLabel(ambito: Ambito) {
   if (ambito === "laboral") return "Laboral";
@@ -14,13 +35,8 @@ export function getAmbitoLabel(ambito: Ambito) {
   return "Sin definir";
 }
 
-export function matchesAmbitoFilter(
-  ambito: Ambito,
-  filter: (typeof ambitoFilterOptions)[number]["value"]
-) {
-  if (filter === "all") return true;
-  if (filter === "undefined") return ambito === null;
-  return ambito === filter;
+export function matchesActiveAmbito(ambito: Ambito, activeAmbito: ActiveAmbitoMode) {
+  return ambito === activeAmbito;
 }
 
 const statusPresentationMap: Record<string, { label: string; tone: string }> = {

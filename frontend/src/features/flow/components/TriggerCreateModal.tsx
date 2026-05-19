@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import AddTaskRoundedIcon from "@mui/icons-material/AddTaskRounded";
 import TuneRoundedIcon from "@mui/icons-material/TuneRounded";
-import { Alert, Box, Button, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import { useNavigate } from "react-router-dom";
 
@@ -11,7 +11,7 @@ import { AmbitoChip } from "./AmbitoChip";
 import { DuplicateFlowWarningDialog } from "./DuplicateFlowWarningDialog";
 import { LiveDuplicateSuggestions } from "./LiveDuplicateSuggestions";
 import type { Ambito, QuickCaptureInput, TriggerDetail, WorkflowDetail, WorkflowStartInput } from "../types";
-import { DEFAULT_ACTOR, getAmbitoLabel } from "../utils";
+import { DEFAULT_ACTOR, getStoredActiveAmbito } from "../utils";
 import {
   buildRequirementByWorkflowId,
   findSimilarFlows,
@@ -56,7 +56,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
   const [checkingLiveDuplicates, setCheckingLiveDuplicates] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showOptional, setShowOptional] = useState(false);
-  const [ambito, setAmbito] = useState<Exclude<Ambito, null>>("laboral");
+  const [ambito] = useState<Exclude<Ambito, null>>(() => getStoredActiveAmbito());
   const [duplicateCandidates, setDuplicateCandidates] = useState<DuplicateCandidate[]>([]);
   const [liveDuplicateCandidates, setLiveDuplicateCandidates] = useState<DuplicateCandidate[]>([]);
   const [pendingCreation, setPendingCreation] = useState<PendingCreation | null>(null);
@@ -335,10 +335,12 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
               </Alert>
             )}
             {!isLinkedCapture && (
-              <TextField select label="Ámbito *" value={ambito} onChange={(event) => setAmbito(event.target.value as Exclude<Ambito, null>)}>
-                <MenuItem value="laboral">{getAmbitoLabel("laboral")}</MenuItem>
-                <MenuItem value="personal">{getAmbitoLabel("personal")}</MenuItem>
-              </TextField>
+              <Alert severity="info" sx={{ py: 0.5 }}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
+                  <Typography component="span">Se creará como:</Typography>
+                  <AmbitoChip ambito={ambito} />
+                </Stack>
+              </Alert>
             )}
             <TextField
               autoFocus

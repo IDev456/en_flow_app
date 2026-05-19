@@ -165,8 +165,8 @@ export type TriggerCreateInput = {
 };
 
 export type TriggerUpdateInput = {
-  solicitante: string | null;
-  descripcion: string | null;
+  solicitante?: string | null;
+  descripcion?: string | null;
   tipo?: string | null;
   ambito?: Ambito;
   propagate_ambito?: boolean;
