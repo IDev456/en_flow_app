@@ -1,7 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import AddTaskRoundedIcon from "@mui/icons-material/AddTaskRounded";
 import TuneRoundedIcon from "@mui/icons-material/TuneRounded";
-import { Alert, Box, Button, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography } from "@mui/material";
+import {
+  Alert,
+  Box,
+  Button,
+  Collapse,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Stack,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
+} from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import { useNavigate } from "react-router-dom";
 
@@ -26,7 +40,6 @@ type TriggerCreateModalProps = {
   onClose: () => void;
   defaultRequirementId?: string;
   defaultRequirementLabel?: string;
-  defaultAmbito?: "laboral" | "personal";
 };
 
 type DuplicateCatalog = {
@@ -47,7 +60,7 @@ type PendingCreation =
       payload: WorkflowStartInput;
     };
 
-export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequirementLabel, defaultAmbito }: TriggerCreateModalProps) {
+export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequirementLabel }: TriggerCreateModalProps) {
   const [title, setTitle] = useState("");
   const [detail, setDetail] = useState("");
   const [assignee, setAssignee] = useState("");
@@ -57,7 +70,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
   const [checkingLiveDuplicates, setCheckingLiveDuplicates] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showOptional, setShowOptional] = useState(false);
-  const [ambito] = useState<Exclude<Ambito, null>>(() => defaultAmbito ?? getStoredActiveAmbito());
+  const [ambito, setAmbito] = useState<Exclude<Ambito, null>>(() => getStoredActiveAmbito());
   const [duplicateCandidates, setDuplicateCandidates] = useState<DuplicateCandidate[]>([]);
   const [liveDuplicateCandidates, setLiveDuplicateCandidates] = useState<DuplicateCandidate[]>([]);
   const [pendingCreation, setPendingCreation] = useState<PendingCreation | null>(null);
@@ -150,7 +163,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
         workflowObjective: creation.payload.objetivo_final,
         requirementId: creation.requirementId,
         requirementLabel: creation.requirementLabel,
-        reminderAt: creation.payload.primer_paso.fecha_vencimiento ?? creation.payload.primer_paso.fecha_ejecucion_estimada ?? null,
+        reminderAt: creation.payload.primer_paso.fecha_vencimiento ?? null,
         ambito: creation.payload.ambito ?? null,
       };
     }
@@ -158,7 +171,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
     return {
       taskName: creation.payload.titulo,
       taskDescription: creation.payload.detalle,
-      reminderAt: creation.payload.fecha_ejecucion_estimada ?? creation.payload.fecha_vencimiento ?? null,
+      reminderAt: creation.payload.fecha_ejecucion_estimada ?? null,
       ambito: creation.payload.ambito,
     };
   }
@@ -230,7 +243,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [title, detail, executionDate, isLinkedCapture, linkedRequirementAmbito, defaultRequirementId, linkedRequirementLabel]);
+  }, [title, detail, executionDate, ambito, isLinkedCapture, linkedRequirementAmbito, defaultRequirementId, linkedRequirementLabel]);
 
   async function performCreate(creation: PendingCreation) {
     try {
@@ -348,12 +361,28 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
               </Alert>
             )}
             {!isLinkedCapture && (
-              <Alert severity="info" sx={{ py: 0.5 }}>
-                <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
-                  <Typography component="span">Se creará como:</Typography>
-                  <AmbitoChip ambito={ambito} />
-                </Stack>
-              </Alert>
+              <Stack spacing={1}>
+                <ToggleButtonGroup
+                  exclusive
+                  size="small"
+                  value={ambito}
+                  onChange={(_, value: Exclude<Ambito, null> | null) => {
+                    if (!value) return;
+                    setAmbito(value);
+                  }}
+                  sx={{ alignSelf: "flex-start" }}
+                  aria-label="Ambito de la captura"
+                >
+                  <ToggleButton value="laboral">Laboral</ToggleButton>
+                  <ToggleButton value="personal">Personal</ToggleButton>
+                </ToggleButtonGroup>
+                <Alert severity="info" sx={{ py: 0.5 }}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
+                    <Typography component="span">Se creará como:</Typography>
+                    <AmbitoChip ambito={ambito} />
+                  </Stack>
+                </Alert>
+              </Stack>
             )}
             <TextField
               autoFocus
@@ -373,7 +402,12 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
               onOpenExisting={handleOpenExistingFromSuggestions}
             />
 
-            <Button variant="text" color="inherit" onClick={() => setShowOptional((current) => !current)} sx={{ alignSelf: "flex-start", px: 0.5 }}>
+            <Button
+              variant="text"
+              color="inherit"
+              onClick={() => setShowOptional((current) => !current)}
+              sx={{ alignSelf: "flex-start", px: 0.5 }}
+            >
               <TuneRoundedIcon sx={{ fontSize: 16, mr: 0.6 }} />
               {showOptional ? "Ocultar datos opcionales" : "Agregar datos opcionales"}
             </Button>

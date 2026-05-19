@@ -78,7 +78,6 @@ function AppShell({ mode, onToggleMode }: AppShellProps) {
     nextParams.delete("modal");
     nextParams.delete("requirementId");
     nextParams.delete("requirementLabel");
-    nextParams.delete("defaultAmbito");
     const nextSearch = nextParams.toString();
     navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ""}`);
   }
@@ -93,7 +92,6 @@ function AppShell({ mode, onToggleMode }: AppShellProps) {
           onClose={closeCreateModal}
           defaultRequirementId={captureRequirementId}
           defaultRequirementLabel={captureRequirementLabel}
-          defaultAmbito={params.get("defaultAmbito") === "personal" ? "personal" : params.get("defaultAmbito") === "laboral" ? "laboral" : undefined}
         />
       )}
     </DashboardLayout>

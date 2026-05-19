@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type FocusEvent } from "react";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
-import ArrowDropDownRoundedIcon from "@mui/icons-material/ArrowDropDownRounded";
 import BoltRoundedIcon from "@mui/icons-material/BoltRounded";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
@@ -26,7 +25,6 @@ import {
   Box,
   ButtonBase,
   Button,
-  ButtonGroup,
   Chip,
   Collapse,
   LinearProgress,
@@ -359,7 +357,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [requirementToastMessage, setRequirementToastMessage] = useState<string | null>(null);
   const [flowToastOpen, setFlowToastOpen] = useState(false);
   const [flowToastMessage, setFlowToastMessage] = useState<string | null>(null);
-  const [captureMenuAnchor, setCaptureMenuAnchor] = useState<HTMLElement | null>(null);
   const [cancellingFlowId, setCancellingFlowId] = useState<string | null>(null);
   const [reactivatingFlowId, setReactivatingFlowId] = useState<string | null>(null);
   const [deletingFlowId, setDeletingFlowId] = useState<string | null>(null);
@@ -848,24 +845,10 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     }
   }
 
-  function openCaptureModal(ambitoOverride?: ActiveAmbitoMode) {
+  function openCaptureModal() {
     const nextParams = new URLSearchParams(location.search);
     nextParams.set("modal", "capture");
-    nextParams.set("defaultAmbito", ambitoOverride ?? activeAmbito);
     navigate(`${location.pathname}?${nextParams.toString()}`);
-  }
-
-  function handleOpenCaptureMenu(event: React.MouseEvent<HTMLElement>) {
-    setCaptureMenuAnchor(event.currentTarget);
-  }
-
-  function handleCloseCaptureMenu() {
-    setCaptureMenuAnchor(null);
-  }
-
-  function handleCaptureAs(ambito: ActiveAmbitoMode) {
-    handleCloseCaptureMenu();
-    openCaptureModal(ambito);
   }
 
   const isFlowsView = viewMode === "flows";
@@ -1453,45 +1436,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             </Tooltip>
 
             {isFlowsView ? (
-              <>
-                <ButtonGroup variant="contained" aria-label="Capturar tarea por ámbito">
-                  <Button startIcon={<AddRoundedIcon />} onClick={() => openCaptureModal()}>
-                    Capturar tarea
-                  </Button>
-                  <Button
-                    size="small"
-                    aria-label="Elegir ámbito de captura"
-                    aria-controls={captureMenuAnchor ? "capture-ambito-menu" : undefined}
-                    aria-expanded={captureMenuAnchor ? "true" : undefined}
-                    aria-haspopup="menu"
-                    onClick={handleOpenCaptureMenu}
-                    sx={{ minWidth: 42, px: 0.5 }}
-                  >
-                    <ArrowDropDownRoundedIcon />
-                  </Button>
-                </ButtonGroup>
-                <Menu
-                  id="capture-ambito-menu"
-                  anchorEl={captureMenuAnchor}
-                  open={Boolean(captureMenuAnchor)}
-                  onClose={handleCloseCaptureMenu}
-                  anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                  transformOrigin={{ vertical: "top", horizontal: "right" }}
-                >
-                  <MenuItem onClick={() => handleCaptureAs("laboral")}>
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                      <WorkOutlineRoundedIcon sx={{ fontSize: 18, color: "text.secondary" }} />
-                      Capturar como Laboral
-                    </Box>
-                  </MenuItem>
-                  <MenuItem onClick={() => handleCaptureAs("personal")}>
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                      <PersonOutlineRoundedIcon sx={{ fontSize: 18, color: "text.secondary" }} />
-                      Capturar como Personal
-                    </Box>
-                  </MenuItem>
-                </Menu>
-              </>
+              <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={openCaptureModal}>
+                Capturar tarea
+              </Button>
             ) : (
               <Button
                 variant="contained"
