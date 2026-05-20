@@ -193,6 +193,17 @@ function canEditStepName(step: Step) {
   return ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado);
 }
 
+function isEditableEventTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+
+  return (
+    target.tagName === "INPUT" ||
+    target.tagName === "TEXTAREA" ||
+    target.isContentEditable ||
+    Boolean(target.closest("input, textarea, [contenteditable='true']"))
+  );
+}
+
 type StepNameEditorProps = {
   step: Step;
   onRenameStep?: (step: Step, nextName: string) => Promise<void>;
@@ -263,6 +274,8 @@ function StepNameEditor({ step, onRenameStep, onEditingChange, dense = false }: 
   }
 
   function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    event.stopPropagation();
+
     if (event.key === "Enter") {
       event.preventDefault();
       void handleSave();
@@ -518,6 +531,8 @@ function VerticalWorkflowGraph({
                   aria-label={`Seleccionar tarea ${step.nombre}`}
                   onClick={() => onStepSelect(step.id)}
                   onKeyDown={(event) => {
+                    if (isEditableEventTarget(event.target)) return;
+
                     if (event.key !== "Enter" && event.key !== " ") return;
                     event.preventDefault();
                     onStepSelect(step.id);
@@ -638,6 +653,8 @@ function GitLogWorkflowGraph({
               aria-label={`Seleccionar tarea ${step.nombre}`}
               onClick={() => onStepSelect(step.id)}
               onKeyDown={(event) => {
+                if (isEditableEventTarget(event.target)) return;
+
                 if (event.key !== "Enter" && event.key !== " ") return;
                 event.preventDefault();
                 onStepSelect(step.id);
