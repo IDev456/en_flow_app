@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
+import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
+import ReplayRoundedIcon from "@mui/icons-material/ReplayRounded";
 import {
   Alert,
   Box,
@@ -23,7 +25,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
-import { Link as RouterLink, useLocation, useParams } from "react-router-dom";
+import { Link as RouterLink, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { useToastContext } from "../../../components/Toast";
 
@@ -32,11 +34,13 @@ import {
   cancelWorkflow,
   completeStep,
   createRequirementFromFlow,
+  deleteWorkflow,
   getStepComments,
   getWorkflow,
   getStepHistory,
   linkWorkflowRequirement,
   listTriggers,
+  reactivateWorkflow,
   registerExternalEvent,
   resolveExternalResponse,
   unlinkWorkflowRequirement,
@@ -65,6 +69,7 @@ import { buildJournalItems, DEFAULT_ACTOR, getAmbitoLabel } from "../utils";
 export function WorkflowDetailPage() {
   const { workflowId = "" } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const { showToast } = useToastContext();
   const initialToastMessage = (location.state as { toast?: string } | null)?.toast ?? null;
   const [workflow, setWorkflow] = useState<WorkflowDetail | null>(null);
@@ -88,6 +93,8 @@ export function WorkflowDetailPage() {
   const [creatingRequirement, setCreatingRequirement] = useState(false);
   const [unlinkingRequirementId, setUnlinkingRequirementId] = useState<string | null>(null);
   const [cancellingFlow, setCancellingFlow] = useState(false);
+  const [reactivatingFlow, setReactivatingFlow] = useState(false);
+  const [deletingFlow, setDeletingFlow] = useState(false);
   const [toastOpen, setToastOpen] = useState(Boolean(initialToastMessage));
   const [toastMessage, setToastMessage] = useState<string | null>(initialToastMessage);
   const [workflowAmbitoDraft, setWorkflowAmbitoDraft] = useState<Ambito>(null);
@@ -544,6 +551,55 @@ export function WorkflowDetailPage() {
     }
   }
 
+  async function handleReactivateCurrentFlow() {
+    if (!workflow || workflow.estado !== "cancelado") return;
+
+    const currentTask =
+      workflow.steps.find((item) => ["activo", "espera", "problema", "esperando_respuesta"].includes(item.estado))?.nombre?.trim() ||
+      workflow.objetivo_final?.trim() ||
+      "Flow sin tarea actual";
+
+    const confirmed = window.confirm(
+      `Reactivar este flow?\n\n${currentTask}\n\nEl flow volvera a la operacion activa con sus tareas y proyectos vinculados intactos.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setReactivatingFlow(true);
+      await reactivateWorkflow(workflow.id);
+      await loadWorkflow(selectedStepId ?? undefined);
+      setToastMessage("Flow reactivado.");
+      setToastOpen(true);
+      showToast("Flow reactivado.", "success");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudo reactivar el flow";
+      showToast(message, "error");
+    } finally {
+      setReactivatingFlow(false);
+    }
+  }
+
+  async function handleDeleteCurrentFlow() {
+    if (!workflow || !["cancelado", "finalizado"].includes(workflow.estado)) return;
+
+    const confirmed = window.confirm(
+      "Eliminar este flow?\n\nEsta accion eliminara el flow, sus tareas, comentarios, historial, eventos externos y vinculos con proyectos.\n\nEsta accion no se puede deshacer."
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeletingFlow(true);
+      await deleteWorkflow(workflow.id);
+      showToast("Flow eliminado.", "success");
+      navigate("/flows");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudo eliminar el flow";
+      showToast(message, "error");
+    } finally {
+      setDeletingFlow(false);
+    }
+  }
+
   if (loading) {
     return (
       <Stack direction="row" spacing={1.5} sx={{ py: 8, alignItems: "center", justifyContent: "center" }}>
@@ -564,6 +620,8 @@ export function WorkflowDetailPage() {
   const selectedStep: Step | null = workflow.steps.find((step) => step.id === selectedStepId) ?? null;
   const isWorkflowOperationalClosed = workflow.estado === "cancelado" || workflow.estado === "finalizado";
   const canCancelCurrent = ["en_proceso", "esperando_respuesta", "en_espera", "con_problema", "pendiente"].includes(workflow.estado);
+  const canReactivateCurrent = workflow.estado === "cancelado";
+  const canDeleteCurrent = ["cancelado", "finalizado"].includes(workflow.estado);
   const linkedRequirementIds = new Set([...(workflow.requirement_ids ?? []), ...(workflow.trigger_id ? [workflow.trigger_id] : [])]);
   const linkedRequirements = requirements.filter(
     (item) => linkedRequirementIds.has(item.id) || item.workflow_ids.includes(workflow.id)
@@ -781,7 +839,7 @@ export function WorkflowDetailPage() {
                 onRenameStep={isWorkflowOperationalClosed ? undefined : handleRenameStep}
               />
 
-              {canCancelCurrent && (
+              {(canCancelCurrent || canReactivateCurrent || canDeleteCurrent) && (
                 <>
                   <Divider />
                   <Stack
@@ -797,23 +855,54 @@ export function WorkflowDetailPage() {
                         Acciones del flow
                       </Typography>
                       <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>
-                        Cancelar el flow detiene su operaci&oacute;n, pero no modifica el proyecto asociado.
+                        Gestioná el estado del flow sin perder tareas, registros ni proyectos vinculados.
                       </Typography>
                     </Box>
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      color="error"
-                      startIcon={<CancelOutlinedIcon fontSize="small" />}
-                      onClick={() => void handleCancelCurrentFlow()}
-                      disabled={cancellingFlow}
-                      sx={{
-                        alignSelf: { xs: "stretch", md: "center" },
-                        px: 1.5,
-                      }}
+                    <Stack
+                      direction={{ xs: "column", sm: "row" }}
+                      spacing={1}
+                      sx={{ alignSelf: { xs: "stretch", md: "center" }, width: { xs: "100%", md: "auto" } }}
                     >
-                      {cancellingFlow ? "Cancelando..." : "Cancelar flow"}
-                    </Button>
+                      {canCancelCurrent && (
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          color="error"
+                          startIcon={<CancelOutlinedIcon fontSize="small" />}
+                          onClick={() => void handleCancelCurrentFlow()}
+                          disabled={cancellingFlow || reactivatingFlow || deletingFlow}
+                          sx={{ px: 1.5 }}
+                        >
+                          {cancellingFlow ? "Cancelando..." : "Cancelar flow"}
+                        </Button>
+                      )}
+                      {canReactivateCurrent && (
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          color="inherit"
+                          startIcon={<ReplayRoundedIcon fontSize="small" />}
+                          onClick={() => void handleReactivateCurrentFlow()}
+                          disabled={reactivatingFlow || cancellingFlow || deletingFlow}
+                          sx={{ px: 1.5 }}
+                        >
+                          {reactivatingFlow ? "Reactivando..." : "Reactivar flow"}
+                        </Button>
+                      )}
+                      {canDeleteCurrent && (
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          color="error"
+                          startIcon={<DeleteOutlineRoundedIcon fontSize="small" />}
+                          onClick={() => void handleDeleteCurrentFlow()}
+                          disabled={deletingFlow || cancellingFlow || reactivatingFlow}
+                          sx={{ px: 1.5 }}
+                        >
+                          {deletingFlow ? "Eliminando..." : "Eliminar flow"}
+                        </Button>
+                      )}
+                    </Stack>
                   </Stack>
                 </>
               )}

@@ -10,6 +10,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  MenuItem,
   Stack,
   TextField,
   ToggleButton,
@@ -21,11 +22,19 @@ import { useNavigate } from "react-router-dom";
 
 import { useToastContext } from "../../../components/Toast";
 import { getWorkflow, listTriggers, listWorkflows, quickCaptureFlow, startWorkflow } from "../api";
+import { ReminderShortcutButtons } from "./ReminderShortcutButtons";
 import { AmbitoChip } from "./AmbitoChip";
 import { DuplicateFlowWarningDialog } from "./DuplicateFlowWarningDialog";
 import { LiveDuplicateSuggestions } from "./LiveDuplicateSuggestions";
 import type { Ambito, QuickCaptureInput, TriggerDetail, WorkflowDetail, WorkflowStartInput } from "../types";
-import { DEFAULT_ACTOR, getAmbitoLabel, getStoredActiveAmbito } from "../utils";
+import {
+  DEFAULT_ACTOR,
+  getAmbitoLabel,
+  getReminderDateError,
+  getStoredActiveAmbito,
+  getTodayLocalDateInput,
+  toCalendarDateUtcIso,
+} from "../utils";
 import {
   buildRequirementByWorkflowId,
   findSimilarFlows,
@@ -66,6 +75,9 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
   const [detail, setDetail] = useState("");
   const [assignee, setAssignee] = useState("");
   const [executionDate, setExecutionDate] = useState("");
+  const [selectedRequirementId, setSelectedRequirementId] = useState("");
+  const [availableRequirements, setAvailableRequirements] = useState<TriggerDetail[]>([]);
+  const [loadingRequirements, setLoadingRequirements] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
   const [checkingLiveDuplicates, setCheckingLiveDuplicates] = useState(false);
@@ -83,7 +95,14 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
   const titleInputRef = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
   const canSubmit = title.trim().length >= 3;
   const linkedRequirementLabel = defaultRequirementLabel?.trim() || null;
-  const isLinkedCapture = Boolean(defaultRequirementId);
+  const selectedRequirement =
+    !defaultRequirementId && selectedRequirementId
+      ? availableRequirements.find((requirement) => requirement.id === selectedRequirementId) ?? null
+      : null;
+  const effectiveRequirementId = defaultRequirementId ?? selectedRequirement?.id ?? null;
+  const effectiveRequirementLabel = linkedRequirementLabel ?? selectedRequirement?.descripcion?.trim() ?? null;
+  const effectiveRequirementAmbito = defaultRequirementId ? linkedRequirementAmbito : (selectedRequirement?.ambito ?? null);
+  const isLinkedCapture = Boolean(effectiveRequirementId);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -95,8 +114,48 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
     };
   }, []);
 
+  useEffect(() => {
+    if (defaultRequirementId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        setLoadingRequirements(true);
+        const requirements = await listTriggers();
+        if (cancelled) return;
+        setAvailableRequirements(requirements);
+      } catch (err) {
+        if (cancelled) return;
+        console.warn("No se pudieron cargar los proyectos para la captura rápida.", err);
+        setAvailableRequirements([]);
+      } finally {
+        if (!cancelled) {
+          setLoadingRequirements(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [defaultRequirementId]);
+
+  useEffect(() => {
+    if (defaultRequirementId || !selectedRequirementId) {
+      return;
+    }
+
+    const selected = availableRequirements.find((requirement) => requirement.id === selectedRequirementId);
+    if (!selected || selected.ambito !== ambito) {
+      setSelectedRequirementId("");
+    }
+  }, [ambito, availableRequirements, defaultRequirementId, selectedRequirementId]);
+
   function handleClose() {
-    if (title.trim() || detail.trim() || assignee.trim() || executionDate) {
+    if (title.trim() || detail.trim() || assignee.trim() || executionDate || selectedRequirementId) {
       if (!window.confirm("¿Cerrar sin guardar? Se perderán los datos ingresados.")) {
         return;
       }
@@ -124,20 +183,23 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
   }
 
   function buildCreation(): PendingCreation {
-    if (defaultRequirementId) {
+    const selectedDateIso = toCalendarDateUtcIso(executionDate);
+
+    if (effectiveRequirementId) {
       return {
         kind: "linked",
-        requirementId: defaultRequirementId,
-        requirementLabel: linkedRequirementLabel,
+        requirementId: effectiveRequirementId,
+        requirementLabel: effectiveRequirementLabel,
         payload: {
           objetivo_final: title.trim(),
           resolucion_esperada: "Flujo completado con validacion final",
-          ambito: linkedRequirementAmbito,
+          ambito: effectiveRequirementAmbito,
           primer_paso: {
             nombre: title.trim(),
             descripcion: detail.trim() || null,
             asignado_a: assignee.trim() || DEFAULT_ACTOR,
-            fecha_vencimiento: executionDate ? `${executionDate}T00:00:00Z` : null,
+            fecha_vencimiento: selectedDateIso,
+            fecha_ejecucion_estimada: selectedDateIso,
           },
         },
       };
@@ -149,7 +211,8 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
         titulo: title.trim(),
         detalle: detail.trim() || null,
         asignado_a: assignee.trim() || DEFAULT_ACTOR,
-        fecha_ejecucion_estimada: executionDate ? `${executionDate}T00:00:00Z` : null,
+        fecha_vencimiento: selectedDateIso,
+        fecha_ejecucion_estimada: selectedDateIso,
         creado_por: DEFAULT_ACTOR,
         ambito,
       },
@@ -197,7 +260,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
     const normalizedInput = normalizeText(inputText);
     const significantTokens = getSignificantTokens(inputText);
 
-    if (significantTokens.length === 0 || normalizedInput.length < 3 || (isLinkedCapture && linkedRequirementAmbito === null)) {
+    if (significantTokens.length === 0 || normalizedInput.length < 3 || (isLinkedCapture && effectiveRequirementAmbito === null)) {
       liveRequestIdRef.current += 1;
       setCheckingLiveDuplicates(false);
       setLiveDuplicateCandidates([]);
@@ -219,10 +282,10 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
             taskName: title.trim(),
             taskDescription: detail.trim() || null,
             workflowObjective: isLinkedCapture ? title.trim() : null,
-            requirementId: defaultRequirementId ?? null,
-            requirementLabel: linkedRequirementLabel,
-            reminderAt: executionDate ? `${executionDate}T00:00:00Z` : null,
-            ambito: isLinkedCapture ? linkedRequirementAmbito : ambito,
+            requirementId: effectiveRequirementId,
+            requirementLabel: effectiveRequirementLabel,
+            reminderAt: toCalendarDateUtcIso(executionDate),
+            ambito: isLinkedCapture ? effectiveRequirementAmbito : ambito,
           },
           catalog.workflowsById,
           catalog.requirementByWorkflowId
@@ -244,7 +307,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [title, detail, executionDate, ambito, isLinkedCapture, linkedRequirementAmbito, defaultRequirementId, linkedRequirementLabel]);
+  }, [title, detail, executionDate, ambito, isLinkedCapture, effectiveRequirementAmbito, effectiveRequirementId, effectiveRequirementLabel]);
 
   async function performCreate(creation: PendingCreation) {
     try {
@@ -305,7 +368,12 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
       setError("Escribe la tarea principal para capturar el flow.");
       return;
     }
-    if (isLinkedCapture && linkedRequirementAmbito === null) {
+    const reminderError = getReminderDateError(executionDate);
+    if (reminderError) {
+      setError(reminderError);
+      return;
+    }
+    if (isLinkedCapture && effectiveRequirementAmbito === null) {
       setError("Debes definir el ámbito del proyecto antes de crear un flow vinculado.");
       return;
     }
@@ -353,15 +421,15 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
 
         <DialogContent dividers sx={{ borderColor: "outlineVariant" }}>
           <Stack spacing={2.5}>
-            {isLinkedCapture && linkedRequirementLabel && (
-              <Alert severity={linkedRequirementAmbito ? "info" : "warning"} sx={{ py: 0.5 }}>
+            {isLinkedCapture && effectiveRequirementLabel && (
+              <Alert severity={effectiveRequirementAmbito ? "info" : "warning"} sx={{ py: 0.5 }}>
                 <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
-                  <Typography component="span">Proyecto vinculado: {linkedRequirementLabel}</Typography>
-                  <AmbitoChip ambito={linkedRequirementAmbito} />
+                  <Typography component="span">Proyecto vinculado: {effectiveRequirementLabel}</Typography>
+                  <AmbitoChip ambito={effectiveRequirementAmbito} />
                 </Stack>
               </Alert>
             )}
-            {!isLinkedCapture && (
+            {!defaultRequirementId && (
               <Stack spacing={1}>
                 <ToggleButtonGroup
                   exclusive
@@ -394,7 +462,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               placeholder="Ej. Pedir layout actualizado al proveedor"
-              disabled={isLinkedCapture && linkedRequirementAmbito === null}
+              disabled={isLinkedCapture && effectiveRequirementAmbito === null}
             />
 
             <LiveDuplicateSuggestions
@@ -427,16 +495,48 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
                   <Typography variant="subtitle2" color="text.secondary">
                     Datos opcionales
                   </Typography>
+                  {!defaultRequirementId && (
+                    <TextField
+                      select
+                      label="Asociar a proyecto existente"
+                      value={selectedRequirementId}
+                      onChange={(event) => setSelectedRequirementId(event.target.value)}
+                      disabled={loadingRequirements}
+                      helperText={
+                        loadingRequirements
+                          ? "Cargando proyectos..."
+                          : "Opcional. Solo se muestran proyectos del ámbito activo."
+                      }
+                    >
+                      <MenuItem value="">Sin proyecto asociado</MenuItem>
+                      {availableRequirements
+                        .filter((requirement) => requirement.ambito === ambito)
+                        .map((requirement) => (
+                          <MenuItem key={requirement.id} value={requirement.id}>
+                            {requirement.descripcion?.trim() || `Proyecto ${requirement.id.slice(0, 8)}`}
+                          </MenuItem>
+                        ))}
+                    </TextField>
+                  )}
                   <TextField label="Detalle" multiline minRows={2} value={detail} onChange={(event) => setDetail(event.target.value)} />
                   <TextField label="Asignado a" value={assignee} onChange={(event) => setAssignee(event.target.value)} />
                   <TextField
-                    label="Fecha"
+                    label="Recordatorio"
                     type="date"
                     value={executionDate}
-                    onChange={(event) => setExecutionDate(event.target.value)}
+                    onChange={(event) => {
+                      setExecutionDate(event.target.value);
+                      if (error) {
+                        setError(null);
+                      }
+                    }}
                     helperText="Posible fecha de ejecución"
-                    slotProps={{ inputLabel: { shrink: true } }}
+                    slotProps={{
+                      inputLabel: { shrink: true },
+                      htmlInput: { min: getTodayLocalDateInput() },
+                    }}
                   />
+                  <ReminderShortcutButtons onSelect={setExecutionDate} />
                 </Stack>
               </Box>
             </Collapse>
@@ -456,7 +556,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
             <Button
               variant="contained"
               onClick={() => void handleSubmit()}
-              disabled={submitting || checkingDuplicates || !canSubmit || (isLinkedCapture && linkedRequirementAmbito === null)}
+              disabled={submitting || checkingDuplicates || !canSubmit || (isLinkedCapture && effectiveRequirementAmbito === null)}
               startIcon={<AddTaskRoundedIcon />}
             >
               {checkingDuplicates ? "Revisando..." : submitting ? "Guardando..." : "Capturar tarea"}

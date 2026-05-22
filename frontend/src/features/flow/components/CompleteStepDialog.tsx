@@ -13,8 +13,9 @@ import {
   Typography,
 } from "@mui/material";
 
+import { ReminderShortcutButtons } from "./ReminderShortcutButtons";
 import type { Step, StepCompleteInput, StepTransitionType } from "../types";
-import { DEFAULT_ACTOR } from "../utils";
+import { DEFAULT_ACTOR, getReminderDateError, getTodayLocalDateInput, toCalendarDateUtcIso } from "../utils";
 
 type CompleteStepDialogProps = {
   open: boolean;
@@ -52,6 +53,14 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
       return;
     }
 
+    if (transition === "next_task") {
+      const reminderError = getReminderDateError(nextTaskReminderDate);
+      if (reminderError) {
+        setError(reminderError);
+        return;
+      }
+    }
+
     try {
       setSubmitting(true);
       setError(null);
@@ -66,7 +75,7 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
           transition === "next_task"
             ? {
                 nombre: nextTaskName.trim(),
-                fecha_vencimiento: nextTaskReminderDate ? `${nextTaskReminderDate}T00:00:00Z` : null,
+                fecha_vencimiento: toCalendarDateUtcIso(nextTaskReminderDate),
               }
             : null,
         external_wait: transition === "wait_external" ? { que_se_espera: "Esperando respuesta externa" } : null,
@@ -117,11 +126,20 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
                 label="Recordatorio"
                 type="date"
                 value={nextTaskReminderDate}
-                onChange={(event) => setNextTaskReminderDate(event.target.value)}
+                onChange={(event) => {
+                  setNextTaskReminderDate(event.target.value);
+                  if (error) {
+                    setError(null);
+                  }
+                }}
                 helperText="Fecha recordatorio"
-                slotProps={{ inputLabel: { shrink: true } }}
+                slotProps={{
+                  inputLabel: { shrink: true },
+                  htmlInput: { min: getTodayLocalDateInput() },
+                }}
                 disabled={submitting}
               />
+              <ReminderShortcutButtons onSelect={setNextTaskReminderDate} disabled={submitting} />
             </Stack>
           )}
 

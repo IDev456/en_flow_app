@@ -1,6 +1,6 @@
 import unittest
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from sqlalchemy import create_engine, event, select
@@ -53,6 +53,12 @@ from app.services.workflow_service import WorkflowService
 
 
 OPEN_STEP_STATUSES = {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA, StepStatus.ESPERANDO_RESPUESTA}
+
+
+def start_of_utc_day(offset_days: int = 0) -> datetime:
+    now = datetime.now(timezone.utc)
+    base = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+    return base + timedelta(days=offset_days)
 
 
 def build_linear_template() -> WorkflowTemplatePublic:
@@ -375,6 +381,88 @@ class WorkflowDagTestCase(unittest.TestCase):
 
         self.assertEqual(workflow.ambito, Ambito.LABORAL)
         self.assertTrue(all(step.ambito == Ambito.LABORAL for step in workflow.steps))
+
+    def test_quick_capture_rejects_past_reminder(self) -> None:
+        with self.assertRaises(BusinessRuleError):
+            self.service.quick_capture_flow(
+                QuickCaptureRequest(
+                    titulo="Organizar papeles",
+                    detalle=None,
+                    asignado_a="tester",
+                    fecha_vencimiento=start_of_utc_day(-1),
+                    creado_por="tester",
+                    ambito=Ambito.LABORAL,
+                )
+            )
+
+    def test_start_workflow_rejects_past_first_step_reminder(self) -> None:
+        template = build_linear_template()
+        self.repository._workflow_templates = {template.id: template}  # type: ignore[attr-defined]
+        trigger = self.service.create_trigger(
+            TriggerCreate(
+                solicitante="QA",
+                descripcion="Proyecto laboral",
+                tipo="requerimiento",
+                ambito=Ambito.LABORAL,
+                creado_por="tester",
+                metadata=None,
+            )
+        )
+
+        with self.assertRaises(BusinessRuleError):
+            self.service.start_workflow(
+                trigger.id,
+                WorkflowStartRequest(
+                    workflow_template_id=template.id,
+                    primer_paso=InitialStepOverride(
+                        nombre="Paso inicial",
+                        fecha_vencimiento=start_of_utc_day(-1),
+                    ),
+                ),
+            )
+
+    def test_update_step_date_rejects_past_reminder(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        step = self.service.get_workflow(workflow_id).steps[0]
+
+        with self.assertRaises(BusinessRuleError):
+            self.service.update_step_date(step.id, StepDateUpdate(fecha_vencimiento=start_of_utc_day(-1)))
+
+    def test_complete_step_rejects_past_next_task_reminder(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        step = self.service.get_workflow(workflow_id).steps[0]
+
+        with self.assertRaises(BusinessRuleError):
+            self.service.complete_step(
+                step.id,
+                StepCompletePayload(
+                    usuario="tester",
+                    comentario="Cierre con siguiente tarea",
+                    resultado_cierre="Cierre con siguiente tarea",
+                    observaciones=None,
+                    transition_type=StepTransitionType.NEXT_TASK,
+                    next_task=NextTaskInput(
+                        nombre="Siguiente paso",
+                        fecha_vencimiento=start_of_utc_day(-1),
+                    ),
+                ),
+            )
+
+    def test_today_reminder_is_allowed(self) -> None:
+        workflow = self.service.quick_capture_flow(
+            QuickCaptureRequest(
+                titulo="Organizar papeles",
+                detalle=None,
+                asignado_a="tester",
+                fecha_vencimiento=start_of_utc_day(0),
+                creado_por="tester",
+                ambito=Ambito.LABORAL,
+            )
+        )
+
+        first_step = workflow.steps[0]
+        self.assertIsNotNone(first_step.fecha_vencimiento)
+        self.assertEqual(first_step.fecha_vencimiento.date(), start_of_utc_day(0).date())
 
     def test_create_step_inherits_workflow_ambito(self) -> None:
         workflow_id = self._start_workflow(build_linear_template())

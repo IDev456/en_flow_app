@@ -2,6 +2,7 @@ import type { Ambito, Attachment, StepComment, StepHistoryEntry, StepStatus, Tri
 
 export const DEFAULT_ACTOR = "sistema";
 export const ACTIVE_AMBITO_STORAGE_KEY = "enflow_active_ambito";
+export const REMINDER_PAST_ERROR = "El recordatorio no puede ser una fecha pasada.";
 export const activeAmbitoOptions = [
   { value: "laboral", label: "Laboral" },
   { value: "personal", label: "Personal" },
@@ -116,6 +117,11 @@ function padCalendarPart(value: number) {
   return String(value).padStart(2, "0");
 }
 
+export function formatCalendarDayInput(dayValue: number) {
+  const date = new Date(dayValue * 86400000);
+  return `${date.getUTCFullYear()}-${padCalendarPart(date.getUTCMonth() + 1)}-${padCalendarPart(date.getUTCDate())}`;
+}
+
 function parseCalendarValue(value: string) {
   const matched = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
   if (matched) {
@@ -162,6 +168,38 @@ export function toCalendarDayValue(value: string | null) {
 
   const dayMs = Date.UTC(parsed.year, parsed.month - 1, parsed.day);
   return Math.floor(dayMs / 86400000);
+}
+
+export function toCalendarDateUtcIso(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) {
+    return null;
+  }
+  return `${trimmed}T00:00:00Z`;
+}
+
+export function isPastCalendarDateInput(value: string | null | undefined, baseValue: string | null = null) {
+  const targetDay = toCalendarDayValue(value ?? null);
+  if (targetDay === null) {
+    return false;
+  }
+  const baseDay = toCalendarDayValue(baseValue ?? getTodayLocalDateInput());
+  if (baseDay === null) {
+    return false;
+  }
+  return targetDay < baseDay;
+}
+
+export function getReminderDateError(value: string | null | undefined, baseValue: string | null = null) {
+  return isPastCalendarDateInput(value, baseValue) ? REMINDER_PAST_ERROR : null;
+}
+
+export function getRelativeCalendarDateInput(offsetDays: number, baseValue: string | null = null) {
+  const baseDay = toCalendarDayValue(baseValue ?? getTodayLocalDateInput());
+  if (baseDay === null) {
+    return getTodayLocalDateInput();
+  }
+  return formatCalendarDayInput(baseDay + offsetDays);
 }
 
 export function getCalendarDayDiff(targetValue: string | null, baseValue: string | null = null) {

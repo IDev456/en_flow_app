@@ -1,8 +1,26 @@
-from datetime import datetime
+from datetime import date, datetime, timezone
 from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
+
+
+REMINDER_PAST_ERROR = "El recordatorio no puede ser una fecha pasada."
+
+
+def to_calendar_day(value: datetime | None) -> date | None:
+    if value is None:
+        return None
+    if value.tzinfo is not None:
+        return value.astimezone(timezone.utc).date()
+    return value.date()
+
+
+def is_past_calendar_day(value: datetime | None, today: date | None = None) -> bool:
+    calendar_day = to_calendar_day(value)
+    if calendar_day is None:
+        return False
+    return calendar_day < (today or datetime.now().astimezone().date())
 
 
 class TriggerStatus(StrEnum):

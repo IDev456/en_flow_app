@@ -73,6 +73,7 @@ import {
   formatRelativeCalendarDay,
   getCalendarDayDiff,
   getAmbitoLabel,
+  getReminderDateError,
   getVisibleTriggerStatus,
   getVisibleWorkflowStatus,
   isNoisyAutomaticJournalText,
@@ -81,6 +82,7 @@ import {
   setStoredActiveAmbito,
   getTodayLocalDateInput,
   toCalendarDayValue,
+  toCalendarDateUtcIso,
   type ActiveAmbitoMode,
 } from "../utils";
 
@@ -280,12 +282,6 @@ function toDateSortValue(dateInput: string) {
   return dayValue ?? Number.MAX_SAFE_INTEGER;
 }
 
-function fromDateInputValue(dateInput: string) {
-  const trimmed = dateInput.trim();
-  if (!trimmed) return null;
-  return `${trimmed}T00:00:00Z`;
-}
-
 function getMovementHeatVisual(days: number | null) {
   if (days === null) {
     return null;
@@ -328,14 +324,78 @@ function toQuickFilterValues(search: string) {
   return normalized.split(/\s+/);
 }
 
-type GridToolbarProps = {
-  quickFilterPlaceholder: string;
-  searchOpen: boolean;
-  searchValue: string;
-  onSearchToggle: () => void;
-  onSearchChange: (value: string) => void;
-  onSearchClearOrClose: () => void;
+type FlowGridToolbarProps = {
+  quickFilterPlaceholder?: string;
+  searchOpen?: boolean;
+  searchValue?: string;
+  onSearchToggle?: () => void;
+  onSearchChange?: (value: string) => void;
+  onSearchClearOrClose?: () => void;
 };
+
+function FlowGridToolbar(props: any) {
+  const {
+    quickFilterPlaceholder,
+    searchOpen,
+    searchValue,
+    onSearchToggle,
+    onSearchChange,
+    onSearchClearOrClose,
+  } = props as FlowGridToolbarProps;
+  const resolvedPlaceholder = quickFilterPlaceholder ?? "";
+  const resolvedSearchOpen = searchOpen ?? false;
+  const resolvedSearchValue = searchValue ?? "";
+  const searchIsEmpty = resolvedSearchValue.trim().length === 0;
+
+  return (
+    <Toolbar aria-label="Toolbar del listado" style={{ gap: "6px", justifyContent: "space-between" }}>
+      <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", minWidth: 0 }}>
+        <ToolbarButton aria-label={resolvedSearchOpen ? "Alternar búsqueda" : "Buscar"} onClick={onSearchToggle}>
+          <SearchRoundedIcon fontSize="small" />
+        </ToolbarButton>
+        {resolvedSearchOpen ? (
+          <>
+            <TextField
+              aria-label="Búsqueda rápida"
+              placeholder={resolvedPlaceholder}
+              size="small"
+              fullWidth={false}
+              value={resolvedSearchValue}
+              onChange={(event) => onSearchChange?.(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && searchIsEmpty) {
+                  onSearchClearOrClose?.();
+                }
+              }}
+              sx={{ width: { xs: 180, sm: 280 } }}
+            />
+            <ToolbarButton
+              aria-label={searchIsEmpty ? "Cerrar búsqueda" : "Limpiar búsqueda"}
+              onClick={onSearchClearOrClose}
+            >
+              <CancelOutlinedIcon fontSize="small" />
+            </ToolbarButton>
+          </>
+        ) : null}
+      </Stack>
+
+      <Box sx={{ flex: 1 }} />
+
+      <ColumnsPanelTrigger
+        aria-label="Columnas"
+        render={<ToolbarButton aria-label="Columnas">{<ViewColumnRoundedIcon fontSize="small" />}</ToolbarButton>}
+      />
+      <FilterPanelTrigger
+        aria-label="Filtros"
+        render={<ToolbarButton aria-label="Filtros">{<FilterListRoundedIcon fontSize="small" />}</ToolbarButton>}
+      />
+      <ExportCsv
+        aria-label="Descargar"
+        render={<ToolbarButton aria-label="Descargar CSV">{<DownloadRoundedIcon fontSize="small" />}</ToolbarButton>}
+      />
+    </Toolbar>
+  );
+}
 
 export function TriggerListPage({ defaultView = "requirements", lockView = false, title = "Proyectos" }: TriggerListPageProps) {
   const theme = useTheme();
@@ -441,7 +501,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     return map;
   }, [triggers]);
 
-  const flowCards = useMemo<FlowCardData[]>(() => {
+  const allFlowCards = useMemo<FlowCardData[]>(() => {
     return Object.values(workflowsById)
       .map((workflow) => {
         const linkedRequirements = requirementByWorkflowId[workflow.id] ?? [];
@@ -454,12 +514,17 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
           linkedRequirements,
         };
       })
-      .filter((item) => {
-        if (!matchesActiveAmbito(item.workflow.ambito, activeAmbito)) return false;
+      .filter((item) => matchesActiveAmbito(item.workflow.ambito, activeAmbito));
+  }, [activeAmbito, requirementByWorkflowId, workflowsById]);
+
+  const filteredFlowCards = useMemo(
+    () =>
+      allFlowCards.filter((item) => {
         if (stateFilter === "all") return true;
         return getFlowFilterFromStatus(item.displayStatus) === stateFilter;
-      });
-  }, [activeAmbito, requirementByWorkflowId, stateFilter, workflowsById]);
+      }),
+    [allFlowCards, stateFilter]
+  );
 
   const flowCounts = useMemo(() => {
     return Object.values(workflowsById)
@@ -514,6 +579,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
   const today = getTodayLocalDateInput();
   const todaySortValue = toDateSortValue(today);
+  const flowSearchActive = flowSearchValue.trim().length > 0;
   const resetFilterAction =
     stateFilter !== "all" ? (
       <Button size="small" variant="outlined" color="inherit" onClick={() => setStateFilter("all")}>
@@ -521,7 +587,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       </Button>
     ) : undefined;
   const flowRows = useMemo<FlowGridRow[]>(() => {
-    return flowCards.map((item) => {
+    return allFlowCards.map((item) => {
       const step = item.relevantStep;
       const executionDateInput = toDateInputValue(step?.fecha_vencimiento);
       const stepLabel =
@@ -557,15 +623,24 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         canDelete: canDeleteWorkflow(item.workflow),
       };
     });
-  }, [flowCards, today]);
+  }, [allFlowCards, today]);
+
+  const filteredFlowRows = useMemo(
+    () =>
+      flowRows.filter((row) => {
+        if (stateFilter === "all") return true;
+        return getFlowFilterFromStatus(row.status) === stateFilter;
+      }),
+    [flowRows, stateFilter]
+  );
 
   const mainRows = useMemo(
-    () => flowRows.filter((row) => !row.executionDateInput || row.executionDateInput <= today),
-    [flowRows, today]
+    () => filteredFlowRows.filter((row) => !row.executionDateInput || row.executionDateInput <= today),
+    [filteredFlowRows, today]
   );
   const futureRows = useMemo(
-    () => flowRows.filter((row) => row.executionDateInput && row.executionDateInput > today),
-    [flowRows, today]
+    () => filteredFlowRows.filter((row) => row.executionDateInput && row.executionDateInput > today),
+    [filteredFlowRows, today]
   );
 
   const nearestFutureMs = useMemo(
@@ -607,7 +682,18 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       return;
     }
 
-    const isoValue = fromDateInputValue(nextValue);
+    const reminderError = getReminderDateError(nextValue, today);
+    if (reminderError) {
+      showToast(reminderError, "error");
+      setPendingDates((previous) => {
+        const next = new Map(previous);
+        next.set(row.id, originalValue);
+        return next;
+      });
+      return;
+    }
+
+    const isoValue = toCalendarDateUtcIso(nextValue);
 
     try {
       await updateStepDate(row.stepId, { fecha_vencimiento: isoValue });
@@ -1107,103 +1193,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
           </Typography>
         ),
       },
-      {
-        field: "actions",
-        headerName: "Acciones",
-        width: 172,
-        align: "center",
-        headerAlign: "center",
-        sortable: false,
-        filterable: false,
-        disableColumnMenu: true,
-        renderCell: (params) => {
-          const row = params.row;
-          const menuOpen = flowActionsMenu?.rowId === row.id;
-          const hasMenuOptions = row.canCancel || row.canReactivate || row.canDelete;
-
-          return (
-            <Stack
-              key={`actions-${row.id}`}
-              direction="row"
-              spacing={0.3}
-              sx={{ alignItems: "center" }}
-              onClick={(event) => event.stopPropagation()}
-              onPointerDown={(event) => event.stopPropagation()}
-            >
-              <Button
-                variant="text"
-                size="small"
-                startIcon={<LaunchRoundedIcon fontSize="small" />}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  navigate(`/workflows/${row.id}`);
-                }}
-              >
-                Abrir
-              </Button>
-              <IconButton
-                size="small"
-                color="inherit"
-                disabled={!hasMenuOptions}
-                sx={{ opacity: 0.6, "&:hover": { opacity: 1 } }}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setFlowActionsMenu({ rowId: row.id, anchorEl: event.currentTarget });
-                }}
-              >
-                <MoreVertRoundedIcon fontSize="small" />
-              </IconButton>
-              <Menu
-                anchorEl={menuOpen ? flowActionsMenu.anchorEl : null}
-                open={menuOpen}
-                onClose={() => setFlowActionsMenu(null)}
-                onClick={(event) => event.stopPropagation()}
-              >
-                {row.canCancel ? (
-                  <MenuItem
-                    disabled={Boolean(cancellingFlowId || deletingFlowId || reactivatingFlowId)}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setFlowActionsMenu(null);
-                      void handleCancelFlowAction(row.id);
-                    }}
-                  >
-                    {cancellingFlowId === row.id ? "Cancelando..." : "Cancelar flow"}
-                  </MenuItem>
-                ) : null}
-
-                {row.canReactivate ? (
-                  <MenuItem
-                    disabled={Boolean(reactivatingFlowId || cancellingFlowId || deletingFlowId)}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setFlowActionsMenu(null);
-                      void handleReactivateFlowAction(row.id);
-                    }}
-                  >
-                    {reactivatingFlowId === row.id ? "Reactivando..." : "Reactivar flow"}
-                  </MenuItem>
-                ) : null}
-
-                {row.canDelete ? (
-                  <MenuItem
-                    disabled={Boolean(deletingFlowId || cancellingFlowId || reactivatingFlowId)}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setFlowActionsMenu(null);
-                      void handleDeleteFlowAction(row.id);
-                    }}
-                  >
-                    {deletingFlowId === row.id ? "Eliminando..." : "Eliminar flow"}
-                  </MenuItem>
-                ) : null}
-              </Menu>
-            </Stack>
-          );
-        },
-      },
     ],
-    [cancellingFlowId, deletingFlowId, flowActionsMenu, navigate, pendingDates, reactivatingFlowId, theme.palette.mode, today]
+    [pendingDates, theme.palette.mode, today]
   );
 
   const requirementColumns = useMemo<GridColDef<RequirementGridRow>[]>(
@@ -1350,13 +1341,13 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   );
 
   function GridToolbar({
-    quickFilterPlaceholder,
-    searchOpen,
-    searchValue,
+    quickFilterPlaceholder = "",
+    searchOpen = false,
+    searchValue = "",
     onSearchToggle,
     onSearchChange,
     onSearchClearOrClose,
-  }: GridToolbarProps) {
+  }: FlowGridToolbarProps) {
     const searchIsEmpty = searchValue.trim().length === 0;
 
     return (
@@ -1373,10 +1364,10 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 size="small"
                 fullWidth={false}
                 value={searchValue}
-                onChange={(event) => onSearchChange(event.target.value)}
+                onChange={(event) => onSearchChange?.(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Escape" && searchIsEmpty) {
-                    onSearchClearOrClose();
+                    onSearchClearOrClose?.();
                   }
                 }}
                 sx={{ width: { xs: 180, sm: 280 } }}
@@ -1790,7 +1781,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             </Box>
           </Box>
 
-          {isFlowsView && !loading && futureRows.length > 0 && (
+          {isFlowsView && !loading && !flowSearchActive && futureRows.length > 0 && (
             <Paper variant="outlined" sx={{ overflow: "hidden" }}>
               <Button
                 variant="text"
@@ -1858,7 +1849,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 }}
               >
                 <DataGrid
-                  rows={mainRows}
+                  rows={flowSearchActive ? flowRows : mainRows}
                   columns={flowColumns}
                   rowHeight={62}
                   filterModel={flowFilterModel}
@@ -1869,40 +1860,15 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                     navigate(`/workflows/${params.row.id}`);
                   }}
                   slots={{
-                    toolbar: () => (
-                      <GridToolbar
-                        quickFilterPlaceholder="Buscar flow, tarea o proyecto vinculado..."
-                        searchOpen={flowSearchOpen}
-                        searchValue={flowSearchValue}
-                        onSearchToggle={() => {
-                          if (flowSearchOpen && flowSearchValue.trim().length === 0) {
-                            setFlowSearchOpen(false);
-                            return;
-                          }
-                          setFlowSearchOpen(true);
-                        }}
-                        onSearchChange={(value) => {
-                          setFlowSearchValue(value);
-                          setFlowFilterModel((previous) => ({
-                            ...previous,
-                            quickFilterValues: toQuickFilterValues(value),
-                          }));
-                        }}
-                        onSearchClearOrClose={() => {
-                          if (flowSearchValue.trim().length > 0) {
-                            setFlowSearchValue("");
-                            setFlowFilterModel((previous) => ({
-                              ...previous,
-                              quickFilterValues: [],
-                            }));
-                            return;
-                          }
-                          setFlowSearchOpen(false);
-                        }}
-                      />
-                    ),
+                    toolbar: FlowGridToolbar,
                     noRowsOverlay: () =>
-                      flowRows.length === 0 ? (
+                      flowSearchActive ? (
+                        <DataGridEmptyState
+                          icon={<SearchRoundedIcon color="action" />}
+                          title="No hay resultados para esta búsqueda"
+                          description="Probá con otros términos para encontrar el flow, la tarea o el proyecto asociado."
+                        />
+                      ) : filteredFlowRows.length === 0 ? (
                         <DataGridEmptyState
                           icon={<InboxRoundedIcon color="action" />}
                           title="No hay flows para este filtro"
@@ -1916,6 +1882,38 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                           description="Todos los flows de este filtro están programados para más adelante. Revisalos en la sección superior."
                         />
                       ),
+                  }}
+                  slotProps={{
+                    toolbar: {
+                      quickFilterPlaceholder: "Buscar flow, tarea o proyecto vinculado...",
+                      searchOpen: flowSearchOpen,
+                      searchValue: flowSearchValue,
+                      onSearchToggle: () => {
+                        if (flowSearchOpen && flowSearchValue.trim().length === 0) {
+                          setFlowSearchOpen(false);
+                          return;
+                        }
+                        setFlowSearchOpen(true);
+                      },
+                      onSearchChange: (value: string) => {
+                        setFlowSearchValue(value);
+                        setFlowFilterModel((previous) => ({
+                          ...previous,
+                          quickFilterValues: toQuickFilterValues(value),
+                        }));
+                      },
+                      onSearchClearOrClose: () => {
+                        if (flowSearchValue.trim().length > 0) {
+                          setFlowSearchValue("");
+                          setFlowFilterModel((previous) => ({
+                            ...previous,
+                            quickFilterValues: [],
+                          }));
+                          return;
+                        }
+                        setFlowSearchOpen(false);
+                      },
+                    } as any,
                   }}
                   initialState={{
                     sorting: {
@@ -1952,38 +1950,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                     navigate(`/requirements/${params.row.id}`);
                   }}
                   slots={{
-                    toolbar: () => (
-                      <GridToolbar
-                        quickFilterPlaceholder="Buscar proyecto o solicitante..."
-                        searchOpen={requirementSearchOpen}
-                        searchValue={requirementSearchValue}
-                        onSearchToggle={() => {
-                          if (requirementSearchOpen && requirementSearchValue.trim().length === 0) {
-                            setRequirementSearchOpen(false);
-                            return;
-                          }
-                          setRequirementSearchOpen(true);
-                        }}
-                        onSearchChange={(value) => {
-                          setRequirementSearchValue(value);
-                          setRequirementFilterModel((previous) => ({
-                            ...previous,
-                            quickFilterValues: toQuickFilterValues(value),
-                          }));
-                        }}
-                        onSearchClearOrClose={() => {
-                          if (requirementSearchValue.trim().length > 0) {
-                            setRequirementSearchValue("");
-                            setRequirementFilterModel((previous) => ({
-                              ...previous,
-                              quickFilterValues: [],
-                            }));
-                            return;
-                          }
-                          setRequirementSearchOpen(false);
-                        }}
-                      />
-                    ),
+                    toolbar: FlowGridToolbar,
                     noRowsOverlay: () => (
                       <DataGridEmptyState
                         icon={<InboxRoundedIcon color="action" />}
@@ -1992,6 +1959,38 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                         action={resetFilterAction}
                       />
                     ),
+                  }}
+                  slotProps={{
+                    toolbar: {
+                      quickFilterPlaceholder: "Buscar proyecto o solicitante...",
+                      searchOpen: requirementSearchOpen,
+                      searchValue: requirementSearchValue,
+                      onSearchToggle: () => {
+                        if (requirementSearchOpen && requirementSearchValue.trim().length === 0) {
+                          setRequirementSearchOpen(false);
+                          return;
+                        }
+                        setRequirementSearchOpen(true);
+                      },
+                      onSearchChange: (value: string) => {
+                        setRequirementSearchValue(value);
+                        setRequirementFilterModel((previous) => ({
+                          ...previous,
+                          quickFilterValues: toQuickFilterValues(value),
+                        }));
+                      },
+                      onSearchClearOrClose: () => {
+                        if (requirementSearchValue.trim().length > 0) {
+                          setRequirementSearchValue("");
+                          setRequirementFilterModel((previous) => ({
+                            ...previous,
+                            quickFilterValues: [],
+                          }));
+                          return;
+                        }
+                        setRequirementSearchOpen(false);
+                      },
+                    } as any,
                   }}
                   initialState={{
                     sorting: {

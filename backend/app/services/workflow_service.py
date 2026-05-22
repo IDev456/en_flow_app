@@ -13,6 +13,7 @@ from app.schemas.workflow import (
     ExternalEventCreate,
     ExternalEventPublic,
     QuickCaptureRequest,
+    REMINDER_PAST_ERROR,
     RequirementCreateFromFlowPayload,
     WorkLogEntry,
     StepDateUpdate,
@@ -35,6 +36,7 @@ from app.schemas.workflow import (
     WorkflowSummary,
     WorkflowTemplatePublic,
     WorkflowUpdate,
+    is_past_calendar_day,
 )
 
 OPEN_STEP_STATUSES = {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA, StepStatus.ESPERANDO_RESPUESTA}
@@ -51,6 +53,11 @@ WORKFLOW_OPEN_STATUSES = {
 class WorkflowService:
     def __init__(self, repository: WorkflowRepository) -> None:
         self.repository = repository
+
+    def _ensure_reminder_not_past(self, *values: datetime | None) -> None:
+        for value in values:
+            if is_past_calendar_day(value):
+                raise BusinessRuleError(REMINDER_PAST_ERROR)
 
     def _ensure_matching_ambito(self, workflow_ambito: Ambito | None, trigger_ambito: Ambito | None) -> None:
         if workflow_ambito is None or trigger_ambito is None or workflow_ambito != trigger_ambito:
@@ -205,6 +212,8 @@ class WorkflowService:
         if not payload.primer_paso.nombre.strip():
             raise BusinessRuleError("La tarea inicial es obligatoria para iniciar el flow")
 
+        self._ensure_reminder_not_past(payload.primer_paso.fecha_vencimiento)
+
         template = (
             self.repository.get_workflow_template(payload.workflow_template_id)
             if payload.workflow_template_id
@@ -218,6 +227,7 @@ class WorkflowService:
         return workflow
 
     def quick_capture_flow(self, payload: QuickCaptureRequest) -> WorkflowDetail:
+        self._ensure_reminder_not_past(payload.fecha_vencimiento)
         template = self.repository.get_default_workflow_template()
         workflow = self.repository.create_workflow(
             None,
@@ -396,6 +406,7 @@ class WorkflowService:
         if workflow.estado == WorkflowStatus.FINALIZADO:
             raise BusinessRuleError("No se pueden agregar tareas a un flow finalizado")
         self._ensure_workflow_operable(workflow)
+        self._ensure_reminder_not_past(payload.fecha_vencimiento)
 
         steps = workflow.steps
         next_order = max((step.orden for step in steps), default=0) + 1
@@ -464,6 +475,7 @@ class WorkflowService:
         step = self.get_step(step_id)
         workflow = self.get_workflow(step.workflow_id)
         self._ensure_workflow_operable(workflow)
+        self._ensure_reminder_not_past(payload.fecha_vencimiento)
         updated = step.model_copy(update={"fecha_vencimiento": payload.fecha_vencimiento})
         return self.repository.save_step(updated)
 
@@ -608,6 +620,7 @@ class WorkflowService:
         if payload.transition_type == StepTransitionType.NEXT_TASK:
             if payload.next_task is None:
                 raise BusinessRuleError("Debes indicar la proxima tarea")
+            self._ensure_reminder_not_past(payload.next_task.fecha_vencimiento)
             next_order = max((item.orden for item in workflow.steps), default=0) + 1
             next_step = self.repository.create_step(
                 workflow.id,

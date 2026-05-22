@@ -11,7 +11,7 @@ import { Box, Button, Card, Chip, IconButton, Stack, TextField, Typography } fro
 
 import { getStatusToken } from "../../../theme";
 import type { Step } from "../types";
-import { formatDateOnly, formatElapsedTime, getStatusTone, humanizeStatus } from "../utils";
+import { formatCalendarDate, formatElapsedTime, getStatusTone, humanizeStatus } from "../utils";
 import type { WorkflowVariant } from "./WorkflowVariantSwitcher";
 
 type WorkflowGraphProps = {
@@ -150,7 +150,7 @@ function renderStepRecordsIndicator(hasRecords: boolean): React.ReactElement {
 
 function renderStepReminder(step: Step): React.ReactElement {
   const reminder = step.fecha_vencimiento;
-  const valueLabel = reminder ? formatDateOnly(reminder) : "Sin recordatorio";
+  const valueLabel = reminder ? formatCalendarDate(reminder) : "Sin recordatorio";
 
   return (
     <Stack
@@ -216,6 +216,7 @@ function StepNameEditor({ step, onRenameStep, onEditingChange, dense = false }: 
   const [draftName, setDraftName] = useState(step.nombre);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const blurIntentRef = useRef<"save" | "cancel" | null>(null);
   const allowInlineEdit = canEditStepName(step) && Boolean(onRenameStep);
 
   useEffect(() => {
@@ -287,6 +288,16 @@ function StepNameEditor({ step, onRenameStep, onEditingChange, dense = false }: 
     }
   }
 
+  function handleInputBlur() {
+    const blurIntent = blurIntentRef.current;
+    blurIntentRef.current = null;
+
+    if (blurIntent === "cancel" || blurIntent === "save") {
+      return;
+    }
+    void handleSave();
+  }
+
   if (editing) {
     return (
       <Stack spacing={0.5} sx={{ mt: dense ? 0 : 1, flex: 1 }}>
@@ -298,6 +309,7 @@ function StepNameEditor({ step, onRenameStep, onEditingChange, dense = false }: 
             value={draftName}
             onChange={(event) => setDraftName(event.target.value)}
             onKeyDown={handleInputKeyDown}
+            onBlur={handleInputBlur}
             onClick={(event) => event.stopPropagation()}
             onMouseDown={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
@@ -308,6 +320,9 @@ function StepNameEditor({ step, onRenameStep, onEditingChange, dense = false }: 
           <IconButton
             size="small"
             color="primary"
+            onMouseDown={() => {
+              blurIntentRef.current = "save";
+            }}
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -321,6 +336,9 @@ function StepNameEditor({ step, onRenameStep, onEditingChange, dense = false }: 
           <IconButton
             size="small"
             color="inherit"
+            onMouseDown={() => {
+              blurIntentRef.current = "cancel";
+            }}
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
