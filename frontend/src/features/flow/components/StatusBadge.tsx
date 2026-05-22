@@ -23,7 +23,7 @@ export function StatusBadge({ value }: StatusBadgeProps) {
       sx={{
         maxWidth: "100%",
         height: 28,
-        borderRadius: 999,
+        borderRadius: theme.appShape.pill,
         fontWeight: 700,
         color: token.onContainer,
         bgcolor: token.container,

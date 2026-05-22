@@ -28,16 +28,17 @@ Evolucionar la interfaz hacia un criterio inspirado en Material Design 3 sin cam
 - `appShape`: escala de radios compartida.
 
 ## Escala de radios
-- `appShape.xs = 4`: detalles compactos o superficies muy pequeñas.
-- `appShape.sm = 6`: pequeños contenedores o controles auxiliares.
-- `appShape.md = 8`: base operativa del sistema.
-- `appShape.lg = 10`: cards, dialogs, data grids y superficies destacadas.
+- `appShape.xs = 2`: detalles compactos o superficies muy pequeñas.
+- `appShape.sm = 3`: pequeños contenedores o controles auxiliares.
+- `appShape.md = 4`: base operativa del sistema.
+- `appShape.lg = 6`: cards, dialogs, data grids y superficies destacadas.
 - `appShape.pill = 999`: chips, badges y controles tipo pill.
 
 ## Reglas de forma
-- Layout, tablas, inputs, dialogs y cards deben verse sobrios y técnicos.
+- Layout, tablas, inputs, dialogs y cards deben verse sobrios, técnicos y con esquinas mínimas.
 - Evitar radios ad hoc cuando ya exista un token en `appShape`.
-- Reservar `pill` para chips, badges y estados compactos.
+- Reservar `pill` solo para chips, badges y estados compactos.
+- No usar `pill` en contenedores grandes o paneles; en su lugar, aplicar `md` o `lg`.
 - Mantener `50%` solo para indicadores realmente circulares.
 
 ## Estados operativos

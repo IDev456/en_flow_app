@@ -102,10 +102,10 @@ export function createAppTheme(mode: AppThemeMode) {
   };
 
   const shape: AppShapeTokens = {
-    xs: 4,
-    sm: 6,
-    md: 8,
-    lg: 10,
+    xs: 2,
+    sm: 3,
+    md: 4,
+    lg: 6,
     pill: 999,
   };
 
@@ -352,7 +352,7 @@ export function createAppTheme(mode: AppThemeMode) {
         styleOverrides: {
           root: ({ theme }) => ({
             minHeight: 38,
-            borderRadius: theme.appShape.lg,
+            borderRadius: theme.appShape.md,
             paddingInline: 16,
             transition: theme.transitions.create(["background-color", "border-color", "box-shadow", "color"], {
               duration: theme.appMotion.short,
@@ -386,7 +386,7 @@ export function createAppTheme(mode: AppThemeMode) {
       MuiIconButton: {
         styleOverrides: {
           root: ({ theme }) => ({
-            borderRadius: theme.appShape.lg,
+            borderRadius: theme.appShape.md,
             transition: theme.transitions.create(["background-color", "color", "border-color"], {
               duration: theme.appMotion.short,
             }),
@@ -402,7 +402,7 @@ export function createAppTheme(mode: AppThemeMode) {
       MuiOutlinedInput: {
         styleOverrides: {
           root: ({ theme }) => ({
-            borderRadius: theme.appShape.lg,
+            borderRadius: theme.appShape.md,
             backgroundColor: alpha(theme.palette.surfaceContainerLow, isDark ? 0.78 : 0.95),
             transition: theme.transitions.create(["background-color", "border-color", "box-shadow"], {
               duration: theme.appMotion.short,
@@ -497,7 +497,7 @@ export function createAppTheme(mode: AppThemeMode) {
         styleOverrides: {
           root: ({ theme }) => ({
             padding: 4,
-            borderRadius: theme.appShape.lg,
+            borderRadius: theme.appShape.md,
             border: `1px solid ${theme.palette.outlineVariant}`,
             backgroundColor: alpha(theme.palette.surfaceContainerLow, isDark ? 0.9 : 0.96),
           }),
@@ -507,7 +507,7 @@ export function createAppTheme(mode: AppThemeMode) {
         styleOverrides: {
           root: ({ theme }) => ({
             border: 0,
-            borderRadius: theme.appShape.md,
+            borderRadius: theme.appShape.sm,
             color: theme.palette.text.secondary,
             fontWeight: 600,
             paddingInline: 12,
@@ -525,6 +525,7 @@ export function createAppTheme(mode: AppThemeMode) {
       MuiListItemButton: {
         styleOverrides: {
           root: ({ theme }) => ({
+            borderRadius: theme.appShape.md,
             transition: theme.transitions.create(["background-color", "border-color", "color"], {
               duration: theme.appMotion.short,
             }),
@@ -540,7 +541,7 @@ export function createAppTheme(mode: AppThemeMode) {
             backgroundImage: "none",
             backgroundColor: theme.palette.surfaceContainerLowest,
             border: `1px solid ${theme.palette.outlineVariant}`,
-            borderRadius: theme.appShape.lg,
+            borderRadius: theme.appShape.md,
             boxShadow: theme.appElevation.overlay,
           }),
         },
