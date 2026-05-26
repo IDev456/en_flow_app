@@ -122,6 +122,14 @@ export function formatCalendarDayInput(dayValue: number) {
   return `${date.getUTCFullYear()}-${padCalendarPart(date.getUTCMonth() + 1)}-${padCalendarPart(date.getUTCDate())}`;
 }
 
+export function toCalendarDateInputValue(value: string | null | undefined) {
+  const calendarDay = toCalendarDayValue(value ?? null);
+  if (calendarDay === null) {
+    return "";
+  }
+  return formatCalendarDayInput(calendarDay);
+}
+
 function parseCalendarValue(value: string) {
   const matched = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
   if (matched) {

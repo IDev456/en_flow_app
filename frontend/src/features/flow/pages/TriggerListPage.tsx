@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FocusEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FocusEvent } from "react";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import BoltRoundedIcon from "@mui/icons-material/BoltRounded";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
@@ -69,6 +69,7 @@ import {
   getStoredActiveAmbito,
   formatCalendarDate,
   formatElapsedTime,
+  formatCalendarDayInput,
   formatLocalDateInput,
   formatRelativeCalendarDay,
   getCalendarDayDiff,
@@ -81,6 +82,7 @@ import {
   getStatusTone,
   setStoredActiveAmbito,
   getTodayLocalDateInput,
+  toCalendarDateInputValue,
   toCalendarDayValue,
   toCalendarDateUtcIso,
   type ActiveAmbitoMode,
@@ -269,12 +271,7 @@ function getDateValue(value: string | null | undefined) {
 }
 
 function toDateInputValue(value: string | null | undefined) {
-  if (!value) return "";
-  const shortValue = value.slice(0, 10);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(shortValue)) return shortValue;
-  const parsed = new Date(value);
-  if (!Number.isFinite(parsed.getTime())) return "";
-  return formatLocalDateInput(parsed);
+  return toCalendarDateInputValue(value);
 }
 
 function toDateSortValue(dateInput: string) {
@@ -302,7 +299,7 @@ function formatNearestFuture(executionDay: number, todayDay: number): string {
   const diffDays = executionDay - todayDay;
   if (diffDays === 1) return "mañana";
   if (diffDays <= 6) return `en ${diffDays} días`;
-  return `el ${formatCalendarDate(new Date(executionDay * 86400000).toISOString())}`;
+  return `el ${formatCalendarDate(formatCalendarDayInput(executionDay))}`;
 }
 
 function formatFutureGroupLabel(dateInput: string, todayInput: string) {
@@ -322,6 +319,13 @@ function toQuickFilterValues(search: string) {
   const normalized = search.trim();
   if (!normalized) return [];
   return normalized.split(/\s+/);
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 }
 
 type FlowGridToolbarProps = {
@@ -346,6 +350,25 @@ function FlowGridToolbar(props: any) {
   const resolvedSearchOpen = searchOpen ?? false;
   const resolvedSearchValue = searchValue ?? "";
   const searchIsEmpty = resolvedSearchValue.trim().length === 0;
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!resolvedSearchOpen) {
+      return;
+    }
+
+    const focusTimer = window.setTimeout(() => {
+      const input = searchInputRef.current;
+      if (!input) {
+        return;
+      }
+      input.focus();
+      const cursorPosition = input.value.length;
+      input.setSelectionRange?.(cursorPosition, cursorPosition);
+    }, 0);
+
+    return () => window.clearTimeout(focusTimer);
+  }, [resolvedSearchOpen]);
 
   return (
     <Toolbar aria-label="Toolbar del listado" style={{ gap: "6px", justifyContent: "space-between" }}>
@@ -360,9 +383,17 @@ function FlowGridToolbar(props: any) {
               placeholder={resolvedPlaceholder}
               size="small"
               fullWidth={false}
+              autoFocus
+              inputRef={searchInputRef}
               value={resolvedSearchValue}
-              onChange={(event) => onSearchChange?.(event.target.value)}
+              onClick={(event) => event.stopPropagation()}
+              onMouseDown={(event) => event.stopPropagation()}
+              onChange={(event) => {
+                event.stopPropagation();
+                onSearchChange?.(event.target.value);
+              }}
               onKeyDown={(event) => {
+                event.stopPropagation();
                 if (event.key === "Escape" && searchIsEmpty) {
                   onSearchClearOrClose?.();
                 }
@@ -624,6 +655,30 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       };
     });
   }, [allFlowCards, today]);
+
+  const searchedFlowRows = useMemo(() => {
+    const normalizedQuery = normalizeSearchText(flowSearchValue.trim());
+    if (!normalizedQuery) {
+      return flowRows;
+    }
+
+    const searchTerms = normalizedQuery.split(/\s+/).filter(Boolean);
+    return flowRows.filter((row) => {
+      const searchableContent = normalizeSearchText(
+        [
+          row.taskName,
+          row.stepLabel,
+          row.status,
+          row.requirementsLabel,
+          row.lastRecord,
+          row.ambito ?? "",
+          getAmbitoLabel(row.ambito),
+        ].join(" ")
+      );
+
+      return searchTerms.every((term) => searchableContent.includes(term));
+    });
+  }, [flowRows, flowSearchValue]);
 
   const filteredFlowRows = useMemo(
     () =>
@@ -1029,7 +1084,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         valueGetter: (_, row) => row.executionAt,
         renderCell: (params) => {
           const row = params.row;
-          const originalValue = row.executionDateInput ? row.executionDateInput.slice(0, 10) : "";
+          const originalValue = row.executionDateInput;
           const isEditing = pendingDates.has(row.id);
           const showInput = isEditing;
           const isFutureRow = Boolean(row.executionDateInput && row.executionDateInput > today);
@@ -1117,6 +1172,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
               value={value}
               autoFocus={isEditing}
               disabled={!row.stepId}
+              slotProps={{ htmlInput: { min: today } }}
               onClick={(event) => event.stopPropagation()}
               onChange={(event) => {
                 event.stopPropagation();
@@ -1849,7 +1905,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 }}
               >
                 <DataGrid
-                  rows={flowSearchActive ? flowRows : mainRows}
+                  rows={flowSearchActive ? searchedFlowRows : mainRows}
                   columns={flowColumns}
                   rowHeight={62}
                   filterModel={flowFilterModel}
@@ -1897,18 +1953,10 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       },
                       onSearchChange: (value: string) => {
                         setFlowSearchValue(value);
-                        setFlowFilterModel((previous) => ({
-                          ...previous,
-                          quickFilterValues: toQuickFilterValues(value),
-                        }));
                       },
                       onSearchClearOrClose: () => {
                         if (flowSearchValue.trim().length > 0) {
                           setFlowSearchValue("");
-                          setFlowFilterModel((previous) => ({
-                            ...previous,
-                            quickFilterValues: [],
-                          }));
                           return;
                         }
                         setFlowSearchOpen(false);

@@ -13,9 +13,9 @@ import {
   Typography,
 } from "@mui/material";
 
-import { ReminderShortcutButtons } from "./ReminderShortcutButtons";
+import { ReminderDateField } from "./ReminderDateField";
 import type { Step, StepCompleteInput, StepTransitionType } from "../types";
-import { DEFAULT_ACTOR, getReminderDateError, getTodayLocalDateInput, toCalendarDateUtcIso } from "../utils";
+import { DEFAULT_ACTOR, getReminderDateError, toCalendarDateUtcIso } from "../utils";
 
 type CompleteStepDialogProps = {
   open: boolean;
@@ -122,24 +122,16 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
                 disabled={submitting}
                 autoFocus
               />
-              <TextField
-                label="Recordatorio"
-                type="date"
+              <ReminderDateField
                 value={nextTaskReminderDate}
-                onChange={(event) => {
-                  setNextTaskReminderDate(event.target.value);
+                onChange={(value) => {
+                  setNextTaskReminderDate(value);
                   if (error) {
                     setError(null);
                   }
                 }}
-                helperText="Fecha recordatorio"
-                slotProps={{
-                  inputLabel: { shrink: true },
-                  htmlInput: { min: getTodayLocalDateInput() },
-                }}
                 disabled={submitting}
               />
-              <ReminderShortcutButtons onSelect={setNextTaskReminderDate} disabled={submitting} />
             </Stack>
           )}
 

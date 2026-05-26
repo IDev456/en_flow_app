@@ -22,7 +22,7 @@ import { useNavigate } from "react-router-dom";
 
 import { useToastContext } from "../../../components/Toast";
 import { getWorkflow, listTriggers, listWorkflows, quickCaptureFlow, startWorkflow } from "../api";
-import { ReminderShortcutButtons } from "./ReminderShortcutButtons";
+import { ReminderDateField } from "./ReminderDateField";
 import { AmbitoChip } from "./AmbitoChip";
 import { DuplicateFlowWarningDialog } from "./DuplicateFlowWarningDialog";
 import { LiveDuplicateSuggestions } from "./LiveDuplicateSuggestions";
@@ -471,6 +471,30 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
               onOpenExisting={handleOpenExistingFromSuggestions}
             />
 
+            {!defaultRequirementId && (
+              <TextField
+                select
+                label="Asociar a proyecto existente"
+                value={selectedRequirementId}
+                onChange={(event) => setSelectedRequirementId(event.target.value)}
+                disabled={loadingRequirements}
+                helperText={
+                  loadingRequirements
+                    ? "Cargando proyectos..."
+                    : "Opcional. Si seleccionás un proyecto, el flow quedará vinculado a ese proyecto."
+                }
+              >
+                <MenuItem value="">Sin proyecto asociado</MenuItem>
+                {availableRequirements
+                  .filter((requirement) => requirement.ambito === ambito)
+                  .map((requirement) => (
+                    <MenuItem key={requirement.id} value={requirement.id}>
+                      {requirement.descripcion?.trim() || `Proyecto ${requirement.id.slice(0, 8)}`}
+                    </MenuItem>
+                  ))}
+              </TextField>
+            )}
+
             <Button
               variant="text"
               color="inherit"
@@ -495,7 +519,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
                   <Typography variant="subtitle2" color="text.secondary">
                     Datos opcionales
                   </Typography>
-                  {!defaultRequirementId && (
+                  {false && (
                     <TextField
                       select
                       label="Asociar a proyecto existente"
@@ -520,7 +544,8 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
                   )}
                   <TextField label="Detalle" multiline minRows={2} value={detail} onChange={(event) => setDetail(event.target.value)} />
                   <TextField label="Asignado a" value={assignee} onChange={(event) => setAssignee(event.target.value)} />
-                  <TextField
+                  {false ? (
+                    <TextField
                     label="Recordatorio"
                     type="date"
                     value={executionDate}
@@ -536,7 +561,18 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
                       htmlInput: { min: getTodayLocalDateInput() },
                     }}
                   />
-                  <ReminderShortcutButtons onSelect={setExecutionDate} />
+                  ) : (
+                  <ReminderDateField
+                    value={executionDate}
+                    onChange={(value) => {
+                      setExecutionDate(value);
+                      if (error) {
+                        setError(null);
+                      }
+                    }}
+                    helperText="Fecha recordatorio"
+                    />
+                  )}
                 </Stack>
               </Box>
             </Collapse>

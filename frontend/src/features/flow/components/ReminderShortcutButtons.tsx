@@ -16,20 +16,28 @@ export function ReminderShortcutButtons({
   return (
     <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 0.75 }}>
       <Button
+        type="button"
         size="small"
         variant="text"
         color="inherit"
         disabled={disabled}
+        onMouseDown={(event) => {
+          event.preventDefault();
+        }}
         onClick={() => onSelect(getRelativeCalendarDateInput(1, baseDateInput))}
         sx={{ px: 0.5, minWidth: 0, textTransform: "none" }}
       >
         Mañana
       </Button>
       <Button
+        type="button"
         size="small"
         variant="text"
         color="inherit"
         disabled={disabled}
+        onMouseDown={(event) => {
+          event.preventDefault();
+        }}
         onClick={() => onSelect(getRelativeCalendarDateInput(2, baseDateInput))}
         sx={{ px: 0.5, minWidth: 0, textTransform: "none" }}
       >
