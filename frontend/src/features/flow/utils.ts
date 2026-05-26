@@ -164,6 +164,34 @@ export function getTodayLocalDateInput() {
   return formatLocalDateInput(new Date());
 }
 
+type DateInputWithPicker = HTMLInputElement & {
+  showPicker?: () => void;
+};
+
+export function openNativeDateInputPicker(input: HTMLInputElement | null | undefined) {
+  if (!input) {
+    return false;
+  }
+
+  try {
+    input.focus({ preventScroll: true });
+  } catch {
+    input.focus();
+  }
+
+  const dateInput = input as DateInputWithPicker;
+  if (typeof dateInput.showPicker === "function") {
+    try {
+      dateInput.showPicker();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
+}
+
 export function toCalendarDayValue(value: string | null) {
   if (!value) {
     return null;

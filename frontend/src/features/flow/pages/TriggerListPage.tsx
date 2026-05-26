@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FocusEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FocusEvent } from "react";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import BoltRoundedIcon from "@mui/icons-material/BoltRounded";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
@@ -54,6 +54,7 @@ import {
   Toolbar,
   ToolbarButton,
 } from "@mui/x-data-grid";
+import { flushSync } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { DataGridEmptyState } from "../../../components/feedback/DataGridEmptyState";
@@ -79,6 +80,7 @@ import {
   getVisibleWorkflowStatus,
   isNoisyAutomaticJournalText,
   matchesActiveAmbito,
+  openNativeDateInputPicker,
   getStatusTone,
   setStoredActiveAmbito,
   getTodayLocalDateInput,
@@ -467,6 +469,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     quickFilterValues: [],
   });
   const [classifyingItemId, setClassifyingItemId] = useState<string | null>(null);
+  const pendingDateInputRefs = useRef(new Map<string, HTMLInputElement | null>());
   const location = useLocation();
   const navigate = useNavigate();
   const searchParams = new URLSearchParams(location.search);
@@ -655,6 +658,26 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       };
     });
   }, [allFlowCards, today]);
+
+  const setPendingDateInputRef = useCallback((rowId: string, input: HTMLInputElement | null) => {
+    const inputRefs = pendingDateInputRefs.current;
+    if (input) {
+      inputRefs.set(rowId, input);
+      return;
+    }
+    inputRefs.delete(rowId);
+  }, []);
+
+  const openPendingDateEditorAndPicker = useCallback((rowId: string, draftValue: string) => {
+    flushSync(() => {
+      setPendingDates((previous) => {
+        const next = new Map(previous);
+        next.set(rowId, draftValue);
+        return next;
+      });
+    });
+    openNativeDateInputPicker(pendingDateInputRefs.current.get(rowId) ?? null);
+  }, []);
 
   const searchedFlowRows = useMemo(() => {
     const normalizedQuery = normalizeSearchText(flowSearchValue.trim());
@@ -1103,11 +1126,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                     disabled={!row.stepId}
                     onClick={(event) => {
                       event.stopPropagation();
-                      setPendingDates((previous) => {
-                        const next = new Map(previous);
-                        next.set(row.id, originalValue);
-                        return next;
-                      });
+                      openPendingDateEditorAndPicker(row.id, originalValue);
                     }}
                     sx={(theme) => ({
                       borderRadius: theme.appShape.sm,
@@ -1150,11 +1169,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 disabled={!row.stepId}
                 onClick={(event) => {
                   event.stopPropagation();
-                  setPendingDates((previous) => {
-                    const next = new Map(previous);
-                    next.set(row.id, "");
-                    return next;
-                  });
+                  openPendingDateEditorAndPicker(row.id, "");
                 }}
                 sx={{ opacity: 0.38, "&:hover": { opacity: 0.9 } }}
               >
@@ -1171,6 +1186,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
               variant="outlined"
               value={value}
               autoFocus={isEditing}
+              inputRef={(input) => {
+                setPendingDateInputRef(row.id, input);
+              }}
               disabled={!row.stepId}
               slotProps={{ htmlInput: { min: today } }}
               onClick={(event) => event.stopPropagation()}
@@ -1197,7 +1215,17 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   (event.target as HTMLInputElement).blur();
                 }
               }}
-              sx={{ minWidth: 150, "& input": { fontSize: "0.82rem", padding: "4px 8px" } }}
+              sx={(theme) => ({
+                minWidth: 150,
+                "& .MuiOutlinedInput-root": {
+                  borderRadius: theme.appShape.sm,
+                  backgroundColor: theme.palette.surfaceContainerLowest,
+                },
+                "& input": {
+                  fontSize: "0.82rem",
+                  padding: "4px 8px",
+                },
+              })}
             />
           );
         },
@@ -1250,7 +1278,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         ),
       },
     ],
-    [pendingDates, theme.palette.mode, today]
+    [openPendingDateEditorAndPicker, pendingDates, setPendingDateInputRef, theme.palette.mode, today]
   );
 
   const requirementColumns = useMemo<GridColDef<RequirementGridRow>[]>(

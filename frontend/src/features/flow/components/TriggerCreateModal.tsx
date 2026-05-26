@@ -32,7 +32,6 @@ import {
   getAmbitoLabel,
   getReminderDateError,
   getStoredActiveAmbito,
-  getTodayLocalDateInput,
   toCalendarDateUtcIso,
 } from "../utils";
 import {
@@ -519,49 +518,14 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
                   <Typography variant="subtitle2" color="text.secondary">
                     Datos opcionales
                   </Typography>
-                  {false && (
-                    <TextField
-                      select
-                      label="Asociar a proyecto existente"
-                      value={selectedRequirementId}
-                      onChange={(event) => setSelectedRequirementId(event.target.value)}
-                      disabled={loadingRequirements}
-                      helperText={
-                        loadingRequirements
-                          ? "Cargando proyectos..."
-                          : "Opcional. Solo se muestran proyectos del ámbito activo."
-                      }
-                    >
-                      <MenuItem value="">Sin proyecto asociado</MenuItem>
-                      {availableRequirements
-                        .filter((requirement) => requirement.ambito === ambito)
-                        .map((requirement) => (
-                          <MenuItem key={requirement.id} value={requirement.id}>
-                            {requirement.descripcion?.trim() || `Proyecto ${requirement.id.slice(0, 8)}`}
-                          </MenuItem>
-                        ))}
-                    </TextField>
-                  )}
-                  <TextField label="Detalle" multiline minRows={2} value={detail} onChange={(event) => setDetail(event.target.value)} />
-                  <TextField label="Asignado a" value={assignee} onChange={(event) => setAssignee(event.target.value)} />
-                  {false ? (
-                    <TextField
-                    label="Recordatorio"
-                    type="date"
-                    value={executionDate}
-                    onChange={(event) => {
-                      setExecutionDate(event.target.value);
-                      if (error) {
-                        setError(null);
-                      }
-                    }}
-                    helperText="Posible fecha de ejecución"
-                    slotProps={{
-                      inputLabel: { shrink: true },
-                      htmlInput: { min: getTodayLocalDateInput() },
-                    }}
+                  <TextField
+                    label="Detalle"
+                    multiline
+                    minRows={2}
+                    value={detail}
+                    onChange={(event) => setDetail(event.target.value)}
                   />
-                  ) : (
+                  <TextField label="Asignado a" value={assignee} onChange={(event) => setAssignee(event.target.value)} />
                   <ReminderDateField
                     value={executionDate}
                     onChange={(value) => {
@@ -571,8 +535,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
                       }
                     }}
                     helperText="Fecha recordatorio"
-                    />
-                  )}
+                  />
                 </Stack>
               </Box>
             </Collapse>

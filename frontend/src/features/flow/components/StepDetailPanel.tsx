@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import EditCalendarRoundedIcon from "@mui/icons-material/EditCalendarRounded";
 import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
@@ -24,6 +24,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
+import { flushSync } from "react-dom";
 import { Link as RouterLink } from "react-router-dom";
 
 import { updateStep, updateStepDate } from "../api";
@@ -48,6 +49,7 @@ import {
   formatRelativeCalendarDay,
   getReminderDateError,
   getTodayLocalDateInput,
+  openNativeDateInputPicker,
   toCalendarDateUtcIso,
 } from "../utils";
 import { AmbitoChip } from "./AmbitoChip";
@@ -124,6 +126,7 @@ export function StepDetailPanel({
   const [isReminderEditing, setIsReminderEditing] = useState(false);
   const [reminderDraft, setReminderDraft] = useState("");
   const [savingReminder, setSavingReminder] = useState(false);
+  const reminderInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!step) {
@@ -434,6 +437,14 @@ export function StepDetailPanel({
     setIsReminderEditing(true);
   }
 
+  function openReminderEditorAndPicker() {
+    if (operationLocked || !step) return;
+    flushSync(() => {
+      startReminderEdit();
+    });
+    openNativeDateInputPicker(reminderInputRef.current);
+  }
+
   function cancelReminderEdit() {
     if (!step) return;
     const currentValue = toCalendarDateInputValue(step.fecha_vencimiento);
@@ -546,7 +557,7 @@ export function StepDetailPanel({
                       variant="text"
                       color="inherit"
                       size="small"
-                      onClick={startReminderEdit}
+                      onClick={openReminderEditorAndPicker}
                       sx={{ minWidth: 0, px: 0.5, textTransform: "none" }}
                     >
                       {formatCalendarDate(step.fecha_vencimiento)}
@@ -555,7 +566,7 @@ export function StepDetailPanel({
                     <IconButton
                       size="small"
                       color="inherit"
-                      onClick={isReminderEditing ? () => void saveReminderEdit() : startReminderEdit}
+                      onClick={isReminderEditing ? () => void saveReminderEdit() : openReminderEditorAndPicker}
                       disabled={savingReminder || operationLocked}
                       aria-label={step.fecha_vencimiento ? "Editar recordatorio" : "Agregar recordatorio"}
                     >
@@ -583,8 +594,9 @@ export function StepDetailPanel({
                     void handleReminderShortcutSelect(value);
                   }}
                   disabled={savingReminder || operationLocked}
-                  size="small"
                   autoFocus
+                  inputRef={reminderInputRef}
+                  compact
                   label=""
                   helperText={null}
                   minDate={todayLocalDateInput}
@@ -645,6 +657,7 @@ export function StepDetailPanel({
                         helperText="Fecha recordatorio"
                         disabled={savingStep}
                         minDate={todayLocalDateInput}
+                        shortcutVariant="chips"
                       />
                     </Stack>
                   ) : (
@@ -912,6 +925,7 @@ export function StepDetailPanel({
                       helperText="Fecha recordatorio"
                       disabled={resolving}
                       minDate={todayLocalDateInput}
+                      shortcutVariant="chips"
                     />
                   </>
                 )}
