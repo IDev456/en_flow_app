@@ -92,7 +92,7 @@ import {
 
 type ViewMode = "requirements" | "flows";
 type FlowFilter = "all" | "active" | "waiting" | "cancelled" | "finalized";
-type FlowQuickFilter = "none" | "today" | "this_week" | "past" | "without_project";
+type FlowQuickFilter = "none" | "today" | "this_week" | "past" | "future" | "without_project";
 
 type TriggerListPageProps = {
   defaultView?: ViewMode;
@@ -117,6 +117,7 @@ type FlowGridRow = {
   stepLabel: string;
   executionDateInput: string;
   executionAt: number;
+  operationalSortValue: number;
   lastRecord: string;
   movementLabel: string;
   movementAt: number;
@@ -158,6 +159,7 @@ const flowQuickFilterOptions = [
   { value: "today", label: "Hoy" },
   { value: "this_week", label: "Esta semana" },
   { value: "past", label: "Pasados" },
+  { value: "future", label: "Futuros" },
   { value: "without_project", label: "Sin proyecto" },
 ] as const satisfies ReadonlyArray<{ value: FlowQuickFilter; label: string }>;
 
@@ -345,6 +347,10 @@ function matchesFlowQuickFilter(row: FlowGridRow, filter: FlowQuickFilter, today
 
   if (filter === "past") {
     return rowDay < todayDay;
+  }
+
+  if (filter === "future") {
+    return rowDay > todayDay;
   }
 
   if (filter === "this_week") {
@@ -740,6 +746,15 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       const requirementLabels = item.linkedRequirements.map(
         (requirement) => requirement.descripcion?.trim() || `Proyecto ${requirement.id.slice(0, 8)}`
       );
+      const executionDayValue = executionDateInput ? toDateSortValue(executionDateInput) : null;
+      const operationalSortValue =
+        executionDayValue === null
+          ? 3_000_000_000
+          : executionDateInput === today
+            ? executionDayValue
+            : executionDateInput < today
+              ? 1_000_000_000 + Math.max(0, todaySortValue - executionDayValue)
+              : 2_000_000_000 + executionDayValue;
         return {
           id: item.workflow.id,
           stepId: step?.id ?? null,
@@ -749,6 +764,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         stepLabel,
         executionDateInput,
         executionAt: executionDateInput ? toDateSortValue(executionDateInput) : Number.MAX_SAFE_INTEGER,
+        operationalSortValue,
         lastRecord: getLatestMeaningfulWorkflowRecord(item.workflow),
         movementLabel: formatElapsedTime(item.latestMovementAt) ?? "Sin movimiento reciente",
         movementAt,
@@ -826,15 +842,15 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     });
   }, [flowSearchValue, quickFilteredFlowRows]);
 
-  const finalFlowRows = searchedFlowRows;
+  const visibleFlowRows = searchedFlowRows;
 
   const mainRows = useMemo(
-    () => finalFlowRows.filter((row) => !row.executionDateInput || row.executionDateInput <= today),
-    [finalFlowRows, today]
+    () => visibleFlowRows.filter((row) => !row.executionDateInput || row.executionDateInput <= today),
+    [visibleFlowRows, today]
   );
   const futureRows = useMemo(
-    () => finalFlowRows.filter((row) => row.executionDateInput && row.executionDateInput > today),
-    [finalFlowRows, today]
+    () => visibleFlowRows.filter((row) => row.executionDateInput && row.executionDateInput > today),
+    [visibleFlowRows, today]
   );
 
   const nearestFutureMs = useMemo(
@@ -1220,7 +1236,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         minWidth: 160,
         align: "center",
         headerAlign: "center",
-        valueGetter: (_, row) => row.executionAt,
+        valueGetter: (_, row) => row.operationalSortValue,
         renderCell: (params) => {
           const row = params.row;
           const originalValue = row.executionDateInput;
@@ -2004,7 +2020,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             </Box>
           </Box>
 
-          {isFlowsView && !loading && !flowSearchActive && futureRows.length > 0 && (
+          {false && (
             <Paper variant="outlined" sx={{ overflow: "hidden" }}>
               <Button
                 variant="text"
@@ -2018,7 +2034,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   />
                 }
               >
-                {`Programados para más adelante (${futureRows.length})${nearestFutureMs ? ` · próximo ${formatNearestFuture(nearestFutureMs, todaySortValue)}` : ""}`}
+                {`Programados para más adelante (${futureRows.length})${nearestFutureMs ? ` · próximo ${formatNearestFuture(nearestFutureMs ?? todaySortValue, todaySortValue)}` : ""}`}
               </Button>
               <Collapse in={futuresOpen}>
                 <Stack spacing={0} sx={{ px: 1.25, pb: 1.25 }}>
@@ -2072,7 +2088,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 }}
               >
                 <DataGrid
-                  rows={flowSearchActive ? finalFlowRows : mainRows}
+                  rows={visibleFlowRows}
                   columns={visibleFlowColumns}
                   rowHeight={62}
                   filterModel={flowFilterModel}
@@ -2091,7 +2107,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                           title="No hay resultados para esta búsqueda"
                           description="Probá con otros términos para encontrar el flow, la tarea o el proyecto asociado."
                         />
-                      ) : quickFilteredFlowRows.length === 0 ? (
+                      ) : quickFilteredFlowRows.length === 0 || visibleFlowRows.length === 0 ? (
                         <DataGridEmptyState
                           icon={<InboxRoundedIcon color="action" />}
                           title="No hay flows para este filtro"
@@ -2146,7 +2162,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   }}
                   initialState={{
                     sorting: {
-                      sortModel: [{ field: "movementAt", sort: "asc" }],
+                      sortModel: [{ field: "executionAt", sort: "asc" }],
                     },
                     pagination: {
                       paginationModel: { pageSize: 20, page: 0 },
