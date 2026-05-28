@@ -123,6 +123,8 @@ type FlowGridRow = {
   movementDays: number | null;
   isDueToday: boolean;
   requirementsLabel: string;
+  primaryRequirementLabel: string;
+  extraRequirementCount: number;
   requirementsCount: number;
   canCancel: boolean;
   canReactivate: boolean;
@@ -381,6 +383,7 @@ type FlowGridToolbarProps = {
   onSearchToggle?: () => void;
   onSearchChange?: (value: string) => void;
   onSearchClearOrClose?: () => void;
+  showGridActions?: boolean;
   showFlowQuickFilter?: boolean;
   flowQuickFilter?: FlowQuickFilter;
   flowQuickFilterLabel?: string;
@@ -398,6 +401,7 @@ function FlowGridToolbar(props: any) {
     onSearchToggle,
     onSearchChange,
     onSearchClearOrClose,
+    showGridActions = true,
     showFlowQuickFilter = false,
     flowQuickFilter = "none",
     flowQuickFilterLabel = "Filtro rápido",
@@ -473,10 +477,12 @@ function FlowGridToolbar(props: any) {
 
       <Box sx={{ flex: 1 }} />
 
-      <ColumnsPanelTrigger
-        aria-label="Columnas"
-        render={<ToolbarButton aria-label="Columnas">{<ViewColumnRoundedIcon fontSize="small" />}</ToolbarButton>}
-      />
+      {showGridActions ? (
+        <ColumnsPanelTrigger
+          aria-label="Columnas"
+          render={<ToolbarButton aria-label="Columnas">{<ViewColumnRoundedIcon fontSize="small" />}</ToolbarButton>}
+        />
+      ) : null}
       {showFlowQuickFilter ? (
         <>
           <ToolbarButton aria-label={flowQuickFilterLabel} onClick={onQuickFilterOpen}>
@@ -504,14 +510,18 @@ function FlowGridToolbar(props: any) {
           </Menu>
         </>
       ) : null}
-      <FilterPanelTrigger
-        aria-label="Filtros"
-        render={<ToolbarButton aria-label="Filtros">{<FilterListRoundedIcon fontSize="small" />}</ToolbarButton>}
-      />
-      <ExportCsv
-        aria-label="Descargar"
-        render={<ToolbarButton aria-label="Descargar CSV">{<DownloadRoundedIcon fontSize="small" />}</ToolbarButton>}
-      />
+      {showGridActions ? (
+        <FilterPanelTrigger
+          aria-label="Filtros"
+          render={<ToolbarButton aria-label="Filtros">{<FilterListRoundedIcon fontSize="small" />}</ToolbarButton>}
+        />
+      ) : null}
+      {showGridActions ? (
+        <ExportCsv
+          aria-label="Descargar"
+          render={<ToolbarButton aria-label="Descargar CSV">{<DownloadRoundedIcon fontSize="small" />}</ToolbarButton>}
+        />
+      ) : null}
     </Toolbar>
   );
 }
@@ -727,6 +737,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       const movementDateInput = movementAtValue === null ? null : formatLocalDateInput(new Date(movementAtValue));
       const movementDayDiff = getCalendarDayDiff(movementDateInput, today);
       const movementDays = movementDayDiff === null ? null : Math.max(0, -movementDayDiff);
+      const requirementLabels = item.linkedRequirements.map(
+        (requirement) => requirement.descripcion?.trim() || `Proyecto ${requirement.id.slice(0, 8)}`
+      );
         return {
           id: item.workflow.id,
           stepId: step?.id ?? null,
@@ -746,6 +759,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             ? "Sin proyectos"
             : item.linkedRequirements.map((requirement) => requirement.descripcion?.trim() || `Proyecto ${requirement.id.slice(0, 8)}`).join(" · "),
         requirementsCount: item.linkedRequirements.length,
+        primaryRequirementLabel: requirementLabels[0] ?? "Sin proyectos",
+        extraRequirementCount: Math.max(0, requirementLabels.length - 1),
         canCancel: canCancelWorkflow(item.workflow),
         canReactivate: canReactivateWorkflow(item.workflow),
         canDelete: canDeleteWorkflow(item.workflow),
@@ -1361,25 +1376,45 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         headerAlign: "left",
         sortable: false,
         renderCell: (params) => (
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              display: "-webkit-box",
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: "vertical",
-              whiteSpace: "normal",
-              lineHeight: 1.3,
-            }}
-          >
-            {params.value}
-          </Typography>
+          <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", minWidth: 0, width: "100%" }}>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                lineHeight: 1.3,
+              }}
+            >
+              {params.row.primaryRequirementLabel}
+            </Typography>
+            {params.row.extraRequirementCount > 0 ? (
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`+${params.row.extraRequirementCount}`}
+                sx={(theme) => ({
+                  height: 22,
+                  flexShrink: 0,
+                  borderRadius: theme.appShape.sm,
+                  borderColor: theme.palette.outlineVariant,
+                  color: theme.palette.text.secondary,
+                  backgroundColor: theme.palette.surfaceContainerLowest,
+                })}
+              />
+            ) : null}
+          </Stack>
         ),
       },
     ],
     [openPendingDateEditorAndPicker, pendingDates, setPendingDateInputRef, theme.palette.mode, today]
+  );
+
+  const visibleFlowColumns = useMemo(
+    () => flowColumns.filter((column) => column.field !== "status" && column.field !== "ambito"),
+    [flowColumns]
   );
 
   const requirementColumns = useMemo<GridColDef<RequirementGridRow>[]>(
@@ -1995,7 +2030,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       </Typography>
                       <DataGrid
                         rows={group.rows}
-                        columns={flowColumns}
+                        columns={visibleFlowColumns}
                         rowHeight={62}
                         filterModel={flowFilterModel}
                         onFilterModelChange={setFlowFilterModel}
@@ -2039,7 +2074,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
               >
                 <DataGrid
                   rows={flowSearchActive ? finalFlowRows : mainRows}
-                  columns={flowColumns}
+                  columns={visibleFlowColumns}
                   rowHeight={62}
                   filterModel={flowFilterModel}
                   onFilterModelChange={setFlowFilterModel}
@@ -2077,6 +2112,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       quickFilterPlaceholder: "Buscar flow, tarea o proyecto vinculado...",
                       searchOpen: flowSearchOpen,
                       searchValue: flowSearchValue,
+                      showGridActions: false,
                       showFlowQuickFilter: true,
                       flowQuickFilter,
                       flowQuickFilterLabel: flowQuickFilter === "none" ? "Filtro rápido" : activeFlowQuickFilterLabel,
@@ -2159,6 +2195,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       quickFilterPlaceholder: "Buscar proyecto o solicitante...",
                       searchOpen: requirementSearchOpen,
                       searchValue: requirementSearchValue,
+                      showGridActions: true,
                       onSearchToggle: () => {
                         if (requirementSearchOpen && requirementSearchValue.trim().length === 0) {
                           setRequirementSearchOpen(false);
