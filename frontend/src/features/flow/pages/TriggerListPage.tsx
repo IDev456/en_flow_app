@@ -109,6 +109,11 @@ type FlowCardData = {
   linkedRequirements: TriggerDetail[];
 };
 
+type LinkedRequirementRow = {
+  id: string;
+  label: string;
+};
+
 type FlowGridRow = {
   id: string;
   stepId: string | null;
@@ -128,6 +133,7 @@ type FlowGridRow = {
   primaryRequirementLabel: string;
   extraRequirementCount: number;
   requirementsCount: number;
+  linkedRequirements: LinkedRequirementRow[];
   canCancel: boolean;
   canReactivate: boolean;
   canDelete: boolean;
@@ -568,6 +574,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [reactivatingFlowId, setReactivatingFlowId] = useState<string | null>(null);
   const [deletingFlowId, setDeletingFlowId] = useState<string | null>(null);
   const [flowActionsMenu, setFlowActionsMenu] = useState<{ rowId: string; anchorEl: HTMLElement } | null>(null);
+  const [requirementsMenu, setRequirementsMenu] = useState<{ rowId: string; anchorEl: HTMLElement } | null>(null);
   const [pendingDates, setPendingDates] = useState<Map<string, string>>(new Map());
   const [futuresOpen, setFuturesOpen] = useState(false);
   const [flowQuickFilter, setFlowQuickFilter] = useState<FlowQuickFilter>("none");
@@ -790,6 +797,10 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         requirementsCount: item.linkedRequirements.length,
         primaryRequirementLabel: requirementLabels[0] ?? "Sin proyectos",
         extraRequirementCount: Math.max(0, requirementLabels.length - 1),
+        linkedRequirements: item.linkedRequirements.map((requirement) => ({
+          id: requirement.id,
+          label: requirement.descripcion?.trim() || `Proyecto ${requirement.id.slice(0, 8)}`,
+        })),
         canCancel: canCancelWorkflow(item.workflow),
         canReactivate: canReactivateWorkflow(item.workflow),
         canDelete: canDeleteWorkflow(item.workflow),
@@ -1168,6 +1179,14 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const pageTitle = title || (isFlowsView ? "Flows" : "Proyectos");
   const currentCounts = isFlowsView ? flowCounts : requirementCounts;
 
+  const handleProjectNavigate = useCallback(
+    (requirementId: string, event: React.MouseEvent<HTMLElement>) => {
+      event.stopPropagation();
+      navigate(`/requirements/${requirementId}`);
+    },
+    [navigate]
+  );
+
   const flowColumns = useMemo<GridColDef<FlowGridRow>[]>(
     () => [
       {
@@ -1408,41 +1427,114 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         align: "left",
         headerAlign: "left",
         sortable: false,
-        renderCell: (params) => (
-          <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", minWidth: 0, width: "100%" }}>
-            <Typography
-              variant="body2"
-              color="text.secondary"
+        renderCell: (params) => {
+          const row = params.row;
+          const hasNoProjects = row.linkedRequirements.length === 0;
+          const hasOneProject = row.linkedRequirements.length === 1;
+          const hasMultipleProjects = row.linkedRequirements.length > 1;
+          const primaryProjectId = row.linkedRequirements[0]?.id;
+
+          if (hasNoProjects) {
+            return (
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  lineHeight: 1.3,
+                }}
+              >
+                Sin proyectos
+              </Typography>
+            );
+          }
+
+          if (hasOneProject) {
+            return (
+              <ButtonBase
+                onClick={(event: React.MouseEvent<HTMLElement>) => {
+                  if (primaryProjectId) {
+                    handleProjectNavigate(primaryProjectId, event);
+                  }
+                }}
+                sx={{
+                  color: "inherit",
+                  textAlign: "left",
+                  width: "100%",
+                  justifyContent: "flex-start",
+                  borderRadius: (theme) => `${theme.appShape.sm}px`,
+                  px: 0.5,
+                  py: 0.25,
+                }}
+              >
+                <Typography
+                  variant="body2"
+                  sx={{
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    lineHeight: 1.3,
+                  }}
+                >
+                  {row.primaryRequirementLabel}
+                </Typography>
+              </ButtonBase>
+            );
+          }
+
+          return (
+            <ButtonBase
+              onClick={(event: React.MouseEvent<HTMLElement>) => {
+                event.stopPropagation();
+                setRequirementsMenu({ rowId: row.id, anchorEl: event.currentTarget as HTMLElement });
+              }}
               sx={{
-                minWidth: 0,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                lineHeight: 1.3,
+                color: "inherit",
+                textAlign: "left",
+                width: "100%",
+                justifyContent: "flex-start",
+                borderRadius: (theme) => `${theme.appShape.sm}px`,
+                px: 0.5,
+                py: 0.25,
               }}
             >
-              {params.row.primaryRequirementLabel}
-            </Typography>
-            {params.row.extraRequirementCount > 0 ? (
-              <Chip
-                size="small"
-                variant="outlined"
-                label={`+${params.row.extraRequirementCount}`}
-                sx={(theme) => ({
-                  height: 22,
-                  flexShrink: 0,
-                  borderRadius: theme.appShape.sm,
-                  borderColor: theme.palette.outlineVariant,
-                  color: theme.palette.text.secondary,
-                  backgroundColor: theme.palette.surfaceContainerLowest,
-                })}
-              />
-            ) : null}
-          </Stack>
-        ),
+              <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", minWidth: 0, width: "100%" }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    minWidth: 0,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    lineHeight: 1.3,
+                  }}
+                >
+                  {row.primaryRequirementLabel}
+                </Typography>
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  label={`+${row.extraRequirementCount}`}
+                  sx={(theme) => ({
+                    height: 22,
+                    flexShrink: 0,
+                    borderRadius: theme.appShape.sm,
+                    borderColor: theme.palette.outlineVariant,
+                    color: theme.palette.text.secondary,
+                    backgroundColor: theme.palette.surfaceContainerLowest,
+                    pointerEvents: "none",
+                  })}
+                  aria-label={`${row.linkedRequirements.length} proyectos vinculados`}
+                />
+              </Stack>
+            </ButtonBase>
+          );
+        },
       },
     ],
-    [openPendingDateEditorAndPicker, pendingDates, setPendingDateInputRef, theme.palette.mode, today]
+    [openPendingDateEditorAndPicker, pendingDates, setPendingDateInputRef, theme.palette.mode, today, handleProjectNavigate, setRequirementsMenu]
   );
 
   const visibleFlowColumns = useMemo(
@@ -1846,6 +1938,36 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
               </Stack>
             </Paper>
           )}
+
+          <Menu
+            anchorEl={requirementsMenu?.anchorEl ?? null}
+            open={requirementsMenu !== null}
+            onClose={() => setRequirementsMenu(null)}
+            slotProps={{
+              paper: {
+                sx: { maxHeight: 320 },
+              },
+            }}
+          >
+            {requirementsMenu && (
+              <>
+                {flowRows
+                  .find((row) => row.id === requirementsMenu.rowId)
+                  ?.linkedRequirements.map((requirement) => (
+                    <MenuItem
+                      key={requirement.id}
+                      onClick={(event: React.MouseEvent<HTMLLIElement>) => {
+                        event.stopPropagation();
+                        setRequirementsMenu(null);
+                        navigate(`/requirements/${requirement.id}`);
+                      }}
+                    >
+                      {requirement.label}
+                    </MenuItem>
+                  ))}
+              </>
+            )}
+          </Menu>
 
           {!isFlowsView && createRequirementOpen && (
             <Paper sx={{ p: { xs: 1.5, md: 1.8 } }}>
