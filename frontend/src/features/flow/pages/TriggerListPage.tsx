@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FocusEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FocusEvent, type MouseEvent } from "react";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import BoltRoundedIcon from "@mui/icons-material/BoltRounded";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
@@ -92,6 +92,7 @@ import {
 
 type ViewMode = "requirements" | "flows";
 type FlowFilter = "all" | "active" | "waiting" | "cancelled" | "finalized";
+type FlowQuickFilter = "none" | "today" | "this_week" | "past" | "without_project";
 
 type TriggerListPageProps = {
   defaultView?: ViewMode;
@@ -149,6 +150,14 @@ const flowFilterOptions: Array<{ value: FlowFilter; label: string }> = [
   { value: "finalized", label: "Finalizados" },
   { value: "all", label: "Todos" },
 ];
+
+const flowQuickFilterOptions = [
+  { value: "none", label: "Sin filtro" },
+  { value: "today", label: "Hoy" },
+  { value: "this_week", label: "Esta semana" },
+  { value: "past", label: "Pasados" },
+  { value: "without_project", label: "Sin proyecto" },
+] as const satisfies ReadonlyArray<{ value: FlowQuickFilter; label: string }>;
 
 function getFilterIcon(filter: FlowFilter) {
   if (filter === "active") return <BoltRoundedIcon sx={{ fontSize: 14 }} />;
@@ -312,6 +321,41 @@ function formatFutureGroupLabel(dateInput: string, todayInput: string) {
   return formattedDate;
 }
 
+function matchesFlowQuickFilter(row: FlowGridRow, filter: FlowQuickFilter, today: string) {
+  if (filter === "none") {
+    return true;
+  }
+
+  if (filter === "without_project") {
+    return row.requirementsCount === 0;
+  }
+
+  const rowDay = toCalendarDayValue(row.executionDateInput || null);
+  const todayDay = toCalendarDayValue(today);
+
+  if (rowDay === null || todayDay === null) {
+    return false;
+  }
+
+  if (filter === "today") {
+    return rowDay === todayDay;
+  }
+
+  if (filter === "past") {
+    return rowDay < todayDay;
+  }
+
+  if (filter === "this_week") {
+    const todayDate = new Date(`${today}T00:00:00`);
+    const dayOfWeek = todayDate.getDay();
+    const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+    const endOfWeekDay = todayDay + daysUntilSunday;
+    return rowDay >= todayDay && rowDay <= endOfWeekDay;
+  }
+
+  return true;
+}
+
 function getStatusHighlight(statusValue: string, theme: Theme) {
   const semantic = getStatusSemanticKey(getStatusTone(statusValue));
   return theme.palette.status[semantic];
@@ -337,6 +381,13 @@ type FlowGridToolbarProps = {
   onSearchToggle?: () => void;
   onSearchChange?: (value: string) => void;
   onSearchClearOrClose?: () => void;
+  showFlowQuickFilter?: boolean;
+  flowQuickFilter?: FlowQuickFilter;
+  flowQuickFilterLabel?: string;
+  quickFilterAnchorEl?: HTMLElement | null;
+  onQuickFilterOpen?: (event: MouseEvent<HTMLElement>) => void;
+  onQuickFilterClose?: () => void;
+  onFlowQuickFilterChange?: (value: FlowQuickFilter) => void;
 };
 
 function FlowGridToolbar(props: any) {
@@ -347,12 +398,20 @@ function FlowGridToolbar(props: any) {
     onSearchToggle,
     onSearchChange,
     onSearchClearOrClose,
+    showFlowQuickFilter = false,
+    flowQuickFilter = "none",
+    flowQuickFilterLabel = "Filtro rápido",
+    quickFilterAnchorEl = null,
+    onQuickFilterOpen,
+    onQuickFilterClose,
+    onFlowQuickFilterChange,
   } = props as FlowGridToolbarProps;
   const resolvedPlaceholder = quickFilterPlaceholder ?? "";
   const resolvedSearchOpen = searchOpen ?? false;
   const resolvedSearchValue = searchValue ?? "";
   const searchIsEmpty = resolvedSearchValue.trim().length === 0;
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const quickFilterMenuOpen = Boolean(quickFilterAnchorEl);
 
   useEffect(() => {
     if (!resolvedSearchOpen) {
@@ -418,6 +477,33 @@ function FlowGridToolbar(props: any) {
         aria-label="Columnas"
         render={<ToolbarButton aria-label="Columnas">{<ViewColumnRoundedIcon fontSize="small" />}</ToolbarButton>}
       />
+      {showFlowQuickFilter ? (
+        <>
+          <ToolbarButton aria-label={flowQuickFilterLabel} onClick={onQuickFilterOpen}>
+            <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+              <ScheduleRoundedIcon fontSize="small" />
+              <Typography variant="body2" sx={{ whiteSpace: "nowrap" }}>
+                {flowQuickFilterLabel}
+              </Typography>
+              <ExpandMoreIcon fontSize="small" />
+            </Stack>
+          </ToolbarButton>
+          <Menu anchorEl={quickFilterAnchorEl} open={quickFilterMenuOpen} onClose={onQuickFilterClose}>
+            {flowQuickFilterOptions.map((option) => (
+              <MenuItem
+                key={option.value}
+                selected={option.value === flowQuickFilter}
+                onClick={() => {
+                  onFlowQuickFilterChange?.(option.value);
+                  onQuickFilterClose?.();
+                }}
+              >
+                {option.label}
+              </MenuItem>
+            ))}
+          </Menu>
+        </>
+      ) : null}
       <FilterPanelTrigger
         aria-label="Filtros"
         render={<ToolbarButton aria-label="Filtros">{<FilterListRoundedIcon fontSize="small" />}</ToolbarButton>}
@@ -456,6 +542,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [flowActionsMenu, setFlowActionsMenu] = useState<{ rowId: string; anchorEl: HTMLElement } | null>(null);
   const [pendingDates, setPendingDates] = useState<Map<string, string>>(new Map());
   const [futuresOpen, setFuturesOpen] = useState(false);
+  const [flowQuickFilter, setFlowQuickFilter] = useState<FlowQuickFilter>("none");
+  const [flowQuickFilterAnchorEl, setFlowQuickFilterAnchorEl] = useState<HTMLElement | null>(null);
   const [flowSearchOpen, setFlowSearchOpen] = useState(false);
   const [flowSearchValue, setFlowSearchValue] = useState("");
   const [requirementSearchOpen, setRequirementSearchOpen] = useState(false);
@@ -482,6 +570,10 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   useEffect(() => {
     setViewMode(defaultView);
     setStateFilter(getDefaultFilterForView(defaultView));
+    if (defaultView !== "flows") {
+      setFlowQuickFilter("none");
+      setFlowQuickFilterAnchorEl(null);
+    }
   }, [defaultView]);
 
   useEffect(() => {
@@ -614,6 +706,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const today = getTodayLocalDateInput();
   const todaySortValue = toDateSortValue(today);
   const flowSearchActive = flowSearchValue.trim().length > 0;
+  const activeFlowQuickFilterLabel =
+    flowQuickFilterOptions.find((option) => option.value === flowQuickFilter)?.label ?? "Filtro rápido";
   const resetFilterAction =
     stateFilter !== "all" ? (
       <Button size="small" variant="outlined" color="inherit" onClick={() => setStateFilter("all")}>
@@ -679,14 +773,28 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     openNativeDateInputPicker(pendingDateInputRefs.current.get(rowId) ?? null);
   }, []);
 
+  const stateFilteredFlowRows = useMemo(
+    () =>
+      flowRows.filter((row) => {
+        if (stateFilter === "all") return true;
+        return getFlowFilterFromStatus(row.status) === stateFilter;
+      }),
+    [flowRows, stateFilter]
+  );
+
+  const quickFilteredFlowRows = useMemo(
+    () => stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, flowQuickFilter, today)),
+    [flowQuickFilter, stateFilteredFlowRows, today]
+  );
+
   const searchedFlowRows = useMemo(() => {
     const normalizedQuery = normalizeSearchText(flowSearchValue.trim());
     if (!normalizedQuery) {
-      return flowRows;
+      return quickFilteredFlowRows;
     }
 
     const searchTerms = normalizedQuery.split(/\s+/).filter(Boolean);
-    return flowRows.filter((row) => {
+    return quickFilteredFlowRows.filter((row) => {
       const searchableContent = normalizeSearchText(
         [
           row.taskName,
@@ -701,24 +809,17 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
       return searchTerms.every((term) => searchableContent.includes(term));
     });
-  }, [flowRows, flowSearchValue]);
+  }, [flowSearchValue, quickFilteredFlowRows]);
 
-  const filteredFlowRows = useMemo(
-    () =>
-      flowRows.filter((row) => {
-        if (stateFilter === "all") return true;
-        return getFlowFilterFromStatus(row.status) === stateFilter;
-      }),
-    [flowRows, stateFilter]
-  );
+  const finalFlowRows = searchedFlowRows;
 
   const mainRows = useMemo(
-    () => filteredFlowRows.filter((row) => !row.executionDateInput || row.executionDateInput <= today),
-    [filteredFlowRows, today]
+    () => finalFlowRows.filter((row) => !row.executionDateInput || row.executionDateInput <= today),
+    [finalFlowRows, today]
   );
   const futureRows = useMemo(
-    () => filteredFlowRows.filter((row) => row.executionDateInput && row.executionDateInput > today),
-    [filteredFlowRows, today]
+    () => finalFlowRows.filter((row) => row.executionDateInput && row.executionDateInput > today),
+    [finalFlowRows, today]
   );
 
   const nearestFutureMs = useMemo(
@@ -1539,6 +1640,10 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 if (!value) return;
                 setViewMode(value);
                 setStateFilter(getDefaultFilterForView(value));
+                if (value !== "flows") {
+                  setFlowQuickFilter("none");
+                  setFlowQuickFilterAnchorEl(null);
+                }
                 setCreateRequirementOpen(false);
                 setCreateRequirementError(null);
               }}
@@ -1933,7 +2038,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 }}
               >
                 <DataGrid
-                  rows={flowSearchActive ? searchedFlowRows : mainRows}
+                  rows={flowSearchActive ? finalFlowRows : mainRows}
                   columns={flowColumns}
                   rowHeight={62}
                   filterModel={flowFilterModel}
@@ -1952,7 +2057,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                           title="No hay resultados para esta búsqueda"
                           description="Probá con otros términos para encontrar el flow, la tarea o el proyecto asociado."
                         />
-                      ) : filteredFlowRows.length === 0 ? (
+                      ) : quickFilteredFlowRows.length === 0 ? (
                         <DataGridEmptyState
                           icon={<InboxRoundedIcon color="action" />}
                           title="No hay flows para este filtro"
@@ -1972,6 +2077,19 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       quickFilterPlaceholder: "Buscar flow, tarea o proyecto vinculado...",
                       searchOpen: flowSearchOpen,
                       searchValue: flowSearchValue,
+                      showFlowQuickFilter: true,
+                      flowQuickFilter,
+                      flowQuickFilterLabel: flowQuickFilter === "none" ? "Filtro rápido" : activeFlowQuickFilterLabel,
+                      quickFilterAnchorEl: flowQuickFilterAnchorEl,
+                      onQuickFilterOpen: (event: MouseEvent<HTMLElement>) => {
+                        setFlowQuickFilterAnchorEl(event.currentTarget);
+                      },
+                      onQuickFilterClose: () => {
+                        setFlowQuickFilterAnchorEl(null);
+                      },
+                      onFlowQuickFilterChange: (value: FlowQuickFilter) => {
+                        setFlowQuickFilter(value);
+                      },
                       onSearchToggle: () => {
                         if (flowSearchOpen && flowSearchValue.trim().length === 0) {
                           setFlowSearchOpen(false);
