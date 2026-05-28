@@ -51,6 +51,7 @@ import {
   type GridColDef,
   type GridFilterModel,
   type GridRowParams,
+  type GridSortModel,
   Toolbar,
   ToolbarButton,
 } from "@mui/x-data-grid";
@@ -579,6 +580,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     items: [],
     quickFilterValues: [],
   });
+  const [flowSortModel, setFlowSortModel] = useState<GridSortModel>([{ field: "movementAt", sort: "asc" }]);
   const [requirementFilterModel, setRequirementFilterModel] = useState<GridFilterModel>({
     items: [],
     quickFilterValues: [],
@@ -828,6 +830,10 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     () => stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, flowQuickFilter, today)),
     [flowQuickFilter, stateFilteredFlowRows, today]
   );
+
+  useEffect(() => {
+    setFlowSortModel(flowQuickFilter === "none" ? [{ field: "movementAt", sort: "asc" }] : [{ field: "executionAt", sort: "asc" }]);
+  }, [flowQuickFilter]);
 
   const searchedFlowRows = useMemo(() => {
     const normalizedQuery = normalizeSearchText(flowSearchValue.trim());
@@ -1375,7 +1381,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       },
       {
         field: "movementAt",
-        headerName: "Movimiento",
+        headerName: "Inactividad",
         width: 126,
         minWidth: 120,
         align: "center",
@@ -2104,6 +2110,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   rowHeight={62}
                   filterModel={flowFilterModel}
                   onFilterModelChange={setFlowFilterModel}
+                  sortModel={flowSortModel}
+                  onSortModelChange={setFlowSortModel}
                   disableRowSelectionOnClick
                   showToolbar
                   onRowClick={(params: GridRowParams<FlowGridRow>) => {
@@ -2172,9 +2180,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                     } as any,
                   }}
                   initialState={{
-                    sorting: {
-                      sortModel: [{ field: "executionAt", sort: "asc" }],
-                    },
                     pagination: {
                       paginationModel: { pageSize: 20, page: 0 },
                     },
