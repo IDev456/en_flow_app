@@ -92,7 +92,7 @@ import {
 } from "../utils";
 
 type ViewMode = "requirements" | "flows";
-type FlowFilter = "all" | "active" | "waiting" | "cancelled" | "finalized";
+type FlowFilter = "all" | "operational" | "non_operational" | "active" | "waiting" | "cancelled" | "finalized";
 type FlowQuickFilter = "none" | "today" | "this_week" | "past" | "future" | "without_project";
 
 type TriggerListPageProps = {
@@ -153,13 +153,6 @@ type RequirementGridRow = {
   canDelete: boolean;
 };
 
-const flowFilterOptions: Array<{ value: FlowFilter; label: string }> = [
-  { value: "active", label: "Activos" },
-  { value: "waiting", label: "Esperando" },
-  { value: "cancelled", label: "Cancelados" },
-  { value: "finalized", label: "Finalizados" },
-  { value: "all", label: "Todos" },
-];
 
 const flowQuickFilterOptions = [
   { value: "none", label: "Sin filtro" },
@@ -170,20 +163,13 @@ const flowQuickFilterOptions = [
   { value: "without_project", label: "Sin proyecto" },
 ] as const satisfies ReadonlyArray<{ value: FlowQuickFilter; label: string }>;
 
-function getFilterIcon(filter: FlowFilter) {
-  if (filter === "active") return <BoltRoundedIcon sx={{ fontSize: 14 }} />;
-  if (filter === "waiting") return <HourglassTopRoundedIcon sx={{ fontSize: 14 }} />;
-  if (filter === "cancelled") return <CancelOutlinedIcon sx={{ fontSize: 14 }} />;
-  if (filter === "finalized") return <CheckCircleRoundedIcon sx={{ fontSize: 14 }} />;
-  return <InboxRoundedIcon sx={{ fontSize: 14 }} />;
-}
 
 function getAmbitoModeIcon(ambito: ActiveAmbitoMode) {
   if (ambito === "laboral") return <WorkOutlineRoundedIcon sx={{ fontSize: 14 }} />;
   return <PersonOutlineRoundedIcon sx={{ fontSize: 14 }} />;
 }
 
-function getFlowFilterFromStatus(statusValue: string): Exclude<FlowFilter, "all"> | null {
+function getFlowFilterFromStatus(statusValue: string): "active" | "waiting" | "cancelled" | "finalized" | null {
   const visibleStatus = getVisibleTriggerStatus(statusValue);
   if (visibleStatus === "cancelado") {
     return "cancelled";
@@ -205,6 +191,14 @@ function getFlowFilterFromStatus(statusValue: string): Exclude<FlowFilter, "all"
     return "active";
   }
   return "active";
+}
+
+function matchesFlowStateFilter(statusValue: string, filter: FlowFilter): boolean {
+  if (filter === "all") return true;
+  const resolved = getFlowFilterFromStatus(statusValue);
+  if (filter === "operational") return resolved === "active" || resolved === "waiting";
+  if (filter === "non_operational") return resolved === "cancelled" || resolved === "finalized";
+  return resolved === filter;
 }
 
 function getDefaultFilterForView(view: ViewMode): FlowFilter {
@@ -680,11 +674,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   }, [activeAmbito, requirementByWorkflowId, workflowsById]);
 
   const filteredFlowCards = useMemo(
-    () =>
-      allFlowCards.filter((item) => {
-        if (stateFilter === "all") return true;
-        return getFlowFilterFromStatus(item.displayStatus) === stateFilter;
-      }),
+    () => allFlowCards.filter((item) => matchesFlowStateFilter(item.displayStatus, stateFilter)),
     [allFlowCards, stateFilter]
   );
 
@@ -692,7 +682,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     return Object.values(workflowsById)
       .filter((workflow) => matchesActiveAmbito(workflow.ambito, activeAmbito))
       .map((workflow) => getVisibleWorkflowStatus(workflow))
-      .reduce<Record<Exclude<FlowFilter, "all">, number>>(
+      .reduce<Record<"active" | "waiting" | "cancelled" | "finalized", number>>(
         (acc, status) => {
           const filter = getFlowFilterFromStatus(status);
           if (!filter) return acc;
@@ -707,8 +697,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     () =>
       triggers.filter((trigger) => {
         if (!matchesActiveAmbito(trigger.ambito, activeAmbito)) return false;
-        if (stateFilter === "all") return true;
-        return getFlowFilterFromStatus(trigger.estado_general) === stateFilter;
+        return matchesFlowStateFilter(trigger.estado_general, stateFilter);
       }),
     [triggers, stateFilter, activeAmbito]
   );
@@ -716,7 +705,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const requirementCounts = useMemo(() => {
     return triggers
       .filter((trigger) => matchesActiveAmbito(trigger.ambito, activeAmbito))
-      .reduce<Record<Exclude<FlowFilter, "all">, number>>(
+      .reduce<Record<"active" | "waiting" | "cancelled" | "finalized", number>>(
       (acc, trigger) => {
         const filter = getFlowFilterFromStatus(trigger.estado_general);
         if (!filter) return acc;
@@ -829,11 +818,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   }, []);
 
   const stateFilteredFlowRows = useMemo(
-    () =>
-      flowRows.filter((row) => {
-        if (stateFilter === "all") return true;
-        return getFlowFilterFromStatus(row.status) === stateFilter;
-      }),
+    () => flowRows.filter((row) => matchesFlowStateFilter(row.status, stateFilter)),
     [flowRows, stateFilter]
   );
 
@@ -2092,69 +2077,248 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
             <Box sx={{ width: "100%", maxWidth: 560, ml: { lg: "auto" } }}>
               <Paper variant="outlined" sx={{ overflow: "hidden" }}>
-                <Tabs
-                  value={stateFilter}
-                  onChange={(_, value: FlowFilter) => setStateFilter(value)}
-                  variant="fullWidth"
-                  aria-label="Filtros de estado"
+                <Box
                   sx={{
-                    minHeight: 64,
-                    "& .MuiTabs-indicator": {
-                      height: 3,
-                    },
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr 1fr 1fr auto",
+                    gridTemplateRows: "auto auto",
                   }}
                 >
-                  {flowFilterOptions.map((option) => {
-                    const count = option.value !== "all" ? (currentCounts[option.value] ?? 0) : null;
-                    const filterToken =
-                      option.value === "active"
-                        ? theme.palette.status.active
-                        : option.value === "waiting"
-                          ? theme.palette.status.waiting
-                          : option.value === "cancelled"
-                            ? theme.palette.status.cancelled
-                            : option.value === "finalized"
-                              ? theme.palette.status.finalized
-                              : theme.palette.status.neutral;
+                  {/* Row 1 – Grupo Operativos */}
+                  <ButtonBase
+                    onClick={() => setStateFilter("operational")}
+                    sx={{
+                      gridColumn: "1 / 3",
+                      gridRow: 1,
+                      py: 0.75,
+                      px: 0.75,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderRight: "1px solid",
+                      borderBottom: "1px solid",
+                      borderColor: "divider",
+                      backgroundColor:
+                        stateFilter === "operational"
+                          ? theme.palette.status.active.container
+                          : stateFilter === "active" || stateFilter === "waiting"
+                            ? alpha(theme.palette.status.active.container, 0.35)
+                            : "transparent",
+                      color:
+                        stateFilter === "operational"
+                          ? theme.palette.status.active.onContainer
+                          : "text.secondary",
+                      transition: "background-color 0.15s",
+                      "&:hover": {
+                        backgroundColor: alpha(theme.palette.status.active.container, 0.5),
+                      },
+                    }}
+                  >
+                    <BoltRoundedIcon
+                      sx={{
+                        fontSize: 13,
+                        mb: 0.25,
+                        color:
+                          stateFilter === "operational"
+                            ? theme.palette.status.active.accent
+                            : "text.disabled",
+                      }}
+                    />
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontWeight: stateFilter === "operational" ? 700 : 500,
+                        fontSize: "0.72rem",
+                        lineHeight: 1.2,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Operativos ({currentCounts.active + currentCounts.waiting})
+                    </Typography>
+                  </ButtonBase>
 
+                  {/* Row 1 – Grupo No operativos */}
+                  <ButtonBase
+                    onClick={() => setStateFilter("non_operational")}
+                    sx={{
+                      gridColumn: "3 / 5",
+                      gridRow: 1,
+                      py: 0.75,
+                      px: 0.75,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderRight: "1px solid",
+                      borderBottom: "1px solid",
+                      borderColor: "divider",
+                      backgroundColor:
+                        stateFilter === "non_operational"
+                          ? theme.palette.status.cancelled.container
+                          : stateFilter === "cancelled" || stateFilter === "finalized"
+                            ? alpha(theme.palette.status.cancelled.container, 0.35)
+                            : "transparent",
+                      color:
+                        stateFilter === "non_operational"
+                          ? theme.palette.status.cancelled.onContainer
+                          : "text.secondary",
+                      transition: "background-color 0.15s",
+                      "&:hover": {
+                        backgroundColor: alpha(theme.palette.status.cancelled.container, 0.5),
+                      },
+                    }}
+                  >
+                    <InboxRoundedIcon
+                      sx={{
+                        fontSize: 13,
+                        mb: 0.25,
+                        color:
+                          stateFilter === "non_operational"
+                            ? theme.palette.status.cancelled.accent
+                            : "text.disabled",
+                      }}
+                    />
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontWeight: stateFilter === "non_operational" ? 700 : 500,
+                        fontSize: "0.72rem",
+                        lineHeight: 1.2,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      No operativos ({currentCounts.cancelled + currentCounts.finalized})
+                    </Typography>
+                  </ButtonBase>
+
+                  {/* Col 5, Rows 1-2 – Todos */}
+                  <ButtonBase
+                    onClick={() => setStateFilter("all")}
+                    sx={{
+                      gridColumn: 5,
+                      gridRow: "1 / 3",
+                      px: 1.5,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      minWidth: 72,
+                      backgroundColor:
+                        stateFilter === "all"
+                          ? theme.palette.status.neutral.container
+                          : "transparent",
+                      color:
+                        stateFilter === "all"
+                          ? theme.palette.status.neutral.onContainer
+                          : "text.secondary",
+                      transition: "background-color 0.15s",
+                      "&:hover": {
+                        backgroundColor: alpha(theme.palette.status.neutral.container, 0.5),
+                      },
+                    }}
+                  >
+                    <InboxRoundedIcon
+                      sx={{
+                        fontSize: 13,
+                        mb: 0.25,
+                        color:
+                          stateFilter === "all"
+                            ? theme.palette.status.neutral.accent
+                            : "text.disabled",
+                      }}
+                    />
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontWeight: stateFilter === "all" ? 700 : 500,
+                        fontSize: "0.72rem",
+                        lineHeight: 1.2,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Todos (
+                      {currentCounts.active +
+                        currentCounts.waiting +
+                        currentCounts.cancelled +
+                        currentCounts.finalized}
+                      )
+                    </Typography>
+                  </ButtonBase>
+
+                  {/* Row 2 – Botones individuales */}
+                  {(
+                    [
+                      {
+                        value: "active" as const,
+                        label: "Activos",
+                        token: theme.palette.status.active,
+                      },
+                      {
+                        value: "waiting" as const,
+                        label: "Esperando",
+                        token: theme.palette.status.waiting,
+                      },
+                      {
+                        value: "cancelled" as const,
+                        label: "Cancelados",
+                        token: theme.palette.status.cancelled,
+                      },
+                      {
+                        value: "finalized" as const,
+                        label: "Finalizados",
+                        token: theme.palette.status.finalized,
+                      },
+                    ] as const
+                  ).map((option, idx) => {
+                    const isSelected = stateFilter === option.value;
+                    const iconColor = isSelected ? option.token.accent : "text.disabled";
+                    const iconSx = { fontSize: 13, mb: 0.25, color: iconColor };
                     return (
-                      <Tab
+                      <ButtonBase
                         key={option.value}
-                        value={option.value}
-                        icon={getFilterIcon(option.value)}
-                        iconPosition="top"
-                        label={count !== null ? `${option.label} (${count})` : option.label}
+                        onClick={() => setStateFilter(option.value)}
                         sx={{
-                          minWidth: 0,
-                          minHeight: 64,
-                          px: 0.75,
-                          py: 0.5,
-                          textTransform: "none",
-                          fontWeight: 500,
-                          fontSize: "0.73rem",
-                          letterSpacing: "0.01em",
-                          lineHeight: 1.15,
-                          whiteSpace: "nowrap",
-                          color: "text.secondary",
-                          "& .MuiTab-iconWrapper": {
-                            marginBottom: 0.25,
-                          },
-                          "& .MuiSvgIcon-root": {
-                            fontSize: 16,
-                            color: "text.secondary",
-                          },
-                          "&.Mui-selected": {
-                            color: filterToken.onContainer,
-                            backgroundColor: filterToken.container,
-                          },
-                          "&.Mui-selected .MuiSvgIcon-root": {
-                            color: filterToken.accent,
+                          gridColumn: idx + 1,
+                          gridRow: 2,
+                          py: 1,
+                          px: 0.5,
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          ...(idx < 3
+                            ? { borderRight: "1px solid", borderColor: "divider" }
+                            : {}),
+                          backgroundColor: isSelected
+                            ? option.token.container
+                            : "transparent",
+                          color: isSelected ? option.token.onContainer : "text.secondary",
+                          transition: "background-color 0.15s",
+                          "&:hover": {
+                            backgroundColor: alpha(option.token.container, 0.6),
                           },
                         }}
-                      />
+                      >
+                        {option.value === "active" && <BoltRoundedIcon sx={iconSx} />}
+                        {option.value === "waiting" && <HourglassTopRoundedIcon sx={iconSx} />}
+                        {option.value === "cancelled" && <CancelOutlinedIcon sx={iconSx} />}
+                        {option.value === "finalized" && <CheckCircleRoundedIcon sx={iconSx} />}
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            fontWeight: isSelected ? 700 : 500,
+                            fontSize: "0.68rem",
+                            lineHeight: 1.2,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {option.label} ({currentCounts[option.value] ?? 0})
+                        </Typography>
+                      </ButtonBase>
                     );
                   })}
-                </Tabs>
+                </Box>
               </Paper>
             </Box>
           </Box>
