@@ -500,6 +500,17 @@ function FlowGridToolbar(props: any) {
               <ExpandMoreIcon fontSize="small" />
             </Stack>
           </ToolbarButton>
+          {flowQuickFilter !== "none" ? (
+            <ToolbarButton
+              aria-label="Restablecer filtro rápido"
+              onClick={() => {
+                onFlowQuickFilterChange?.("none");
+                onQuickFilterClose?.();
+              }}
+            >
+              <CancelOutlinedIcon fontSize="small" />
+            </ToolbarButton>
+          ) : null}
           <Menu anchorEl={quickFilterAnchorEl} open={quickFilterMenuOpen} onClose={onQuickFilterClose}>
             {flowQuickFilterOptions.map((option) => (
               <MenuItem
