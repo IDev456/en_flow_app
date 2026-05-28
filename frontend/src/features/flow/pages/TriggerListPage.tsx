@@ -1871,7 +1871,71 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
               width: "100%",
             }}
           >
-            <Box sx={{ width: "100%", maxWidth: 560 }}>
+            <Box
+              sx={{
+                width: { xs: "100%", sm: 260 },
+                maxWidth: { xs: "100%", sm: 260 },
+                flexShrink: 0,
+              }}
+            >
+              <Paper variant="outlined" sx={{ overflow: "hidden" }}>
+                <Tabs
+                  value={activeAmbito}
+                  onChange={(_, value: ActiveAmbitoMode | null) => handleChangeActiveAmbito(value)}
+                  variant="fullWidth"
+                  aria-label="Modo de ámbito"
+                  sx={{
+                    minHeight: 64,
+                    "& .MuiTabs-indicator": {
+                      height: 3,
+                    },
+                  }}
+                >
+                  {activeAmbitoOptions.map((option) => {
+                    const isLaboral = option.value === "laboral";
+                    const accent = isLaboral ? theme.palette.primary : theme.palette.secondary;
+                    return (
+                      <Tab
+                        key={option.value}
+                        value={option.value}
+                        icon={getAmbitoModeIcon(option.value)}
+                        iconPosition="top"
+                        label={option.label}
+                        sx={{
+                          minWidth: 0,
+                          minHeight: 64,
+                          px: 0.75,
+                          py: 0.5,
+                          textTransform: "none",
+                          fontWeight: 500,
+                          fontSize: "0.73rem",
+                          letterSpacing: "0.01em",
+                          lineHeight: 1.15,
+                          whiteSpace: "nowrap",
+                          color: "text.secondary",
+                          "& .MuiTab-iconWrapper": {
+                            marginBottom: 0.25,
+                          },
+                          "& .MuiSvgIcon-root": {
+                            fontSize: 16,
+                            color: "text.secondary",
+                          },
+                          "&.Mui-selected": {
+                            color: accent.main,
+                            backgroundColor: alpha(accent.main, 0.1),
+                          },
+                          "&.Mui-selected .MuiSvgIcon-root": {
+                            color: accent.main,
+                          },
+                        }}
+                      />
+                    );
+                  })}
+                </Tabs>
+              </Paper>
+            </Box>
+
+            <Box sx={{ width: "100%", maxWidth: 560, ml: { lg: "auto" } }}>
               <Paper variant="outlined" sx={{ overflow: "hidden" }}>
                 <Tabs
                   value={stateFilter}
@@ -1930,71 +1994,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                           },
                           "&.Mui-selected .MuiSvgIcon-root": {
                             color: filterToken.accent,
-                          },
-                        }}
-                      />
-                    );
-                  })}
-                </Tabs>
-              </Paper>
-            </Box>
-
-            <Box
-              sx={{
-                width: { xs: "100%", sm: 260 },
-                maxWidth: { xs: "100%", sm: 260 },
-                ml: { lg: "auto" },
-                flexShrink: 0,
-              }}
-            >
-              <Paper variant="outlined" sx={{ overflow: "hidden" }}>
-                <Tabs
-                  value={activeAmbito}
-                  onChange={(_, value: ActiveAmbitoMode | null) => handleChangeActiveAmbito(value)}
-                  variant="fullWidth"
-                  aria-label="Modo de ámbito"
-                  sx={{
-                    minHeight: 64,
-                    "& .MuiTabs-indicator": {
-                      height: 3,
-                    },
-                  }}
-                >
-                  {activeAmbitoOptions.map((option) => {
-                    const isLaboral = option.value === "laboral";
-                    const accent = isLaboral ? theme.palette.primary : theme.palette.secondary;
-                    return (
-                      <Tab
-                        key={option.value}
-                        value={option.value}
-                        icon={getAmbitoModeIcon(option.value)}
-                        iconPosition="top"
-                        label={option.label}
-                        sx={{
-                          minWidth: 0,
-                          minHeight: 64,
-                          px: 0.75,
-                          py: 0.5,
-                          textTransform: "none",
-                          fontWeight: 500,
-                          fontSize: "0.73rem",
-                          letterSpacing: "0.01em",
-                          lineHeight: 1.15,
-                          whiteSpace: "nowrap",
-                          color: "text.secondary",
-                          "& .MuiTab-iconWrapper": {
-                            marginBottom: 0.25,
-                          },
-                          "& .MuiSvgIcon-root": {
-                            fontSize: 16,
-                            color: "text.secondary",
-                          },
-                          "&.Mui-selected": {
-                            color: accent.main,
-                            backgroundColor: alpha(accent.main, 0.1),
-                          },
-                          "&.Mui-selected .MuiSvgIcon-root": {
-                            color: accent.main,
                           },
                         }}
                       />
