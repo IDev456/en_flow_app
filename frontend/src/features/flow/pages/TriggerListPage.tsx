@@ -27,6 +27,10 @@ import {
   Button,
   Chip,
   Collapse,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   LinearProgress,
   IconButton,
   Menu,
@@ -62,7 +66,7 @@ import { DataGridEmptyState } from "../../../components/feedback/DataGridEmptySt
 import { PageContainer } from "../../../components/layout/PageContainer";
 import { useToastContext } from "../../../components/Toast";
 import { getStatusSemanticKey } from "../../../theme";
-import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, getWorkflow, listTriggers, listWorkflows, reactivateWorkflow, updateStepDate, updateTrigger, updateWorkflow } from "../api";
+import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, getWorkflow, linkWorkflowRequirement, listTriggers, listWorkflows, reactivateWorkflow, updateStepDate, updateTrigger, updateWorkflow } from "../api";
 import { AmbitoChip } from "../components/AmbitoChip";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Ambito, Step, TriggerDetail, WorkflowDetail } from "../types";
@@ -569,6 +573,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [deletingFlowId, setDeletingFlowId] = useState<string | null>(null);
   const [flowActionsMenu, setFlowActionsMenu] = useState<{ rowId: string; anchorEl: HTMLElement } | null>(null);
   const [requirementsMenu, setRequirementsMenu] = useState<{ rowId: string; anchorEl: HTMLElement } | null>(null);
+  const [linkProjectDialog, setLinkProjectDialog] = useState<{ workflowId: string; workflowName: string } | null>(null);
+  const [linkProjectSearch, setLinkProjectSearch] = useState("");
+  const [linkProjectLoading, setLinkProjectLoading] = useState(false);
   const [pendingDates, setPendingDates] = useState<Map<string, string>>(new Map());
   const [futuresOpen, setFuturesOpen] = useState(false);
   const [flowQuickFilter, setFlowQuickFilter] = useState<FlowQuickFilter>("none");
@@ -641,6 +648,24 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       setError(err instanceof Error ? err.message : "No se pudieron cargar los datos");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleLinkProject(projectId: string) {
+    if (!linkProjectDialog || linkProjectLoading) return;
+    setLinkProjectLoading(true);
+    try {
+      await linkWorkflowRequirement(linkProjectDialog.workflowId, { requirement_id: projectId });
+      setLinkProjectDialog(null);
+      setLinkProjectSearch("");
+      await loadData();
+      setFlowToastMessage("Proyecto asociado.");
+      setFlowToastOpen(true);
+    } catch {
+      setFlowToastMessage("No se pudo asociar el proyecto.");
+      setFlowToastOpen(true);
+    } finally {
+      setLinkProjectLoading(false);
     }
   }
 
@@ -717,6 +742,20 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   }, [activeAmbito, triggers]);
 
   const unclassifiedTriggers = useMemo(() => triggers.filter((trigger) => trigger.ambito === null), [triggers]);
+
+  const linkableProjects = useMemo(() => {
+    if (!linkProjectDialog) return [];
+    const searchTerm = linkProjectSearch.trim().toLowerCase();
+    return triggers.filter((t) => {
+      if (!matchesActiveAmbito(t.ambito, activeAmbito)) return false;
+      if (searchTerm) {
+        const description = (t.descripcion ?? "").toLowerCase();
+        const requester = (t.solicitante ?? "").toLowerCase();
+        if (!description.includes(searchTerm) && !requester.includes(searchTerm)) return false;
+      }
+      return true;
+    });
+  }, [triggers, linkProjectSearch, linkProjectDialog, activeAmbito]);
   const unclassifiedWorkflowCards = useMemo(
     () =>
       Object.values(workflowsById)
@@ -1421,18 +1460,21 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
           if (hasNoProjects) {
             return (
-              <Typography
-                variant="body2"
-                color="text.secondary"
+              <ButtonBase
+                onClick={() => {
+                  setLinkProjectDialog({ workflowId: row.id, workflowName: row.taskName });
+                }}
                 sx={{
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  lineHeight: 1.3,
+                  color: "text.disabled",
+                  fontSize: "0.8rem",
+                  px: 0.5,
+                  py: 0.25,
+                  borderRadius: (theme) => `${theme.appShape.sm}px`,
+                  "&:hover": { color: "text.secondary" },
                 }}
               >
-                Sin proyectos
-              </Typography>
+                + Asociar proyecto
+              </ButtonBase>
             );
           }
 
@@ -1519,7 +1561,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         },
       },
     ],
-    [openPendingDateEditorAndPicker, pendingDates, setPendingDateInputRef, theme.palette.mode, today, handleProjectNavigate, setRequirementsMenu]
+    [openPendingDateEditorAndPicker, pendingDates, setPendingDateInputRef, theme.palette.mode, today, handleProjectNavigate, setRequirementsMenu, setLinkProjectDialog]
   );
 
   const visibleFlowColumns = useMemo(
@@ -1744,6 +1786,77 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         onClose={() => setFlowToastOpen(false)}
         message={flowToastMessage}
       />
+
+      <Dialog
+        open={linkProjectDialog !== null}
+        onClose={() => {
+          if (!linkProjectLoading) {
+            setLinkProjectDialog(null);
+            setLinkProjectSearch("");
+          }
+        }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ pb: 0.5 }}>Asociar proyecto</DialogTitle>
+        <DialogContent>
+          {linkProjectDialog && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              {linkProjectDialog.workflowName}
+            </Typography>
+          )}
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            placeholder="Buscar proyecto..."
+            value={linkProjectSearch}
+            onChange={(e) => setLinkProjectSearch(e.target.value)}
+            slotProps={{
+              input: {
+                startAdornment: <SearchRoundedIcon fontSize="small" sx={{ mr: 0.75, color: "text.secondary" }} />,
+              },
+            }}
+            sx={{ mb: 1 }}
+          />
+          {linkableProjects.length === 0 ? (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
+              {linkProjectSearch.trim()
+                ? "No se encontraron proyectos."
+                : "No hay proyectos disponibles para asociar."}
+            </Typography>
+          ) : (
+            <Box sx={{ maxHeight: 280, overflowY: "auto" }}>
+              {linkableProjects.map((project) => (
+                <MenuItem
+                  key={project.id}
+                  disabled={linkProjectLoading}
+                  onClick={() => void handleLinkProject(project.id)}
+                >
+                  <Typography
+                    variant="body2"
+                    sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  >
+                    {project.descripcion?.trim() || "Proyecto sin detalle"}
+                  </Typography>
+                </MenuItem>
+              ))}
+            </Box>
+          )}
+          {linkProjectLoading && <LinearProgress sx={{ mt: 1.5 }} />}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setLinkProjectDialog(null);
+              setLinkProjectSearch("");
+            }}
+            disabled={linkProjectLoading}
+          >
+            Cancelar
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <PageContainer
         breadcrumbs={[]}
@@ -2090,10 +2203,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                     sx={{
                       gridColumn: "1 / 3",
                       gridRow: 1,
-                      py: 0.75,
+                      py: 0.5,
                       px: 0.75,
                       display: "flex",
-                      flexDirection: "column",
                       alignItems: "center",
                       justifyContent: "center",
                       borderRight: "1px solid",
@@ -2101,9 +2213,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       borderColor: "divider",
                       backgroundColor:
                         stateFilter === "operational"
-                          ? theme.palette.status.active.container
+                          ? alpha(theme.palette.status.active.container, 0.65)
                           : stateFilter === "active" || stateFilter === "waiting"
-                            ? alpha(theme.palette.status.active.container, 0.35)
+                            ? alpha(theme.palette.status.active.container, 0.2)
                             : "transparent",
                       color:
                         stateFilter === "operational"
@@ -2111,26 +2223,17 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                           : "text.secondary",
                       transition: "background-color 0.15s",
                       "&:hover": {
-                        backgroundColor: alpha(theme.palette.status.active.container, 0.5),
+                        backgroundColor: alpha(theme.palette.status.active.container, 0.35),
                       },
                     }}
                   >
-                    <BoltRoundedIcon
-                      sx={{
-                        fontSize: 13,
-                        mb: 0.25,
-                        color:
-                          stateFilter === "operational"
-                            ? theme.palette.status.active.accent
-                            : "text.disabled",
-                      }}
-                    />
                     <Typography
                       variant="caption"
                       sx={{
-                        fontWeight: stateFilter === "operational" ? 700 : 500,
-                        fontSize: "0.72rem",
+                        fontWeight: stateFilter === "operational" ? 600 : 400,
+                        fontSize: "0.70rem",
                         lineHeight: 1.2,
+                        letterSpacing: "0.02em",
                         whiteSpace: "nowrap",
                       }}
                     >
@@ -2144,10 +2247,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                     sx={{
                       gridColumn: "3 / 5",
                       gridRow: 1,
-                      py: 0.75,
+                      py: 0.5,
                       px: 0.75,
                       display: "flex",
-                      flexDirection: "column",
                       alignItems: "center",
                       justifyContent: "center",
                       borderRight: "1px solid",
@@ -2155,9 +2257,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       borderColor: "divider",
                       backgroundColor:
                         stateFilter === "non_operational"
-                          ? theme.palette.status.cancelled.container
+                          ? alpha(theme.palette.status.cancelled.container, 0.65)
                           : stateFilter === "cancelled" || stateFilter === "finalized"
-                            ? alpha(theme.palette.status.cancelled.container, 0.35)
+                            ? alpha(theme.palette.status.cancelled.container, 0.2)
                             : "transparent",
                       color:
                         stateFilter === "non_operational"
@@ -2165,26 +2267,17 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                           : "text.secondary",
                       transition: "background-color 0.15s",
                       "&:hover": {
-                        backgroundColor: alpha(theme.palette.status.cancelled.container, 0.5),
+                        backgroundColor: alpha(theme.palette.status.cancelled.container, 0.35),
                       },
                     }}
                   >
-                    <InboxRoundedIcon
-                      sx={{
-                        fontSize: 13,
-                        mb: 0.25,
-                        color:
-                          stateFilter === "non_operational"
-                            ? theme.palette.status.cancelled.accent
-                            : "text.disabled",
-                      }}
-                    />
                     <Typography
                       variant="caption"
                       sx={{
-                        fontWeight: stateFilter === "non_operational" ? 700 : 500,
-                        fontSize: "0.72rem",
+                        fontWeight: stateFilter === "non_operational" ? 600 : 400,
+                        fontSize: "0.70rem",
                         lineHeight: 1.2,
+                        letterSpacing: "0.02em",
                         whiteSpace: "nowrap",
                       }}
                     >
@@ -2203,10 +2296,10 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       flexDirection: "column",
                       alignItems: "center",
                       justifyContent: "center",
-                      minWidth: 72,
+                      minWidth: 68,
                       backgroundColor:
                         stateFilter === "all"
-                          ? theme.palette.status.neutral.container
+                          ? alpha(theme.palette.status.neutral.container, 0.65)
                           : "transparent",
                       color:
                         stateFilter === "all"
@@ -2214,26 +2307,17 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                           : "text.secondary",
                       transition: "background-color 0.15s",
                       "&:hover": {
-                        backgroundColor: alpha(theme.palette.status.neutral.container, 0.5),
+                        backgroundColor: alpha(theme.palette.status.neutral.container, 0.35),
                       },
                     }}
                   >
-                    <InboxRoundedIcon
-                      sx={{
-                        fontSize: 13,
-                        mb: 0.25,
-                        color:
-                          stateFilter === "all"
-                            ? theme.palette.status.neutral.accent
-                            : "text.disabled",
-                      }}
-                    />
                     <Typography
                       variant="caption"
                       sx={{
-                        fontWeight: stateFilter === "all" ? 700 : 500,
-                        fontSize: "0.72rem",
+                        fontWeight: stateFilter === "all" ? 600 : 400,
+                        fontSize: "0.70rem",
                         lineHeight: 1.2,
+                        letterSpacing: "0.02em",
                         whiteSpace: "nowrap",
                       }}
                     >
@@ -2353,6 +2437,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                         filterModel={flowFilterModel}
                         onFilterModelChange={setFlowFilterModel}
                         disableRowSelectionOnClick
+                        onCellClick={(params, event) => {
+                          if (params.field === "requirementsLabel") {
+                            event.defaultMuiPrevented = true;
+                          }
+                        }}
                         onRowClick={(params: GridRowParams<FlowGridRow>) => {
                           navigate(`/workflows/${params.row.id}`);
                         }}
@@ -2400,6 +2489,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   onSortModelChange={setFlowSortModel}
                   disableRowSelectionOnClick
                   showToolbar
+                  onCellClick={(params, event) => {
+                    if (params.field === "requirementsLabel") {
+                      event.defaultMuiPrevented = true;
+                    }
+                  }}
                   onRowClick={(params: GridRowParams<FlowGridRow>) => {
                     navigate(`/workflows/${params.row.id}`);
                   }}
