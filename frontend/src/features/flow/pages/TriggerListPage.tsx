@@ -32,6 +32,8 @@ import {
   DialogContent,
   DialogTitle,
   LinearProgress,
+  List,
+  ListItemButton,
   IconButton,
   Menu,
   MenuItem,
@@ -656,8 +658,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     setLinkProjectLoading(true);
     try {
       await linkWorkflowRequirement(linkProjectDialog.workflowId, { requirement_id: projectId });
-      setLinkProjectDialog(null);
-      setLinkProjectSearch("");
+      handleCloseLinkProjectDialog();
       await loadData();
       setFlowToastMessage("Proyecto asociado.");
       setFlowToastOpen(true);
@@ -667,6 +668,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     } finally {
       setLinkProjectLoading(false);
     }
+  }
+
+  function handleCloseLinkProjectDialog() {
+    if (linkProjectLoading) return;
+    setLinkProjectDialog(null);
+    setLinkProjectSearch("");
   }
 
   const requirementByWorkflowId = useMemo(() => {
@@ -745,17 +752,21 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
   const linkableProjects = useMemo(() => {
     if (!linkProjectDialog) return [];
-    const searchTerm = linkProjectSearch.trim().toLowerCase();
+    const normalizedSearch = normalizeSearchText(linkProjectSearch.trim());
+    const searchTerms = normalizedSearch.split(/\s+/).filter(Boolean);
+    const alreadyAssociatedIds = new Set(
+      (requirementByWorkflowId[linkProjectDialog.workflowId] ?? []).map((requirement) => requirement.id)
+    );
     return triggers.filter((t) => {
+      if (alreadyAssociatedIds.has(t.id)) return false;
       if (!matchesActiveAmbito(t.ambito, activeAmbito)) return false;
-      if (searchTerm) {
-        const description = (t.descripcion ?? "").toLowerCase();
-        const requester = (t.solicitante ?? "").toLowerCase();
-        if (!description.includes(searchTerm) && !requester.includes(searchTerm)) return false;
+      if (searchTerms.length > 0) {
+        const searchableContent = normalizeSearchText([t.descripcion ?? "", t.solicitante ?? ""].join(" "));
+        if (!searchTerms.every((term) => searchableContent.includes(term))) return false;
       }
       return true;
     });
-  }, [triggers, linkProjectSearch, linkProjectDialog, activeAmbito]);
+  }, [triggers, linkProjectSearch, linkProjectDialog, activeAmbito, requirementByWorkflowId]);
   const unclassifiedWorkflowCards = useMemo(
     () =>
       Object.values(workflowsById)
@@ -1461,9 +1472,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
           if (hasNoProjects) {
             return (
               <ButtonBase
-                onClick={() => {
+                onClick={(event) => {
+                  event.stopPropagation();
                   setLinkProjectDialog({ workflowId: row.id, workflowName: row.taskName });
                 }}
+                onMouseDown={(event) => event.stopPropagation()}
                 sx={{
                   color: "text.disabled",
                   fontSize: "0.8rem",
@@ -1789,12 +1802,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
       <Dialog
         open={linkProjectDialog !== null}
-        onClose={() => {
-          if (!linkProjectLoading) {
-            setLinkProjectDialog(null);
-            setLinkProjectSearch("");
-          }
-        }}
+        onClose={handleCloseLinkProjectDialog}
         maxWidth="xs"
         fullWidth
       >
@@ -1802,21 +1810,17 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         <DialogContent>
           {linkProjectDialog && (
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              {linkProjectDialog.workflowName}
+              {`Flow: ${linkProjectDialog.workflowName}`}
             </Typography>
           )}
           <TextField
             autoFocus
             fullWidth
             size="small"
+            label="Buscar proyecto"
             placeholder="Buscar proyecto..."
             value={linkProjectSearch}
-            onChange={(e) => setLinkProjectSearch(e.target.value)}
-            slotProps={{
-              input: {
-                startAdornment: <SearchRoundedIcon fontSize="small" sx={{ mr: 0.75, color: "text.secondary" }} />,
-              },
-            }}
+            onChange={(event) => setLinkProjectSearch(event.target.value)}
             sx={{ mb: 1 }}
           />
           {linkableProjects.length === 0 ? (
@@ -1827,32 +1831,40 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             </Typography>
           ) : (
             <Box sx={{ maxHeight: 280, overflowY: "auto" }}>
+              <List disablePadding>
               {linkableProjects.map((project) => (
-                <MenuItem
+                <ListItemButton
                   key={project.id}
                   disabled={linkProjectLoading}
                   onClick={() => void handleLinkProject(project.id)}
+                  sx={{ alignItems: "flex-start", py: 1, borderRadius: 1 }}
                 >
-                  <Typography
-                    variant="body2"
-                    sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                  >
-                    {project.descripcion?.trim() || "Proyecto sin detalle"}
-                  </Typography>
-                </MenuItem>
+                  <Stack spacing={0.35} sx={{ minWidth: 0 }}>
+                    <Typography
+                      variant="body2"
+                      sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}
+                    >
+                      {project.descripcion?.trim() || `Proyecto ${project.id.slice(0, 8)}`}
+                    </Typography>
+                    {project.solicitante?.trim() ? (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                      >
+                        {project.solicitante.trim()}
+                      </Typography>
+                    ) : null}
+                  </Stack>
+                </ListItemButton>
               ))}
+              </List>
             </Box>
           )}
           {linkProjectLoading && <LinearProgress sx={{ mt: 1.5 }} />}
         </DialogContent>
         <DialogActions>
-          <Button
-            onClick={() => {
-              setLinkProjectDialog(null);
-              setLinkProjectSearch("");
-            }}
-            disabled={linkProjectLoading}
-          >
+          <Button onClick={handleCloseLinkProjectDialog} disabled={linkProjectLoading}>
             Cancelar
           </Button>
         </DialogActions>
