@@ -82,6 +82,7 @@ import {
   formatRelativeCalendarDay,
   getCalendarDayDiff,
   getAmbitoLabel,
+  humanizeStatus,
   getReminderDateError,
   getVisibleTriggerStatus,
   getVisibleWorkflowStatus,
@@ -1256,22 +1257,40 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         valueGetter: (_, row) => `${row.stepLabel} ${row.taskName}`,
         renderCell: (params) => {
           const row = params.row;
+          const statusHighlight = getStatusHighlight(row.status, theme);
           return (
-            <Typography
-              variant="body2"
-              sx={{
-                fontWeight: 700,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                display: "-webkit-box",
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: "vertical",
-                whiteSpace: "normal",
-                lineHeight: 1.25,
-              }}
-            >
-              {row.taskName}
-            </Typography>
+            <Tooltip title={humanizeStatus(row.status)}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: "stretch", minWidth: 0, width: "100%", py: 0.25 }}>
+                <Box
+                  aria-hidden
+                  sx={(theme) => ({
+                    width: 4,
+                    flexShrink: 0,
+                    borderRadius: theme.appShape.sm,
+                    backgroundColor: statusHighlight.accent,
+                    alignSelf: "stretch",
+                    minHeight: 34,
+                  })}
+                />
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: 700,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    whiteSpace: "normal",
+                    lineHeight: 1.25,
+                    minWidth: 0,
+                    alignSelf: "center",
+                  }}
+                >
+                  {row.taskName}
+                </Typography>
+              </Stack>
+            </Tooltip>
           );
         },
       },
