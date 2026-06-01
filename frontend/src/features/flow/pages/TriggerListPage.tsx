@@ -56,6 +56,7 @@ import {
   GridActionsCellItem,
   type GridColDef,
   type GridFilterModel,
+  type GridRowClassNameParams,
   type GridRowParams,
   type GridSortModel,
   Toolbar,
@@ -374,6 +375,37 @@ function matchesFlowQuickFilter(row: FlowGridRow, filter: FlowQuickFilter, today
 function getStatusHighlight(statusValue: string, theme: Theme) {
   const semantic = getStatusSemanticKey(getStatusTone(statusValue));
   return theme.palette.status[semantic];
+}
+
+const flowRowSemanticKeys = ["active", "waiting", "problem", "cancelled", "finalized", "neutral"] as const;
+
+function getFlowRowStatusClass(status: string) {
+  const semantic = getStatusSemanticKey(getStatusTone(status));
+  return `flow-row--${semantic}`;
+}
+
+function getFlowRowStatusStyles(theme: Theme) {
+  const styles: Record<string, Record<string, unknown>> = {
+    "& .MuiDataGrid-row": {
+      position: "relative",
+      overflow: "hidden",
+    },
+  };
+
+  flowRowSemanticKeys.forEach((semantic) => {
+    const token = theme.palette.status[semantic];
+    styles[`& .MuiDataGrid-row.flow-row--${semantic}::before`] = {
+      content: '""',
+      position: "absolute",
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: 4,
+      backgroundColor: alpha(token.accent, 0.95),
+    };
+  });
+
+  return styles;
 }
 
 function toQuickFilterValues(search: string) {
@@ -1225,20 +1257,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const flowColumns = useMemo<GridColDef<FlowGridRow>[]>(
     () => [
       {
-        field: "status",
-        headerName: "Estado",
-        width: 160,
-        minWidth: 160,
-        align: "left",
-        headerAlign: "left",
-        sortable: false,
-        renderCell: (params) => (
-          <Box sx={{ display: "flex", alignItems: "center", height: "100%", width: "100%" }}>
-            <StatusBadge value={params.value} />
-          </Box>
-        ),
-      },
-      {
         field: "ambito",
         headerName: "Ámbito",
         width: 128,
@@ -1578,7 +1596,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   );
 
   const visibleFlowColumns = useMemo(
-    () => flowColumns.filter((column) => column.field !== "status" && column.field !== "ambito"),
+    () => flowColumns.filter((column) => column.field !== "ambito"),
     [flowColumns]
   );
 
@@ -2446,6 +2464,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                         rows={group.rows}
                         columns={visibleFlowColumns}
                         rowHeight={62}
+                        getRowClassName={(params: GridRowClassNameParams<FlowGridRow>) =>
+                          getFlowRowStatusClass(params.row.status)
+                        }
                         filterModel={flowFilterModel}
                         onFilterModelChange={setFlowFilterModel}
                         disableRowSelectionOnClick
@@ -2468,7 +2489,10 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                           },
                         }}
                         pageSizeOptions={[10, 15, 20, 50]}
-                        sx={{ border: 0 }}
+                        sx={(theme) => ({
+                          border: 0,
+                          ...getFlowRowStatusStyles(theme),
+                        })}
                       />
                     </Box>
                   ))}
@@ -2495,6 +2519,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   rows={visibleFlowRows}
                   columns={visibleFlowColumns}
                   rowHeight={62}
+                  getRowClassName={(params: GridRowClassNameParams<FlowGridRow>) =>
+                    getFlowRowStatusClass(params.row.status)
+                  }
                   filterModel={flowFilterModel}
                   onFilterModelChange={setFlowFilterModel}
                   sortModel={flowSortModel}
@@ -2577,7 +2604,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                     },
                   }}
                   pageSizeOptions={[10, 15, 20, 50]}
-                  sx={{ border: 0, height: "100%" }}
+                  sx={(theme) => ({
+                    border: 0,
+                    height: "100%",
+                    ...getFlowRowStatusStyles(theme),
+                  })}
                 />
               </Box>
             ) : (
