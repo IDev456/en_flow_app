@@ -605,7 +605,7 @@ export function Journal({
                       {body}
                     </Typography>
                     <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", gap: 1 }}>
-                      {item.previousStatus ? <StatusBadge value={item.previousStatus} /> : <Chip label="sin dato" size="small" variant="outlined" />}
+                      {item.previousStatus ? <StatusBadge value={item.previousStatus} /> : <Chip label="Tarea creada" size="small" variant="outlined" />}
                       <Typography color="text.secondary">→</Typography>
                       {item.nextStatus ? <StatusBadge value={item.nextStatus} /> : <Chip label="sin dato" size="small" variant="outlined" />}
                     </Stack>

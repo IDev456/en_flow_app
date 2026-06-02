@@ -177,6 +177,7 @@ const flowQuickFilterOptions = [
   { value: "without_project", label: "Sin proyecto" },
   { value: "without_reminder", label: "Sin recordatorio" },
 ] as const satisfies ReadonlyArray<{ value: FlowQuickFilter; label: string }>;
+const selectableFlowQuickFilterOptions = flowQuickFilterOptions.filter((option) => option.value !== "none");
 
 
 function getAmbitoModeIcon(ambito: ActiveAmbitoMode) {
@@ -454,6 +455,7 @@ type FlowGridToolbarProps = {
   showFlowQuickFilter?: boolean;
   activeFlowFilterDescription?: string;
   flowQuickFilter?: FlowQuickFilter;
+  flowQuickFilterCounts?: Partial<Record<FlowQuickFilter, number>>;
   flowQuickFilterLabel?: string;
   quickFilterAnchorEl?: HTMLElement | null;
   onQuickFilterOpen?: (event: MouseEvent<HTMLElement>) => void;
@@ -520,6 +522,7 @@ function FlowGridToolbar(props: any) {
     showFlowQuickFilter = false,
     activeFlowFilterDescription = "",
     flowQuickFilter = "none",
+    flowQuickFilterCounts = {},
     flowQuickFilterLabel = "Filtro rápido",
     quickFilterAnchorEl = null,
     onQuickFilterOpen,
@@ -646,7 +649,7 @@ function FlowGridToolbar(props: any) {
             </ToolbarButton>
           ) : null}
           <Menu anchorEl={quickFilterAnchorEl} open={quickFilterMenuOpen} onClose={onQuickFilterClose}>
-            {flowQuickFilterOptions.map((option) => (
+            {selectableFlowQuickFilterOptions.map((option) => (
               <MenuItem
                 key={option.value}
                 selected={option.value === flowQuickFilter}
@@ -655,7 +658,7 @@ function FlowGridToolbar(props: any) {
                   onQuickFilterClose?.();
                 }}
               >
-                {option.label}
+                {`${option.label} (${flowQuickFilterCounts[option.value] ?? 0})`}
               </MenuItem>
             ))}
           </Menu>
@@ -687,6 +690,7 @@ function FlowListToolbar(props: FlowGridToolbarProps) {
     onSearchClearOrClose,
     activeFlowFilterDescription = "",
     flowQuickFilter = "none",
+    flowQuickFilterCounts = {},
     flowQuickFilterLabel = "Filtro rápido",
     quickFilterAnchorEl = null,
     onQuickFilterOpen,
@@ -820,7 +824,7 @@ function FlowListToolbar(props: FlowGridToolbarProps) {
           </IconButton>
         ) : null}
         <Menu anchorEl={quickFilterAnchorEl} open={quickFilterMenuOpen} onClose={onQuickFilterClose}>
-          {flowQuickFilterOptions.map((option) => (
+          {selectableFlowQuickFilterOptions.map((option) => (
             <MenuItem
               key={option.value}
               selected={option.value === flowQuickFilter}
@@ -829,7 +833,7 @@ function FlowListToolbar(props: FlowGridToolbarProps) {
                 onQuickFilterClose?.();
               }}
             >
-              {option.label}
+              {`${option.label} (${flowQuickFilterCounts[option.value] ?? 0})`}
             </MenuItem>
           ))}
         </Menu>
@@ -1159,6 +1163,18 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const quickFilteredFlowRows = useMemo(
     () => stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, flowQuickFilter, today)),
     [flowQuickFilter, stateFilteredFlowRows, today]
+  );
+  const quickFilterCountsByValue = useMemo<Record<FlowQuickFilter, number>>(
+    () => ({
+      none: stateFilteredFlowRows.length,
+      today: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "today", today)).length,
+      this_week: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "this_week", today)).length,
+      past: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "past", today)).length,
+      future: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "future", today)).length,
+      without_project: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "without_project", today)).length,
+      without_reminder: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "without_reminder", today)).length,
+    }),
+    [stateFilteredFlowRows, today]
   );
 
   useEffect(() => {
@@ -2713,6 +2729,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       searchValue={flowSearchValue}
                       activeFlowFilterDescription={activeFlowFilterDescription}
                       flowQuickFilter={flowQuickFilter}
+                      flowQuickFilterCounts={quickFilterCountsByValue}
                       flowQuickFilterLabel={flowQuickFilter === "none" ? "Filtro rápido" : activeFlowQuickFilterLabel}
                       quickFilterAnchorEl={flowQuickFilterAnchorEl}
                       onQuickFilterOpen={(event: MouseEvent<HTMLElement>) => {

@@ -439,6 +439,11 @@ function isCompletionText(value: string | null | undefined): boolean {
   return normalized === "tarea completada";
 }
 
+function isGenericStatusNote(value: string | null | undefined): boolean {
+  const normalized = normalizeJournalText(value ?? "");
+  return normalized === "tarea completada";
+}
+
 function isNameHistoryField(value: string | null | undefined): boolean {
   const normalized = normalizeJournalText(value ?? "");
   if (!normalized) return false;
@@ -466,6 +471,30 @@ function hasNearbyTimestamp(referenceMs: number, values: number[], thresholdMs: 
   return values.some((valueMs) => Math.abs(referenceMs - valueMs) <= thresholdMs);
 }
 
+function combineJournalText(primary: string | null, secondary: string | null) {
+  const left = primary?.trim() ?? "";
+  const right = secondary?.trim() ?? "";
+  if (!left) return right || null;
+  if (!right) return left || null;
+  if (normalizeJournalText(left) === normalizeJournalText(right)) return left;
+  return `${left}\n\n${right}`;
+}
+
+function mergeAttachments(primary: Attachment[], secondary: Attachment[]) {
+  const merged = [...primary];
+  const seenIds = new Set(primary.map((attachment) => attachment.id));
+
+  secondary.forEach((attachment) => {
+    if (seenIds.has(attachment.id)) {
+      return;
+    }
+    merged.push(attachment);
+    seenIds.add(attachment.id);
+  });
+
+  return merged;
+}
+
 export function buildJournalItems(history: StepHistoryEntry[], comments: StepComment[]): JournalItem[] {
   const historyNoteTimestamps = new Map<string, number[]>();
   const nonCompletionStatusTimestamps: number[] = [];
@@ -486,24 +515,49 @@ export function buildJournalItems(history: StepHistoryEntry[], comments: StepCom
     historyNoteTimestamps.set(normalized, current);
   });
 
+  const mergedCommentIds = new Set<string>();
   const statusEntries = history
     .filter((entry) => entry.campo === "estado")
-    .map((entry) => ({
-      id: `history-${entry.id}`,
-      kind: "status" as const,
-      author: entry.usuario,
-      date: entry.fecha,
-      body: "Estado cambiado",
-      secondaryText:
+    .map((entry) => {
+      const entryDateMs = formatJournalDateAsMs(entry.fecha);
+      const entryAuthor = normalizeJournalText(entry.usuario);
+      const mergedComment = comments
+        .filter((comment) => !mergedCommentIds.has(comment.id))
+        .filter((comment) => normalizeJournalText(comment.autor) === entryAuthor)
+        .filter((comment) => !isNoisyAutomaticJournalText(comment.comentario))
+        .map((comment) => ({
+          comment,
+          commentDateMs: formatJournalDateAsMs(comment.fecha_creacion),
+        }))
+        .filter(({ commentDateMs }) => Math.abs(commentDateMs - entryDateMs) <= 5 * 60 * 1000)
+        .sort((left, right) => Math.abs(left.commentDateMs - entryDateMs) - Math.abs(right.commentDateMs - entryDateMs))[0]?.comment ?? null;
+
+      if (mergedComment) {
+        mergedCommentIds.add(mergedComment.id);
+      }
+
+      const historyNote =
         sanitizeHistoryNote(entry.nota) &&
         !(isCompletionText(entry.nota) && !isCompletionStatus(entry.valor_nuevo))
           ? sanitizeHistoryNote(entry.nota)
-          : null,
-      status: entry.valor_nuevo ?? "activo",
-      previousStatus: entry.valor_anterior ?? null,
-      nextStatus: entry.valor_nuevo ?? null,
-      attachments: entry.attachments ?? []
-    }));
+          : null;
+      const mergedCommentText = mergedComment?.comentario?.trim() ?? null;
+
+      const combinedSecondaryText = combineJournalText(historyNote, mergedCommentText);
+
+      return {
+        id: `history-${entry.id}`,
+        kind: "status" as const,
+        author: entry.usuario,
+        date: entry.fecha,
+        body: "Estado cambiado",
+        secondaryText: isGenericStatusNote(combinedSecondaryText) ? null : combinedSecondaryText,
+        status: entry.valor_nuevo ?? "activo",
+        previousStatus: entry.valor_anterior ?? null,
+        nextStatus: entry.valor_nuevo ?? null,
+        attachments: mergeAttachments(entry.attachments ?? [], mergedComment?.attachments ?? [])
+      };
+    });
 
   const historyNameEntries = history
     .filter((entry) => isNameHistoryField(entry.campo))
@@ -546,6 +600,7 @@ export function buildJournalItems(history: StepHistoryEntry[], comments: StepCom
 
   const commentEntries = comments
     .filter((comment) => {
+      if (mergedCommentIds.has(comment.id)) return false;
       const text = comment.comentario?.trim() ?? "";
       if (isNoisyAutomaticJournalText(text)) return false;
       if (
