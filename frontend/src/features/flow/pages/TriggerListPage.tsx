@@ -26,7 +26,6 @@ import {
   ButtonBase,
   Button,
   Chip,
-  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
@@ -158,6 +157,14 @@ type RequirementGridRow = {
   openCount: number;
   waitingCount: number;
   canDelete: boolean;
+};
+
+type FlowDateGroupSection = {
+  key: string;
+  dateInput: string | null;
+  label: string;
+  sortKey: number;
+  rows: FlowGridRow[];
 };
 
 
@@ -318,19 +325,56 @@ function getMovementHeatVisual(days: number | null) {
   return { color: "error.main", opacity: 0.94 };
 }
 
-function formatNearestFuture(executionDay: number, todayDay: number): string {
-  const diffDays = executionDay - todayDay;
-  if (diffDays === 1) return "maÃ±ana";
-  if (diffDays <= 6) return `en ${diffDays} dÃ­as`;
-  return `el ${formatCalendarDate(formatCalendarDayInput(executionDay))}`;
-}
+function buildFlowDateGroupLabel(dateInput: string | null, todayInput: string) {
+  if (!dateInput) {
+    return "Sin fecha";
+  }
 
-function formatFutureGroupLabel(dateInput: string, todayInput: string) {
   const diffDays = getCalendarDayDiff(dateInput, todayInput) ?? 0;
   const formattedDate = formatCalendarDate(dateInput);
-  if (diffDays === 1) return `MaÃ±ana Â· ${formattedDate}`;
-  if (diffDays === 2) return `Pasado maÃ±ana Â· ${formattedDate}`;
-  return formattedDate;
+
+  if (diffDays === 0) return `Hoy · ${formattedDate}`;
+  if (diffDays === 1) return `Mañana · ${formattedDate}`;
+  if (diffDays === 2) return `Pasado mañana · ${formattedDate}`;
+  if (diffDays > 2) return `En ${diffDays} días · ${formattedDate}`;
+  if (diffDays === -1) return `Ayer · ${formattedDate}`;
+  return `Hace ${Math.abs(diffDays)} días · ${formattedDate}`;
+}
+
+function getFlowDateGroupSortKey(dateInput: string | null, todayInput: string) {
+  if (!dateInput) {
+    return 3_000_000_000;
+  }
+
+  const diffDays = getCalendarDayDiff(dateInput, todayInput) ?? 0;
+  if (diffDays === 0) return 0;
+  if (diffDays < 0) return 1_000_000 + Math.abs(diffDays);
+  return 2_000_000 + diffDays;
+}
+
+function groupFlowRowsByDate(rows: FlowGridRow[], todayInput: string): FlowDateGroupSection[] {
+  const groups = new Map<string, FlowDateGroupSection>();
+
+  for (const row of rows) {
+    const dateInput = row.executionDateInput || null;
+    const key = dateInput ?? "__without-date__";
+    const existing = groups.get(key);
+
+    if (existing) {
+      existing.rows.push(row);
+      continue;
+    }
+
+    groups.set(key, {
+      key,
+      dateInput,
+      label: buildFlowDateGroupLabel(dateInput, todayInput),
+      sortKey: getFlowDateGroupSortKey(dateInput, todayInput),
+      rows: [row],
+    });
+  }
+
+  return Array.from(groups.values()).sort((left, right) => left.sortKey - right.sortKey);
 }
 
 function matchesFlowQuickFilter(row: FlowGridRow, filter: FlowQuickFilter, today: string) {
@@ -622,6 +666,167 @@ function FlowGridToolbar(props: any) {
   );
 }
 
+function FlowListToolbar(props: FlowGridToolbarProps) {
+  const {
+    quickFilterPlaceholder,
+    searchOpen,
+    searchValue,
+    onSearchToggle,
+    onSearchChange,
+    onSearchClearOrClose,
+    activeFlowFilterDescription = "",
+    flowQuickFilter = "none",
+    flowQuickFilterLabel = "Filtro rápido",
+    quickFilterAnchorEl = null,
+    onQuickFilterOpen,
+    onQuickFilterClose,
+    onFlowQuickFilterChange,
+  } = props;
+  const resolvedPlaceholder = quickFilterPlaceholder ?? "";
+  const resolvedSearchOpen = searchOpen ?? false;
+  const resolvedSearchValue = searchValue ?? "";
+  const searchIsEmpty = resolvedSearchValue.trim().length === 0;
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const quickFilterMenuOpen = Boolean(quickFilterAnchorEl);
+
+  useEffect(() => {
+    if (!resolvedSearchOpen) {
+      return;
+    }
+
+    const focusTimer = window.setTimeout(() => {
+      const input = searchInputRef.current;
+      if (!input) {
+        return;
+      }
+      input.focus();
+      const cursorPosition = input.value.length;
+      input.setSelectionRange?.(cursorPosition, cursorPosition);
+    }, 0);
+
+    return () => window.clearTimeout(focusTimer);
+  }, [resolvedSearchOpen]);
+
+  const searchControls = (
+    <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", minWidth: 0 }}>
+      <IconButton aria-label={resolvedSearchOpen ? "Alternar búsqueda" : "Buscar"} size="small" onClick={onSearchToggle}>
+        <SearchRoundedIcon fontSize="small" />
+      </IconButton>
+      {resolvedSearchOpen ? (
+        <>
+          <TextField
+            aria-label="Búsqueda rápida"
+            placeholder={resolvedPlaceholder}
+            size="small"
+            fullWidth={false}
+            autoFocus
+            inputRef={searchInputRef}
+            value={resolvedSearchValue}
+            onClick={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+            onChange={(event) => {
+              event.stopPropagation();
+              onSearchChange?.(event.target.value);
+            }}
+            onKeyDown={(event) => {
+              event.stopPropagation();
+              if (event.key === "Escape" && searchIsEmpty) {
+                onSearchClearOrClose?.();
+              }
+            }}
+            sx={{ width: { xs: 180, sm: 280 } }}
+          />
+          <IconButton
+            aria-label={searchIsEmpty ? "Cerrar búsqueda" : "Limpiar búsqueda"}
+            size="small"
+            onClick={onSearchClearOrClose}
+          >
+            <CancelOutlinedIcon fontSize="small" />
+          </IconButton>
+        </>
+      ) : null}
+    </Stack>
+  );
+
+  return (
+    <Box
+      aria-label="Toolbar del listado de flows"
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 0.75,
+        px: 1,
+        py: 0.75,
+      }}
+    >
+      <Typography
+        variant="body1"
+        color="text.primary"
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          fontWeight: 700,
+        }}
+      >
+        {activeFlowFilterDescription}
+      </Typography>
+
+      <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", minWidth: 0 }}>
+        {searchControls}
+        <ButtonBase
+          aria-label={flowQuickFilterLabel}
+          onClick={onQuickFilterOpen}
+          sx={{
+            px: 1,
+            py: 0.5,
+            borderRadius: 1,
+            color: "text.secondary",
+            "&:hover": { backgroundColor: "action.hover" },
+          }}
+        >
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+            <ScheduleRoundedIcon fontSize="small" />
+            <Typography variant="body2" sx={{ whiteSpace: "nowrap" }}>
+              {flowQuickFilterLabel}
+            </Typography>
+            <ExpandMoreIcon fontSize="small" />
+          </Stack>
+        </ButtonBase>
+        {flowQuickFilter !== "none" ? (
+          <IconButton
+            aria-label="Restablecer filtro rápido"
+            size="small"
+            onClick={() => {
+              onFlowQuickFilterChange?.("none");
+              onQuickFilterClose?.();
+            }}
+          >
+            <CancelOutlinedIcon fontSize="small" />
+          </IconButton>
+        ) : null}
+        <Menu anchorEl={quickFilterAnchorEl} open={quickFilterMenuOpen} onClose={onQuickFilterClose}>
+          {flowQuickFilterOptions.map((option) => (
+            <MenuItem
+              key={option.value}
+              selected={option.value === flowQuickFilter}
+              onClick={() => {
+                onFlowQuickFilterChange?.(option.value);
+                onQuickFilterClose?.();
+              }}
+            >
+              {option.label}
+            </MenuItem>
+          ))}
+        </Menu>
+      </Stack>
+    </Box>
+  );
+}
+
 export function TriggerListPage({ defaultView = "requirements", lockView = false, title = "Proyectos" }: TriggerListPageProps) {
   const theme = useTheme();
   const { showToast } = useToastContext();
@@ -651,17 +856,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [linkProjectSearch, setLinkProjectSearch] = useState("");
   const [linkProjectLoading, setLinkProjectLoading] = useState(false);
   const [pendingDates, setPendingDates] = useState<Map<string, string>>(new Map());
-  const [futuresOpen, setFuturesOpen] = useState(false);
   const [flowQuickFilter, setFlowQuickFilter] = useState<FlowQuickFilter>("none");
   const [flowQuickFilterAnchorEl, setFlowQuickFilterAnchorEl] = useState<HTMLElement | null>(null);
   const [flowSearchOpen, setFlowSearchOpen] = useState(false);
   const [flowSearchValue, setFlowSearchValue] = useState("");
   const [requirementSearchOpen, setRequirementSearchOpen] = useState(false);
   const [requirementSearchValue, setRequirementSearchValue] = useState("");
-  const [flowFilterModel, setFlowFilterModel] = useState<GridFilterModel>({
-    items: [],
-    quickFilterValues: [],
-  });
   const [flowSortModel, setFlowSortModel] = useState<GridSortModel>([{ field: "movementAt", sort: "asc" }]);
   const [requirementFilterModel, setRequirementFilterModel] = useState<GridFilterModel>({
     items: [],
@@ -979,37 +1179,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   }, [flowSearchValue, quickFilteredFlowRows]);
 
   const visibleFlowRows = searchedFlowRows;
-
-  const mainRows = useMemo(
-    () => visibleFlowRows.filter((row) => !row.executionDateInput || row.executionDateInput <= today),
-    [visibleFlowRows, today]
-  );
-  const futureRows = useMemo(
-    () => visibleFlowRows.filter((row) => row.executionDateInput && row.executionDateInput > today),
-    [visibleFlowRows, today]
-  );
-
-  const nearestFutureMs = useMemo(
-    () => (futureRows.length > 0 ? Math.min(...futureRows.map((r) => r.executionAt)) : null),
-    [futureRows]
-  );
-  const futureGroups = useMemo(() => {
-    const byDate = new Map<string, FlowGridRow[]>();
-    for (const row of futureRows) {
-      if (!row.executionDateInput) continue;
-      const current = byDate.get(row.executionDateInput) ?? [];
-      current.push(row);
-      byDate.set(row.executionDateInput, current);
-    }
-
-    return Array.from(byDate.entries())
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([dateInput, rows]) => ({
-        dateInput,
-        label: formatFutureGroupLabel(dateInput, today),
-        rows,
-      }));
-  }, [futureRows, today]);
+  const groupedFlowSections = useMemo(() => groupFlowRowsByDate(visibleFlowRows, today), [today, visibleFlowRows]);
 
   async function handleDateBlur(event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>, row: FlowGridRow) {
     event.stopPropagation();
@@ -1658,6 +1828,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     () => flowColumns.filter((column) => column.field !== "ambito"),
     [flowColumns]
   );
+  const flowGroupedHeaderTemplateColumns = "minmax(300px, 1.45fr) minmax(300px, 1.35fr) 172px 126px minmax(260px, 1.2fr)";
 
   const requirementColumns = useMemo<GridColDef<RequirementGridRow>[]>(
     () => [
@@ -2496,64 +2667,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             </Box>
           </Box>
 
-          {false && (
-            <Paper variant="outlined" sx={{ overflow: "hidden" }}>
-              <Button
-                variant="text"
-                color="inherit"
-                onClick={() => setFuturesOpen((value) => !value)}
-                sx={{ color: "text.secondary", py: 1.25, px: 2, width: "100%", justifyContent: "flex-start", gap: 1 }}
-                startIcon={<ScheduleRoundedIcon fontSize="small" />}
-                endIcon={
-                  <ExpandMoreIcon
-                    sx={{ ml: "auto", transform: futuresOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}
-                  />
-                }
-              >
-                {`Programados para mÃ¡s adelante (${futureRows.length})${nearestFutureMs ? ` Â· prÃ³ximo ${formatNearestFuture(nearestFutureMs ?? todaySortValue, todaySortValue)}` : ""}`}
-              </Button>
-              <Collapse in={futuresOpen}>
-                <Stack spacing={0} sx={{ px: 1.25, pb: 1.25 }}>
-                  {futureGroups.map((group) => (
-                    <Box key={group.dateInput} sx={{ borderTop: "1px solid", borderColor: "divider", pt: 1.1 }}>
-                      <Typography variant="caption" color="text.secondary" sx={{ px: 1 }}>
-                        {`${group.label} (${group.rows.length})`}
-                      </Typography>
-                      <DataGrid
-                        rows={group.rows}
-                        columns={visibleFlowColumns}
-                        rowHeight={62}
-                        filterModel={flowFilterModel}
-                        onFilterModelChange={setFlowFilterModel}
-                        disableRowSelectionOnClick
-                        onCellClick={(params, event) => {
-                          if (params.field === "requirementsLabel") {
-                            event.defaultMuiPrevented = true;
-                          }
-                        }}
-                        onRowClick={(params: GridRowParams<FlowGridRow>) => {
-                          navigate(`/workflows/${params.row.id}`);
-                        }}
-                        autoHeight
-                        hideFooter={group.rows.length <= 10}
-                        initialState={{
-                          sorting: {
-                            sortModel: [{ field: "movementAt", sort: "asc" }],
-                          },
-                          pagination: {
-                            paginationModel: { pageSize: 20, page: 0 },
-                          },
-                        }}
-                        pageSizeOptions={[10, 15, 20, 50]}
-                        sx={{ border: 0 }}
-                      />
-                    </Box>
-                  ))}
-                </Stack>
-              </Collapse>
-            </Paper>
-          )}
-
           <Paper sx={{ overflow: "hidden" }}>
             {loading ? (
               <LinearProgress />
@@ -2568,95 +2681,176 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   width: "100%",
                 }}
               >
-                <DataGrid
-                  rows={visibleFlowRows}
-                  columns={visibleFlowColumns}
-                  rowHeight={62}
-                  filterModel={flowFilterModel}
-                  onFilterModelChange={setFlowFilterModel}
-                  sortModel={flowSortModel}
-                  onSortModelChange={setFlowSortModel}
-                  disableRowSelectionOnClick
-                  showToolbar
-                  onCellClick={(params, event) => {
-                    if (params.field === "requirementsLabel") {
-                      event.defaultMuiPrevented = true;
-                    }
-                  }}
-                  onRowClick={(params: GridRowParams<FlowGridRow>) => {
-                    navigate(`/workflows/${params.row.id}`);
-                  }}
-                  slots={{
-                    toolbar: FlowGridToolbar,
-                    noRowsOverlay: () =>
-                      flowSearchActive ? (
-                        <DataGridEmptyState
-                          icon={<SearchRoundedIcon color="action" />}
-                          title="No hay resultados para esta bÃºsqueda"
-                          description="ProbÃ¡ con otros tÃ©rminos para encontrar el flow, la tarea o el proyecto asociado."
-                        />
-                      ) : quickFilteredFlowRows.length === 0 || visibleFlowRows.length === 0 ? (
-                        <DataGridEmptyState
-                          icon={<InboxRoundedIcon color="action" />}
-                          title="No hay flows para este filtro"
-                          description="ProbÃ¡ con otro estado o capturÃ¡ una nueva tarea para iniciar el flujo."
-                          action={resetFilterAction}
-                        />
-                      ) : (
-                        <DataGridEmptyState
-                          icon={<ScheduleRoundedIcon color="action" />}
-                          title="Sin flows pendientes en esta tabla"
-                          description="Todos los flows de este filtro estÃ¡n programados para mÃ¡s adelante. Revisalos en la secciÃ³n superior."
-                        />
-                      ),
-                  }}
-                  slotProps={{
-                    toolbar: {
-                      quickFilterPlaceholder: "Buscar flow, tarea o proyecto vinculado...",
-                      searchOpen: flowSearchOpen,
-                      searchValue: flowSearchValue,
-                      showGridActions: false,
-                      showFlowQuickFilter: true,
-                      activeFlowFilterDescription,
-                      flowQuickFilter,
-                      flowQuickFilterLabel: flowQuickFilter === "none" ? "Filtro rápido" : activeFlowQuickFilterLabel,
-                      quickFilterAnchorEl: flowQuickFilterAnchorEl,
-                      onQuickFilterOpen: (event: MouseEvent<HTMLElement>) => {
+                <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                  <Box
+                    sx={{
+                      position: "sticky",
+                      top: 0,
+                      zIndex: 1,
+                      backgroundColor: "background.paper",
+                      borderBottom: "1px solid",
+                      borderColor: "divider",
+                    }}
+                  >
+                    <FlowListToolbar
+                      quickFilterPlaceholder="Buscar flow, tarea o proyecto vinculado..."
+                      searchOpen={flowSearchOpen}
+                      searchValue={flowSearchValue}
+                      activeFlowFilterDescription={activeFlowFilterDescription}
+                      flowQuickFilter={flowQuickFilter}
+                      flowQuickFilterLabel={flowQuickFilter === "none" ? "Filtro rápido" : activeFlowQuickFilterLabel}
+                      quickFilterAnchorEl={flowQuickFilterAnchorEl}
+                      onQuickFilterOpen={(event: MouseEvent<HTMLElement>) => {
                         setFlowQuickFilterAnchorEl(event.currentTarget);
-                      },
-                      onQuickFilterClose: () => {
+                      }}
+                      onQuickFilterClose={() => {
                         setFlowQuickFilterAnchorEl(null);
-                      },
-                      onFlowQuickFilterChange: (value: FlowQuickFilter) => {
+                      }}
+                      onFlowQuickFilterChange={(value: FlowQuickFilter) => {
                         setFlowQuickFilter(value);
-                      },
-                      onSearchToggle: () => {
+                      }}
+                      onSearchToggle={() => {
                         if (flowSearchOpen && flowSearchValue.trim().length === 0) {
                           setFlowSearchOpen(false);
                           return;
                         }
                         setFlowSearchOpen(true);
-                      },
-                      onSearchChange: (value: string) => {
+                      }}
+                      onSearchChange={(value: string) => {
                         setFlowSearchValue(value);
-                      },
-                      onSearchClearOrClose: () => {
+                      }}
+                      onSearchClearOrClose={() => {
                         if (flowSearchValue.trim().length > 0) {
                           setFlowSearchValue("");
                           return;
                         }
                         setFlowSearchOpen(false);
-                      },
-                    } as any,
-                  }}
-                  initialState={{
-                    pagination: {
-                      paginationModel: { pageSize: 20, page: 0 },
-                    },
-                  }}
-                  pageSizeOptions={[10, 15, 20, 50]}
-                  sx={{ border: 0, height: "100%" }}
-                />
+                      }}
+                    />
+                  </Box>
+
+                  <Box sx={{ flex: 1, overflowY: "auto" }}>
+                    {visibleFlowRows.length === 0 ? (
+                      flowSearchActive ? (
+                        <DataGridEmptyState
+                          icon={<SearchRoundedIcon color="action" />}
+                          title="No hay resultados para esta búsqueda"
+                          description="Probá con otros términos para encontrar el flow, la tarea o el proyecto asociado."
+                        />
+                      ) : (
+                        <DataGridEmptyState
+                          icon={<InboxRoundedIcon color="action" />}
+                          title="No hay flows para este filtro"
+                          description="Probá con otro estado o capturá una nueva tarea para iniciar el flujo."
+                          action={resetFilterAction}
+                        />
+                      )
+                    ) : (
+                      <Stack spacing={0}>
+                        <Box
+                          sx={{
+                            display: "grid",
+                            gridTemplateColumns: flowGroupedHeaderTemplateColumns,
+                            columnGap: 0,
+                            alignItems: "center",
+                            px: 1.5,
+                            py: 1,
+                            borderBottom: "1px solid",
+                            borderColor: "divider",
+                            color: "text.secondary",
+                            backgroundColor: "background.paper",
+                          }}
+                        >
+                          <Typography variant="overline" sx={{ fontWeight: 700, letterSpacing: "0.08em" }}>
+                            Tarea inicial / disparador
+                          </Typography>
+                          <Typography variant="overline" sx={{ fontWeight: 700, letterSpacing: "0.08em", pl: 1 }}>
+                            Registro
+                          </Typography>
+                          <Typography variant="overline" sx={{ fontWeight: 700, letterSpacing: "0.08em", textAlign: "center" }}>
+                            Fecha
+                          </Typography>
+                          <Typography variant="overline" sx={{ fontWeight: 700, letterSpacing: "0.08em", textAlign: "center" }}>
+                            Inactividad
+                          </Typography>
+                          <Typography variant="overline" sx={{ fontWeight: 700, letterSpacing: "0.08em", pl: 1 }}>
+                            Proyecto
+                          </Typography>
+                        </Box>
+
+                        {groupedFlowSections.map((group, index) => (
+                          <Box
+                            key={group.key}
+                            sx={{
+                              borderTop: "1px solid",
+                              borderColor: "divider",
+                              pt: 0.5,
+                            }}
+                          >
+                            <Stack
+                              direction="row"
+                              spacing={0.75}
+                              sx={{
+                                alignItems: "center",
+                                px: 1.5,
+                                py: 0.75,
+                                color: "text.secondary",
+                              }}
+                            >
+                              <Box
+                                sx={{
+                                  width: 6,
+                                  height: 6,
+                                  borderRadius: "50%",
+                                  backgroundColor: alpha(theme.palette.text.secondary, 0.5),
+                                  flexShrink: 0,
+                                }}
+                              />
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontWeight: 600,
+                                  color: "text.secondary",
+                                  letterSpacing: "0.02em",
+                                }}
+                              >
+                                {group.label}
+                              </Typography>
+                              <Typography variant="caption" sx={{ color: "text.disabled" }}>
+                                {group.rows.length}
+                              </Typography>
+                            </Stack>
+
+                            <DataGrid
+                              rows={group.rows}
+                              columns={visibleFlowColumns}
+                              rowHeight={62}
+                              sortModel={flowSortModel}
+                              onSortModelChange={setFlowSortModel}
+                              disableRowSelectionOnClick
+                              autoHeight
+                              hideFooter
+                              columnHeaderHeight={0}
+                              onCellClick={(params, event) => {
+                                if (params.field === "requirementsLabel") {
+                                  event.defaultMuiPrevented = true;
+                                }
+                              }}
+                              onRowClick={(params: GridRowParams<FlowGridRow>) => {
+                                navigate(`/workflows/${params.row.id}`);
+                              }}
+                              sx={{
+                                border: 0,
+                                "& .MuiDataGrid-columnHeaders": { display: "none" },
+                                "& .MuiDataGrid-virtualScroller": { marginTop: "0 !important" },
+                              }}
+                            />
+                          </Box>
+                        ))}
+                      </Stack>
+                    )}
+                  </Box>
+                </Box>
               </Box>
             ) : (
               <Box
