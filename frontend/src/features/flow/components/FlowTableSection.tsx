@@ -729,34 +729,38 @@ export function FlowTableSection({
             }
           >
             {stateTabsVariant === "summary" ? (
-              <>
+              [
                 <Tab
+                  key="summary_operational"
                   value="operational"
                   label={`Operativos (${resolvedCounts.active + resolvedCounts.waiting})`}
                   sx={getSemanticTabSx(operationalHighlight.accent, operationalHighlight.soft)}
-                />
+                />,
                 <Tab
+                  key="summary_non_operational"
                   value="non_operational"
                   label={`No operativos (${resolvedCounts.cancelled + resolvedCounts.finalized})`}
                   sx={getSemanticTabSx(nonOperationalHighlight.accent, nonOperationalHighlight.soft)}
-                />
+                />,
                 <Tab
+                  key="summary_all"
                   value="all"
                   label={`Todos (${resolvedCounts.active + resolvedCounts.waiting + resolvedCounts.cancelled + resolvedCounts.finalized})`}
                   sx={getSemanticTabSx(neutralHighlight.accent, neutralHighlight.soft)}
-                />
-              </>
+                />,
+              ]
             ) : (
-              <>
-                <Tab value="active" label={`Activos (${resolvedCounts.active})`} />
-                <Tab value="waiting" label={`Esperando (${resolvedCounts.waiting})`} />
-                <Tab value="cancelled" label={`Cancelados (${resolvedCounts.cancelled})`} />
-                <Tab value="finalized" label={`Finalizados (${resolvedCounts.finalized})`} />
+              [
+                <Tab key="tab_active" value="active" label={`Activos (${resolvedCounts.active})`} />,
+                <Tab key="tab_waiting" value="waiting" label={`Esperando (${resolvedCounts.waiting})`} />,
+                <Tab key="tab_cancelled" value="cancelled" label={`Cancelados (${resolvedCounts.cancelled})`} />,
+                <Tab key="tab_finalized" value="finalized" label={`Finalizados (${resolvedCounts.finalized})`} />,
                 <Tab
+                  key="tab_all"
                   value="all"
                   label={`Todos (${resolvedCounts.active + resolvedCounts.waiting + resolvedCounts.cancelled + resolvedCounts.finalized})`}
-                />
-              </>
+                />,
+              ]
             )}
           </Tabs>
         </Box>

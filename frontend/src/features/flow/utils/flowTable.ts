@@ -4,7 +4,7 @@ import {
   getAmbitoLabel,
   getCalendarDayDiff,
   getTodayLocalDateInput,
-  getVisibleTriggerStatus,
+  getVisibleWorkflowStatusValue,
   getVisibleWorkflowStatus,
   isNoisyAutomaticJournalText,
   toCalendarDateInputValue,
@@ -141,26 +141,10 @@ function getLatestMeaningfulWorkflowRecord(workflow: WorkflowDetail) {
 }
 
 export function getFlowFilterFromStatus(statusValue: string): "active" | "waiting" | "cancelled" | "finalized" | null {
-  const visibleStatus = getVisibleTriggerStatus(statusValue);
-  if (visibleStatus === "cancelado") {
-    return "cancelled";
-  }
-  if (visibleStatus === "finalizado" || visibleStatus === "resuelto") {
-    return "finalized";
-  }
-  if (visibleStatus === "esperando_respuesta" || visibleStatus === "en_espera") {
-    return "waiting";
-  }
-  if (
-    visibleStatus === "sin_flows" ||
-    visibleStatus === "con_problema" ||
-    visibleStatus === "problema" ||
-    visibleStatus === "pendiente" ||
-    visibleStatus === "activo" ||
-    visibleStatus === "en_proceso"
-  ) {
-    return "active";
-  }
+  const visibleStatus = getVisibleWorkflowStatusValue(statusValue);
+  if (visibleStatus === "cancelado") return "cancelled";
+  if (visibleStatus === "finalizado") return "finalized";
+  if (visibleStatus === "esperando_respuesta") return "waiting";
   return "active";
 }
 
