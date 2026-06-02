@@ -392,6 +392,17 @@ class CommentCreate(BaseModel):
         return self
 
 
+class CommentUpdate(BaseModel):
+    autor: str | None = Field(default=None, min_length=1, max_length=120)
+    comentario: str | None = Field(default=None, max_length=1000)
+
+    @model_validator(mode="after")
+    def validate_content(self) -> "CommentUpdate":
+        if not (self.comentario and self.comentario.strip()):
+            raise ValueError("Debes enviar un registro")
+        return self
+
+
 class CommentPublic(CommentCreate):
     id: str
     step_instance_id: str

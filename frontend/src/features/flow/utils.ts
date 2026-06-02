@@ -389,6 +389,8 @@ export type JournalItem =
       body: string;
       secondaryText: string | null;
       attachments: Attachment[];
+      commentId: string | null;
+      editable: boolean;
     }
   | {
       id: string;
@@ -516,8 +518,9 @@ export function buildJournalItems(history: StepHistoryEntry[], comments: StepCom
   });
 
   const mergedCommentIds = new Set<string>();
-  const statusEntries = history
+  const statusEntries = [...history]
     .filter((entry) => entry.campo === "estado")
+    .sort((left, right) => formatJournalDateAsMs(right.fecha) - formatJournalDateAsMs(left.fecha))
     .map((entry) => {
       const entryDateMs = formatJournalDateAsMs(entry.fecha);
       const entryAuthor = normalizeJournalText(entry.usuario);
@@ -550,7 +553,7 @@ export function buildJournalItems(history: StepHistoryEntry[], comments: StepCom
         kind: "status" as const,
         author: entry.usuario,
         date: entry.fecha,
-        body: "Estado cambiado",
+        body: entry.valor_anterior === null && entry.valor_nuevo === "activo" ? "Tarea creada" : "Estado cambiado",
         secondaryText: isGenericStatusNote(combinedSecondaryText) ? null : combinedSecondaryText,
         status: entry.valor_nuevo ?? "activo",
         previousStatus: entry.valor_anterior ?? null,
@@ -595,7 +598,9 @@ export function buildJournalItems(history: StepHistoryEntry[], comments: StepCom
       date: entry.fecha,
       body: sanitizeHistoryNote(entry.nota) ?? `Movimiento: ${entry.campo}`,
       secondaryText: null,
-      attachments: entry.attachments ?? []
+      attachments: entry.attachments ?? [],
+      commentId: null,
+      editable: false,
     }));
 
   const commentEntries = comments
@@ -625,7 +630,9 @@ export function buildJournalItems(history: StepHistoryEntry[], comments: StepCom
       date: comment.fecha_creacion,
       body: comment.comentario ?? "",
       secondaryText: null,
-      attachments: comment.attachments ?? []
+      attachments: comment.attachments ?? [],
+      commentId: comment.id,
+      editable: true,
     }));
 
   return [...statusEntries, ...historyNameEntries, ...historyNoteEntries, ...commentEntries].sort(

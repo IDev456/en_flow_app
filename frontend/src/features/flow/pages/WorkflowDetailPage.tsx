@@ -46,6 +46,7 @@ import {
   unlinkWorkflowRequirement,
   updateWorkflow,
   updateStep,
+  updateStepComment,
   updateStepStatus,
 } from "../api";
 import { AmbitoChip } from "../components/AmbitoChip";
@@ -217,6 +218,15 @@ export function WorkflowDetailPage() {
       usuario: DEFAULT_ACTOR,
       nota: input.comentario,
       attachments: input.attachments ?? [],
+    });
+    await refreshAfterStepChange(selectedStepId);
+  }
+
+  async function handleEditJournalComment(commentId: string, comentario: string | null) {
+    if (!selectedStepId) return;
+    await updateStepComment(selectedStepId, commentId, {
+      autor: DEFAULT_ACTOR,
+      comentario,
     });
     await refreshAfterStepChange(selectedStepId);
   }
@@ -682,7 +692,7 @@ export function WorkflowDetailPage() {
           display: "grid",
           gap: 2,
           alignItems: "start",
-          gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1fr) 420px" },
+          gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1fr) 500px" },
         }}
       >
         <Card sx={{ minWidth: 0 }}>
@@ -920,6 +930,7 @@ export function WorkflowDetailPage() {
             error={panelError}
             onStepUpdated={handleStepUpdated}
             onSubmitJournal={handleSubmitJournal}
+            onEditJournalComment={handleEditJournalComment}
             onCompleteTask={handleCompleteTask}
             onRegisterExternalEvent={
               selectedStep ? (input) => handleRegisterExternalEvent(selectedStep.id, input) : undefined

@@ -65,6 +65,7 @@ type FlowTableSectionProps = {
   stateTabsVariant?: "full" | "summary";
   showProjectColumn?: boolean;
   quickFilterPlaceholder?: string;
+  allowedQuickFilters?: FlowQuickFilter[];
   noRowsTitle: string;
   noRowsDescription: string;
   noSearchTitle?: string;
@@ -104,6 +105,30 @@ function getMovementHeatVisual(days: number | null) {
   return { color: "error.main", opacity: 0.94 };
 }
 
+function getSemanticTabSx(accent: string, soft: string) {
+  return {
+    minHeight: 46,
+    borderRadius: 1.15,
+    border: "1px solid",
+    borderColor: alpha(accent, 0.18),
+    textTransform: "none",
+    fontWeight: 700,
+    color: alpha(accent, 0.88),
+    backgroundColor: alpha(accent, 0.04),
+    transition: "background-color 180ms ease, color 180ms ease, box-shadow 180ms ease",
+    "&:hover": {
+      backgroundColor: alpha(accent, 0.1),
+      borderColor: alpha(accent, 0.3),
+    },
+    "&.Mui-selected": {
+      color: accent,
+      backgroundColor: soft,
+      borderColor: alpha(accent, 0.42),
+      boxShadow: `inset 0 -2px 0 ${accent}, 0 0 0 1px ${alpha(accent, 0.08)}`,
+    },
+  } as const;
+}
+
 export function FlowTableSection({
   items,
   stateFilter,
@@ -113,6 +138,7 @@ export function FlowTableSection({
   stateTabsVariant = "full",
   showProjectColumn = true,
   quickFilterPlaceholder = "Buscar flow o tarea...",
+  allowedQuickFilters,
   noRowsTitle,
   noRowsDescription,
   noSearchTitle = "No hay resultados para esta búsqueda",
@@ -165,6 +191,19 @@ export function FlowTableSection({
     flowQuickFilterOptions.find((option) => option.value === flowQuickFilter)?.label ?? "Filtro rápido";
   const activeFlowFilterDescription = buildActiveFlowFilterDescription(stateFilter, flowQuickFilter);
   const flowSearchActive = flowSearchValue.trim().length > 0;
+
+  const allowedQuickFilterValues = useMemo(
+    () =>
+      allowedQuickFilters ?? selectableFlowQuickFilterOptions.map((option) => option.value),
+    [allowedQuickFilters]
+  );
+
+  useEffect(() => {
+    if (flowQuickFilter !== "none" && !allowedQuickFilterValues.includes(flowQuickFilter)) {
+      setFlowQuickFilter("none");
+      setFlowQuickFilterAnchorEl(null);
+    }
+  }, [allowedQuickFilterValues, flowQuickFilter]);
 
   const stateFilteredFlowRows = useMemo(
     () => flowRows.filter((row) => matchesFlowStateFilter(row.status, stateFilter)),
@@ -660,6 +699,9 @@ export function FlowTableSection({
       groupedFlowSections.flatMap((group) => group.rows).find((row) => row.id === requirementsMenu.rowId) ??
       null
     : null;
+  const operationalHighlight = getStatusHighlight("activo", theme);
+  const nonOperationalHighlight = getStatusHighlight("cancelado", theme);
+  const neutralHighlight = theme.palette.status.neutral;
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -671,14 +713,37 @@ export function FlowTableSection({
             variant="scrollable"
             scrollButtons="auto"
             allowScrollButtonsMobile
+            sx={
+              stateTabsVariant === "summary"
+                ? {
+                    minHeight: 52,
+                    gap: 0.75,
+                    px: 0.4,
+                    py: 0.45,
+                    borderRadius: 1.4,
+                    backgroundColor: alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.34 : 0.74),
+                    "& .MuiTabs-indicator": { display: "none" },
+                    "& .MuiTab-root": { minHeight: 46, px: 1.8, mr: 0 },
+                  }
+                : undefined
+            }
           >
             {stateTabsVariant === "summary" ? (
               <>
-                <Tab value="operational" label={`Operativos (${resolvedCounts.active + resolvedCounts.waiting})`} />
-                <Tab value="non_operational" label={`No operativos (${resolvedCounts.cancelled + resolvedCounts.finalized})`} />
+                <Tab
+                  value="operational"
+                  label={`Operativos (${resolvedCounts.active + resolvedCounts.waiting})`}
+                  sx={getSemanticTabSx(operationalHighlight.accent, operationalHighlight.soft)}
+                />
+                <Tab
+                  value="non_operational"
+                  label={`No operativos (${resolvedCounts.cancelled + resolvedCounts.finalized})`}
+                  sx={getSemanticTabSx(nonOperationalHighlight.accent, nonOperationalHighlight.soft)}
+                />
                 <Tab
                   value="all"
                   label={`Todos (${resolvedCounts.active + resolvedCounts.waiting + resolvedCounts.cancelled + resolvedCounts.finalized})`}
+                  sx={getSemanticTabSx(neutralHighlight.accent, neutralHighlight.soft)}
                 />
               </>
             ) : (
@@ -811,18 +876,20 @@ export function FlowTableSection({
       </Box>
 
       <Menu anchorEl={flowQuickFilterAnchorEl} open={Boolean(flowQuickFilterAnchorEl)} onClose={() => setFlowQuickFilterAnchorEl(null)}>
-        {selectableFlowQuickFilterOptions.map((option) => (
-          <MenuItem
-            key={option.value}
-            selected={option.value === flowQuickFilter}
-            onClick={() => {
-              setFlowQuickFilter(option.value);
-              setFlowQuickFilterAnchorEl(null);
-            }}
-          >
-            {`${option.label} (${quickFilterCountsByValue[option.value] ?? 0})`}
-          </MenuItem>
-        ))}
+        {selectableFlowQuickFilterOptions
+          .filter((option) => allowedQuickFilterValues.includes(option.value))
+          .map((option) => (
+            <MenuItem
+              key={option.value}
+              selected={option.value === flowQuickFilter}
+              onClick={() => {
+                setFlowQuickFilter(option.value);
+                setFlowQuickFilterAnchorEl(null);
+              }}
+            >
+              {`${option.label} (${quickFilterCountsByValue[option.value] ?? 0})`}
+            </MenuItem>
+          ))}
       </Menu>
 
       <Menu

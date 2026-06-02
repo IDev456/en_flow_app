@@ -204,7 +204,10 @@ export function TriggerDetailPage() {
   const linkedWorkflows = (trigger?.workflow_ids ?? [])
     .map((workflowId) => workflowsById[workflowId])
     .filter((workflow): workflow is WorkflowDetail => Boolean(workflow));
-  const linkedFlowItems = useMemo(() => linkedWorkflows.map((workflow) => ({ workflow })), [linkedWorkflows]);
+  const linkedFlowItems = useMemo(
+    () => linkedWorkflows.map((workflow) => ({ workflow, displayStatus: getVisibleWorkflowStatus(workflow) })),
+    [linkedWorkflows]
+  );
   const canDeleteRequirement = (trigger?.workflow_ids.length ?? 0) === 0;
   const requirementStats = {
     abiertos: linkedWorkflows.filter((workflow) => getVisibleWorkflowStatus(workflow) === "en_proceso").length,
@@ -470,6 +473,7 @@ export function TriggerDetailPage() {
               showStateTabs
               stateTabsVariant="summary"
               showProjectColumn={false}
+              allowedQuickFilters={["today", "this_week", "past", "future", "without_reminder"]}
               quickFilterPlaceholder="Buscar flow o tarea del proyecto..."
               noRowsTitle="No hay flows para este filtro"
               noRowsDescription="Probá con otro estado o capturá una nueva tarea para este proyecto."

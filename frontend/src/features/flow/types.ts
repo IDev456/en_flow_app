@@ -238,6 +238,11 @@ export type StepCommentInput = {
   attachments?: AttachmentInput[];
 };
 
+export type StepCommentUpdateInput = {
+  autor?: string;
+  comentario: string | null;
+};
+
 export type StepJournalEntryInput = {
   comentario: string | null;
   estado?: Extract<StepStatus, "espera" | "problema"> | null;

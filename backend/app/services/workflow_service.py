@@ -8,6 +8,7 @@ from app.schemas.workflow import (
     AttachmentBase,
     CommentCreate,
     CommentPublic,
+    CommentUpdate,
     DailyBoardResponse,
     ExternalResponseDecisionPayload,
     ExternalEventCreate,
@@ -692,6 +693,19 @@ class WorkflowService:
         if not step.puede_tener_comentarios:
             raise BusinessRuleError("Esta tarea no admite registros")
         return self.repository.add_comment(step_id, payload)
+
+    def update_comment(self, step_id: str, comment_id: str, payload: CommentUpdate) -> CommentPublic:
+        step = self.get_step(step_id)
+        workflow = self.get_workflow(step.workflow_id)
+        self._ensure_workflow_operable(workflow)
+        if not step.puede_tener_comentarios:
+            raise BusinessRuleError("Esta tarea no admite registros")
+        if step.estado in {StepStatus.COMPLETADO, StepStatus.CANCELADA}:
+            raise BusinessRuleError("No se pueden editar registros en tareas completadas o canceladas")
+        updated_comment = self.repository.update_comment(step_id, comment_id, payload)
+        if updated_comment is None:
+            raise EntityNotFoundError("Comment not found")
+        return updated_comment
 
     def list_comments(self, step_id: str) -> list[CommentPublic]:
         self.get_step(step_id)

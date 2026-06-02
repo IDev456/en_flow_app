@@ -6,6 +6,7 @@ import type {
   Step,
   StepComment,
   StepCommentInput,
+  StepCommentUpdateInput,
   StepCompleteInput,
   ExternalResponseDecisionInput,
   ExternalEvent,
@@ -134,6 +135,10 @@ export function completeStep(stepId: string, input: StepCompleteInput) {
 
 export function addStepComment(stepId: string, input: StepCommentInput) {
   return apiPost<StepComment>(`/steps/${stepId}/comments`, input);
+}
+
+export function updateStepComment(stepId: string, commentId: string, input: StepCommentUpdateInput) {
+  return apiPatch<StepComment>(`/steps/${stepId}/comments/${commentId}`, input);
 }
 
 export function getStepComments(stepId: string) {

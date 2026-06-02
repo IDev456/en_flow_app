@@ -1,4 +1,4 @@
-import type { ChangeEvent, ClipboardEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
+import type { ChangeEvent, ClipboardEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import AddPhotoAlternateRoundedIcon from "@mui/icons-material/AddPhotoAlternateRounded";
 import AttachmentRoundedIcon from "@mui/icons-material/AttachmentRounded";
@@ -41,6 +41,8 @@ type JournalProps = {
   focusRequestToken: number;
   onSubmitEntry: (input: StepJournalEntryInput) => Promise<void>;
   showComposer?: boolean;
+  canEditEntries?: boolean;
+  onEditEntry?: (commentId: string, comentario: string | null) => Promise<void>;
 };
 
 type DraftAttachment = AttachmentInput & {
@@ -88,6 +90,74 @@ function getStatusToggleSx(status: StatusOptionValue) {
   };
 }
 
+function renderInlineMarkdown(text: string) {
+  const fragments: ReactNode[] = [];
+  const matcher = /(\*\*[^*]+\*\*)/g;
+  const parts = text.split(matcher);
+
+  parts.forEach((part, index) => {
+    if (!part) return;
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      fragments.push(<Box key={`bold-${index}`} component="strong" sx={{ fontWeight: 800 }}>{part.slice(2, -2)}</Box>);
+      return;
+    }
+    fragments.push(<Box key={`text-${index}`} component="span">{part}</Box>);
+  });
+
+  return fragments;
+}
+
+function renderMarkdownContent(text: string) {
+  const lines = text.split(/\r?\n/);
+  const blocks: ReactNode[] = [];
+  let listItems: Array<{ text: string; indent: number }> = [];
+
+  function flushList() {
+    if (listItems.length === 0) return;
+    blocks.push(
+      <Stack key={`list-${blocks.length}`} spacing={0.45} sx={{ py: 0.15 }}>
+        {listItems.map((item, index) => (
+          <Box key={`item-${index}`} sx={{ display: "flex", alignItems: "flex-start", gap: 0.9, pl: item.indent * 2 }}>
+            <Typography component="span" variant="body2" sx={{ color: "text.secondary", lineHeight: 1.7 }}>
+              •
+            </Typography>
+            <Typography component="div" variant="body2" sx={{ whiteSpace: "pre-wrap", lineHeight: 1.7 }}>
+              {renderInlineMarkdown(item.text)}
+            </Typography>
+          </Box>
+        ))}
+      </Stack>
+    );
+    listItems = [];
+  }
+
+  lines.forEach((line) => {
+    const listMatch = /^(\s*)[-*]\s+(.*)$/.exec(line);
+    if (listMatch) {
+      listItems.push({
+        indent: Math.floor((listMatch[1] ?? "").length / 2),
+        text: listMatch[2] ?? "",
+      });
+      return;
+    }
+
+    flushList();
+    if (!line.trim()) {
+      blocks.push(<Box key={`space-${blocks.length}`} sx={{ height: 6 }} />);
+      return;
+    }
+
+    blocks.push(
+      <Typography key={`paragraph-${blocks.length}`} component="div" variant="body2" sx={{ whiteSpace: "pre-wrap", lineHeight: 1.7 }}>
+        {renderInlineMarkdown(line)}
+      </Typography>
+    );
+  });
+
+  flushList();
+  return blocks;
+}
+
 export function Journal({
   step,
   comments,
@@ -100,6 +170,8 @@ export function Journal({
   focusRequestToken,
   onSubmitEntry,
   showComposer = true,
+  canEditEntries = false,
+  onEditEntry,
 }: JournalProps) {
   const composerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -107,6 +179,7 @@ export function Journal({
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<DraftAttachment[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedToastOpen, setSavedToastOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState<ImagePreview | null>(null);
@@ -118,6 +191,7 @@ export function Journal({
     });
   }, [items]);
   const commentTrimmed = text.trim();
+  const isEditing = editingCommentId !== null;
   const canComment = step.puede_tener_comentarios;
   const hasAttachments = attachments.length > 0;
   const missingComment = selectedStatus !== "" ? commentTrimmed.length === 0 : commentTrimmed.length === 0 && !hasAttachments;
@@ -126,6 +200,7 @@ export function Journal({
   useEffect(() => {
     if (focusRequestToken > 0) {
       onComposerExpandedChange(true);
+      setEditingCommentId(null);
       textareaRef.current?.focus();
     }
   }, [focusRequestToken, onComposerExpandedChange]);
@@ -208,18 +283,26 @@ export function Journal({
     try {
       setSubmitting(true);
       setError(null);
-      await onSubmitEntry({
-        comentario,
-        estado: selectedStatus || null,
-        attachments: attachments.map((item) => ({
-          nombre: item.nombre,
-          content_type: item.content_type,
-          size_bytes: item.size_bytes,
-          content_base64: item.content_base64,
-        })),
-      });
+      if (isEditing) {
+        if (!editingCommentId || !onEditEntry) {
+          throw new Error("No se pudo identificar el registro a editar.");
+        }
+        await onEditEntry(editingCommentId, comentario);
+      } else {
+        await onSubmitEntry({
+          comentario,
+          estado: selectedStatus || null,
+          attachments: attachments.map((item) => ({
+            nombre: item.nombre,
+            content_type: item.content_type,
+            size_bytes: item.size_bytes,
+            content_base64: item.content_base64,
+          })),
+        });
+      }
       setText("");
       setAttachments([]);
+      setEditingCommentId(null);
       onSelectedStatusChange("");
       onComposerExpandedChange(false);
       setSavedToastOpen(true);
@@ -263,6 +346,9 @@ export function Journal({
   }
 
   function getSubmitLabel() {
+    if (isEditing) {
+      return "Guardar cambios";
+    }
     if (selectedStatus) {
       return "Guardar avance y cambiar estado";
     }
@@ -270,6 +356,9 @@ export function Journal({
   }
 
   function getCommentPlaceholder() {
+    if (isEditing) {
+      return "Editá el registro...";
+    }
     if (selectedStatus === "espera") {
       return "Qué estás esperando para poder continuar...";
     }
@@ -284,16 +373,69 @@ export function Journal({
     setError(null);
   }
 
+  function handleStartEditing(commentId: string, body: string) {
+    setEditingCommentId(commentId);
+    setText(body);
+    setAttachments([]);
+    onSelectedStatusChange("");
+    setError(null);
+    onComposerExpandedChange(true);
+    window.setTimeout(() => textareaRef.current?.focus(), 0);
+  }
+
   function handleCancelComposer() {
     if (submitting) return;
     setText("");
     setAttachments([]);
+    setEditingCommentId(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
     setError(null);
     onSelectedStatusChange("");
     onComposerExpandedChange(false);
+  }
+
+  function updateTextSelection(
+    transform: (value: string, start: number, end: number) => { nextValue: string; nextStart: number; nextEnd: number }
+  ) {
+    const input = textareaRef.current;
+    const currentValue = text;
+    const selectionStart = input?.selectionStart ?? currentValue.length;
+    const selectionEnd = input?.selectionEnd ?? currentValue.length;
+    const { nextValue, nextStart, nextEnd } = transform(currentValue, selectionStart, selectionEnd);
+    setText(nextValue);
+    window.setTimeout(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(nextStart, nextEnd);
+    }, 0);
+  }
+
+  function handleApplyBold() {
+    updateTextSelection((value, start, end) => {
+      const selected = value.slice(start, end) || "texto";
+      const wrapped = `**${selected}**`;
+      return {
+        nextValue: `${value.slice(0, start)}${wrapped}${value.slice(end)}`,
+        nextStart: start + 2,
+        nextEnd: start + 2 + selected.length,
+      };
+    });
+  }
+
+  function handleApplyIndentList() {
+    updateTextSelection((value, start, end) => {
+      const selected = value.slice(start, end) || "Nuevo punto";
+      const nextBlock = selected
+        .split(/\r?\n/)
+        .map((line) => (line.trim().length > 0 ? `  - ${line}` : line))
+        .join("\n");
+      return {
+        nextValue: `${value.slice(0, start)}${nextBlock}${value.slice(end)}`,
+        nextStart: start,
+        nextEnd: start + nextBlock.length,
+      };
+    });
   }
 
   return (
@@ -323,7 +465,7 @@ export function Journal({
               <Stack spacing={2}>
                 <TextField
                   inputRef={textareaRef}
-                  label="Registrar avance"
+                  label={isEditing ? "Editar registro" : "Registrar avance"}
                   multiline
                   minRows={4}
                   placeholder={getCommentPlaceholder()}
@@ -336,7 +478,29 @@ export function Journal({
                   helperText={`${text.length} / ${MAX_CHARS}`}
                 />
 
-                <input ref={fileInputRef} type="file" multiple hidden onChange={handleFileChange} />
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    borderRadius: SHAPE_RADIUS,
+                    border: "1px solid",
+                    borderColor: "divider",
+                    backgroundColor: "surfaceContainerLow",
+                    px: 1.15,
+                    py: 0.9,
+                  }}
+                >
+                  <Button size="small" color="inherit" onClick={handleApplyBold} disabled={submitting}>
+                    Negrita
+                  </Button>
+                  <Button size="small" color="inherit" onClick={handleApplyIndentList} disabled={submitting}>
+                    Sangría / lista
+                  </Button>
+                </Stack>
+
+                {!isEditing ? <input ref={fileInputRef} type="file" multiple hidden onChange={handleFileChange} /> : null}
                 <Stack
                   direction={{ xs: "column", sm: "row" }}
                   spacing={1.25}
@@ -350,29 +514,35 @@ export function Journal({
                     py: { xs: 1, sm: 1.1 },
                   }}
                 >
-                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-start" }}>
-                    <Tooltip title="Adjuntar archivos">
-                      <span>
-                        <IconButton
-                          type="button"
-                          color="inherit"
-                          onClick={() => fileInputRef.current?.click()}
-                          disabled={!canComment || submitting}
-                          aria-label="Adjuntar archivos"
-                          sx={{
-                            border: "1px solid",
-                            borderColor: "outline",
-                            backgroundColor: "background.paper",
-                            "&:hover": {
-                              backgroundColor: (theme) => alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.14 : 0.06),
-                            },
-                          }}
-                        >
-                          <AddPhotoAlternateRoundedIcon />
-                        </IconButton>
-                      </span>
-                    </Tooltip>
-                  </Box>
+                  {!isEditing ? (
+                    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-start" }}>
+                      <Tooltip title="Adjuntar archivos">
+                        <span>
+                          <IconButton
+                            type="button"
+                            color="inherit"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={!canComment || submitting}
+                            aria-label="Adjuntar archivos"
+                            sx={{
+                              border: "1px solid",
+                              borderColor: "outline",
+                              backgroundColor: "background.paper",
+                              "&:hover": {
+                                backgroundColor: (theme) => alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.14 : 0.06),
+                              },
+                            }}
+                          >
+                            <AddPhotoAlternateRoundedIcon />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Box>
+                  ) : (
+                    <Typography variant="caption" color="text.secondary" sx={{ alignSelf: "center" }}>
+                      Editando solo el texto del registro
+                    </Typography>
+                  )}
 
                   <Stack
                     direction={{ xs: "row", sm: "row" }}
@@ -382,6 +552,7 @@ export function Journal({
                       alignItems: "center",
                       justifyContent: { xs: "space-between", sm: "flex-end" },
                       flexWrap: "wrap",
+                      flex: 1,
                     }}
                   >
                     <Button
@@ -392,7 +563,7 @@ export function Journal({
                       disabled={submitting}
                       sx={{ order: { xs: 1, sm: 1 }, alignSelf: { xs: "stretch", sm: "auto" } }}
                     >
-                      Cancelar
+                      {isEditing ? "Cancelar edición" : "Cancelar"}
                     </Button>
                     <Button
                       type="button"
@@ -591,13 +762,28 @@ export function Journal({
             const body = item.body.trim();
             const secondaryText = item.secondaryText?.trim() ?? "";
             const elapsed = formatElapsedTime(item.date);
+            const canEditItem =
+              item.kind === "comment" && item.editable && Boolean(item.commentId) && canEditEntries && Boolean(onEditEntry);
             const dateLabel = elapsed ? `${formatDate(item.date)} · ${elapsed}` : formatDate(item.date);
             return (
             <Card key={item.id} variant="outlined" sx={{ borderColor: (theme) => alpha(theme.palette.divider, 0.85) }}>
               <CardContent sx={{ display: "grid", gap: 0.9, p: 1.35 }}>
-                <Typography variant="caption" color="text.secondary">
-                  {dateLabel}
-                </Typography>
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    {dateLabel}
+                  </Typography>
+                  {canEditItem ? (
+                    <Button
+                      size="small"
+                      color="inherit"
+                      onClick={() => handleStartEditing(item.commentId as string, item.body)}
+                      disabled={submitting}
+                      sx={{ minWidth: 0, px: 0.75, py: 0.2, fontSize: 12 }}
+                    >
+                      Editar
+                    </Button>
+                  ) : null}
+                </Stack>
 
                 {item.kind === "status" ? (
                   <>
@@ -609,11 +795,7 @@ export function Journal({
                       <Typography color="text.secondary">→</Typography>
                       {item.nextStatus ? <StatusBadge value={item.nextStatus} /> : <Chip label="sin dato" size="small" variant="outlined" />}
                     </Stack>
-                    {secondaryText ? (
-                      <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
-                        {secondaryText}
-                      </Typography>
-                    ) : null}
+                    {secondaryText ? <Box>{renderMarkdownContent(secondaryText)}</Box> : null}
                   </>
                 ) : null}
 
@@ -625,30 +807,20 @@ export function Journal({
                     <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
                       "{item.previousName}" → "{item.nextName}"
                     </Typography>
-                    {secondaryText ? (
-                      <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
-                        {secondaryText}
-                      </Typography>
-                    ) : null}
+                    {secondaryText ? <Box>{renderMarkdownContent(secondaryText)}</Box> : null}
                   </>
                 ) : null}
 
                 {item.kind === "comment" ? (
                   <>
                     {body ? (
-                      <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
-                        {body}
-                      </Typography>
+                      <Box>{renderMarkdownContent(body)}</Box>
                     ) : (
                       <Typography variant="body2" color="text.secondary">
                         Adjunto agregado
                       </Typography>
                     )}
-                    {secondaryText ? (
-                      <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
-                        {secondaryText}
-                      </Typography>
-                    ) : null}
+                    {secondaryText ? <Box>{renderMarkdownContent(secondaryText)}</Box> : null}
                   </>
                 ) : null}
 

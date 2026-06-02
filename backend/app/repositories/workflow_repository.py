@@ -24,6 +24,7 @@ from app.schemas.workflow import (
     AttachmentPublic,
     CommentCreate,
     CommentPublic,
+    CommentUpdate,
     ExternalEventCreate,
     ExternalEventPublic,
     StepCreate,
@@ -246,6 +247,10 @@ class WorkflowRepository(ABC):
 
     @abstractmethod
     def add_comment(self, step_id: str, payload: CommentCreate) -> CommentPublic:
+        raise NotImplementedError
+
+    @abstractmethod
+    def update_comment(self, step_id: str, comment_id: str, payload: CommentUpdate) -> CommentPublic | None:
         raise NotImplementedError
 
     @abstractmethod
@@ -680,6 +685,21 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         )
         self._comments_by_step.setdefault(step_id, []).append(comment)
         return comment
+
+    def update_comment(self, step_id: str, comment_id: str, payload: CommentUpdate) -> CommentPublic | None:
+        comments = self._comments_by_step.get(step_id, [])
+        for index, comment in enumerate(comments):
+            if comment.id != comment_id:
+                continue
+            updated = comment.model_copy(
+                update={
+                    "autor": payload.autor or comment.autor,
+                    "comentario": payload.comentario,
+                }
+            )
+            comments[index] = updated
+            return updated
+        return None
 
     def list_comments(self, step_id: str) -> list[CommentPublic]:
         return list(self._comments_by_step.get(step_id, []))
@@ -1326,6 +1346,20 @@ class PostgresWorkflowRepository(WorkflowRepository):
         )
         with session_scope() as session:
             session.add(comment)
+            session.flush()
+            session.refresh(comment)
+            return self._comment_to_public(comment)
+
+    def update_comment(self, step_id: str, comment_id: str, payload: CommentUpdate) -> CommentPublic | None:
+        with session_scope() as session:
+            comment = session.scalar(
+                select(CommentModel).where(CommentModel.id == comment_id, CommentModel.step_instance_id == step_id)
+            )
+            if comment is None:
+                return None
+            if payload.autor:
+                comment.autor = payload.autor
+            comment.comentario = payload.comentario
             session.flush()
             session.refresh(comment)
             return self._comment_to_public(comment)

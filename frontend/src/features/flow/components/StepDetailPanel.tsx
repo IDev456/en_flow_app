@@ -66,6 +66,7 @@ type StepDetailPanelProps = {
   onClose?: () => void;
   error?: string | null;
   onSubmitJournal: (input: StepJournalEntryInput) => Promise<void>;
+  onEditJournalComment?: (commentId: string, comentario: string | null) => Promise<void>;
   onCompleteTask: (stepId: string, input: StepCompleteInput) => Promise<void>;
   onStepUpdated?: (step: Step) => Promise<void> | void;
   onRegisterExternalEvent?: (input: ExternalEventCreateInput) => Promise<void>;
@@ -84,6 +85,7 @@ export function StepDetailPanel({
   onClose,
   error,
   onSubmitJournal,
+  onEditJournalComment,
   onStepUpdated,
   onRegisterExternalEvent,
   onResolveExternalResponse,
@@ -543,11 +545,11 @@ export function StepDetailPanel({
         message="Tarea actualizada."
       />
       <CardContent sx={{ p: 0 }}>
-        <Box sx={{ p: { xs: 2.5, md: 3 } }}>
+        <Box sx={{ p: { xs: 2.75, md: 3.25 } }}>
           {drawer ? (
-            <Stack spacing={1.5}>
+            <Stack spacing={1.75}>
               <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", justifyContent: "space-between" }}>
-                <Typography variant="h6">Registro de la tarea</Typography>
+                <Typography variant="h6" sx={{ letterSpacing: "-0.01em" }}>Registro de la tarea</Typography>
                 <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
                   <Typography variant="body2" color="text.secondary">
                     Recordatorio
@@ -793,7 +795,7 @@ export function StepDetailPanel({
 
         {!drawer && <Divider />}
 
-        <Box sx={{ p: { xs: 2.5, md: 3 } }}>
+        <Box sx={{ p: { xs: 2.75, md: 3.25 } }}>
           {!drawer && (
             <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2 }}>
               Registro de la tarea
@@ -805,12 +807,20 @@ export function StepDetailPanel({
             history={history}
             canChangeStatus={!drawer && canChangeStatus}
             showComposer={canAddManualRecords}
+            canEditEntries={canAddManualRecords}
             selectedStatus={selectedStatus}
             onSelectedStatusChange={setSelectedStatus}
             composerExpanded={composerExpanded}
             onComposerExpandedChange={setComposerExpanded}
             focusRequestToken={focusRequestToken}
             onSubmitEntry={handleSubmitJournal}
+            onEditEntry={
+              onEditJournalComment
+                ? async (commentId, comentario) => {
+                    await onEditJournalComment(commentId, comentario);
+                  }
+                : undefined
+            }
           />
         </Box>
 

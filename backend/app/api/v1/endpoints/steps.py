@@ -5,6 +5,7 @@ from app.core.errors import BusinessRuleError, EntityNotFoundError
 from app.schemas.workflow import (
     CommentCreate,
     CommentPublic,
+    CommentUpdate,
     ExternalResponseDecisionPayload,
     ExternalEventCreate,
     ExternalEventPublic,
@@ -92,6 +93,21 @@ def add_comment(
 ) -> CommentPublic:
     try:
         return service.add_comment(step_id, payload)
+    except EntityNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except BusinessRuleError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.patch("/{step_id}/comments/{comment_id}", response_model=CommentPublic)
+def update_comment(
+    step_id: str,
+    comment_id: str,
+    payload: CommentUpdate,
+    service: WorkflowService = Depends(get_workflow_service),
+) -> CommentPublic:
+    try:
+        return service.update_comment(step_id, comment_id, payload)
     except EntityNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except BusinessRuleError as exc:
