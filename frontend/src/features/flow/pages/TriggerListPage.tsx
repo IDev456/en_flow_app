@@ -99,7 +99,7 @@ import {
 
 type ViewMode = "requirements" | "flows";
 type FlowFilter = "all" | "operational" | "non_operational" | "active" | "waiting" | "cancelled" | "finalized";
-type FlowQuickFilter = "none" | "today" | "this_week" | "past" | "future" | "without_project";
+type FlowQuickFilter = "none" | "today" | "this_week" | "past" | "future" | "without_project" | "without_reminder";
 
 type TriggerListPageProps = {
   defaultView?: ViewMode;
@@ -175,6 +175,7 @@ const flowQuickFilterOptions = [
   { value: "past", label: "Pasados" },
   { value: "future", label: "Futuros" },
   { value: "without_project", label: "Sin proyecto" },
+  { value: "without_reminder", label: "Sin recordatorio" },
 ] as const satisfies ReadonlyArray<{ value: FlowQuickFilter; label: string }>;
 
 
@@ -377,6 +378,10 @@ function groupFlowRowsByDate(rows: FlowGridRow[], todayInput: string): FlowDateG
   return Array.from(groups.values()).sort((left, right) => left.sortKey - right.sortKey);
 }
 
+function isDateGroupedQuickFilter(filter: FlowQuickFilter) {
+  return filter === "today" || filter === "this_week" || filter === "past" || filter === "future";
+}
+
 function matchesFlowQuickFilter(row: FlowGridRow, filter: FlowQuickFilter, today: string) {
   if (filter === "none") {
     return true;
@@ -384,6 +389,10 @@ function matchesFlowQuickFilter(row: FlowGridRow, filter: FlowQuickFilter, today
 
   if (filter === "without_project") {
     return row.requirementsCount === 0;
+  }
+
+  if (filter === "without_reminder") {
+    return !row.executionDateInput;
   }
 
   const rowDay = toCalendarDayValue(row.executionDateInput || null);
@@ -485,6 +494,8 @@ function getFlowQuickFilterDescription(filter: FlowQuickFilter) {
       return "futuros";
     case "without_project":
       return "sin proyecto";
+    case "without_reminder":
+      return "sin recordatorio";
     case "none":
     default:
       return "";
@@ -1151,7 +1162,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   );
 
   useEffect(() => {
-    setFlowSortModel(flowQuickFilter === "none" ? [{ field: "movementAt", sort: "asc" }] : [{ field: "executionAt", sort: "asc" }]);
+    setFlowSortModel(isDateGroupedQuickFilter(flowQuickFilter) ? [{ field: "executionAt", sort: "asc" }] : [{ field: "movementAt", sort: "asc" }]);
   }, [flowQuickFilter]);
 
   const searchedFlowRows = useMemo(() => {
@@ -1179,7 +1190,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   }, [flowSearchValue, quickFilteredFlowRows]);
 
   const visibleFlowRows = searchedFlowRows;
-  const groupedFlowSections = useMemo(() => groupFlowRowsByDate(visibleFlowRows, today), [today, visibleFlowRows]);
+  const shouldGroupFlowRowsByDate = isDateGroupedQuickFilter(flowQuickFilter);
+  const groupedFlowSections = useMemo(
+    () => (shouldGroupFlowRowsByDate ? groupFlowRowsByDate(visibleFlowRows, today) : []),
+    [shouldGroupFlowRowsByDate, today, visibleFlowRows]
+  );
 
   async function handleDateBlur(event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>, row: FlowGridRow) {
     event.stopPropagation();
@@ -2745,7 +2760,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                           action={resetFilterAction}
                         />
                       )
-                    ) : (
+                    ) : shouldGroupFlowRowsByDate ? (
                       <Stack spacing={0}>
                         <Box
                           sx={{
@@ -2848,6 +2863,26 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                           </Box>
                         ))}
                       </Stack>
+                    ) : (
+                      <DataGrid
+                        rows={visibleFlowRows}
+                        columns={visibleFlowColumns}
+                        rowHeight={62}
+                        sortModel={flowSortModel}
+                        onSortModelChange={setFlowSortModel}
+                        disableRowSelectionOnClick
+                        autoHeight
+                        hideFooter={visibleFlowRows.length <= 10}
+                        onCellClick={(params, event) => {
+                          if (params.field === "requirementsLabel") {
+                            event.defaultMuiPrevented = true;
+                          }
+                        }}
+                        onRowClick={(params: GridRowParams<FlowGridRow>) => {
+                          navigate(`/workflows/${params.row.id}`);
+                        }}
+                        sx={{ border: 0 }}
+                      />
                     )}
                   </Box>
                 </Box>
