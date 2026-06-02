@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FocusEvent, type MouseEvent } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState, type FocusEvent, type MouseEvent } from "react";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import BoltRoundedIcon from "@mui/icons-material/BoltRounded";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
@@ -261,7 +261,7 @@ function getLatestMeaningfulWorkflowRecord(workflow: WorkflowDetail) {
     .filter((item): item is { text: string; timestampMs: number } => Boolean(item));
 
   if (latestByStep.length === 0) {
-    return "Sin registros todavía";
+    return "Sin registros todavÃ­a";
   }
 
   const latest = latestByStep.reduce((current, candidate) => (candidate.timestampMs > current.timestampMs ? candidate : current));
@@ -320,16 +320,16 @@ function getMovementHeatVisual(days: number | null) {
 
 function formatNearestFuture(executionDay: number, todayDay: number): string {
   const diffDays = executionDay - todayDay;
-  if (diffDays === 1) return "mañana";
-  if (diffDays <= 6) return `en ${diffDays} días`;
+  if (diffDays === 1) return "maÃ±ana";
+  if (diffDays <= 6) return `en ${diffDays} dÃ­as`;
   return `el ${formatCalendarDate(formatCalendarDayInput(executionDay))}`;
 }
 
 function formatFutureGroupLabel(dateInput: string, todayInput: string) {
   const diffDays = getCalendarDayDiff(dateInput, todayInput) ?? 0;
   const formattedDate = formatCalendarDate(dateInput);
-  if (diffDays === 1) return `Mañana · ${formattedDate}`;
-  if (diffDays === 2) return `Pasado mañana · ${formattedDate}`;
+  if (diffDays === 1) return `MaÃ±ana Â· ${formattedDate}`;
+  if (diffDays === 2) return `Pasado maÃ±ana Â· ${formattedDate}`;
   return formattedDate;
 }
 
@@ -399,6 +399,7 @@ type FlowGridToolbarProps = {
   onSearchClearOrClose?: () => void;
   showGridActions?: boolean;
   showFlowQuickFilter?: boolean;
+  activeFlowFilterDescription?: string;
   flowQuickFilter?: FlowQuickFilter;
   flowQuickFilterLabel?: string;
   quickFilterAnchorEl?: HTMLElement | null;
@@ -406,6 +407,51 @@ type FlowGridToolbarProps = {
   onQuickFilterClose?: () => void;
   onFlowQuickFilterChange?: (value: FlowQuickFilter) => void;
 };
+
+function getFlowStateFilterLabel(filter: FlowFilter) {
+  switch (filter) {
+    case "all":
+      return "Todos";
+    case "operational":
+      return "Operativos";
+    case "non_operational":
+      return "No operativos";
+    case "active":
+      return "Activos";
+    case "waiting":
+      return "En espera";
+    case "cancelled":
+      return "Cancelados";
+    case "finalized":
+      return "Finalizados";
+    default:
+      return "Todos";
+  }
+}
+
+function getFlowQuickFilterDescription(filter: FlowQuickFilter) {
+  switch (filter) {
+    case "today":
+      return "hoy";
+    case "this_week":
+      return "esta semana";
+    case "past":
+      return "pasados";
+    case "future":
+      return "futuros";
+    case "without_project":
+      return "sin proyecto";
+    case "none":
+    default:
+      return "";
+  }
+}
+
+function buildActiveFlowFilterDescription(stateFilter: FlowFilter, flowQuickFilter: FlowQuickFilter) {
+  const stateLabel = getFlowStateFilterLabel(stateFilter);
+  const quickFilterLabel = getFlowQuickFilterDescription(flowQuickFilter);
+  return quickFilterLabel ? `${stateLabel} ${quickFilterLabel}` : stateLabel;
+}
 
 function FlowGridToolbar(props: any) {
   const {
@@ -417,6 +463,7 @@ function FlowGridToolbar(props: any) {
     onSearchClearOrClose,
     showGridActions = true,
     showFlowQuickFilter = false,
+    activeFlowFilterDescription = "",
     flowQuickFilter = "none",
     flowQuickFilterLabel = "Filtro rápido",
     quickFilterAnchorEl = null,
@@ -449,47 +496,70 @@ function FlowGridToolbar(props: any) {
     return () => window.clearTimeout(focusTimer);
   }, [resolvedSearchOpen]);
 
+  const searchControls = (
+    <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", minWidth: 0 }}>
+      <ToolbarButton aria-label={resolvedSearchOpen ? "Alternar búsqueda" : "Buscar"} onClick={onSearchToggle}>
+        <SearchRoundedIcon fontSize="small" />
+      </ToolbarButton>
+      {resolvedSearchOpen ? (
+        <>
+          <TextField
+            aria-label="Búsqueda rápida"
+            placeholder={resolvedPlaceholder}
+            size="small"
+            fullWidth={false}
+            autoFocus
+            inputRef={searchInputRef}
+            value={resolvedSearchValue}
+            onClick={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+            onChange={(event) => {
+              event.stopPropagation();
+              onSearchChange?.(event.target.value);
+            }}
+            onKeyDown={(event) => {
+              event.stopPropagation();
+              if (event.key === "Escape" && searchIsEmpty) {
+                onSearchClearOrClose?.();
+              }
+            }}
+            sx={{ width: { xs: 180, sm: 280 } }}
+          />
+          <ToolbarButton
+            aria-label={searchIsEmpty ? "Cerrar búsqueda" : "Limpiar búsqueda"}
+            onClick={onSearchClearOrClose}
+          >
+            <CancelOutlinedIcon fontSize="small" />
+          </ToolbarButton>
+        </>
+      ) : null}
+    </Stack>
+  );
+
   return (
     <Toolbar aria-label="Toolbar del listado" style={{ gap: "6px", justifyContent: "space-between" }}>
-      <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", minWidth: 0 }}>
-        <ToolbarButton aria-label={resolvedSearchOpen ? "Alternar búsqueda" : "Buscar"} onClick={onSearchToggle}>
-          <SearchRoundedIcon fontSize="small" />
-        </ToolbarButton>
-        {resolvedSearchOpen ? (
-          <>
-            <TextField
-              aria-label="Búsqueda rápida"
-              placeholder={resolvedPlaceholder}
-              size="small"
-              fullWidth={false}
-              autoFocus
-              inputRef={searchInputRef}
-              value={resolvedSearchValue}
-              onClick={(event) => event.stopPropagation()}
-              onMouseDown={(event) => event.stopPropagation()}
-              onChange={(event) => {
-                event.stopPropagation();
-                onSearchChange?.(event.target.value);
-              }}
-              onKeyDown={(event) => {
-                event.stopPropagation();
-                if (event.key === "Escape" && searchIsEmpty) {
-                  onSearchClearOrClose?.();
-                }
-              }}
-              sx={{ width: { xs: 180, sm: 280 } }}
-            />
-            <ToolbarButton
-              aria-label={searchIsEmpty ? "Cerrar búsqueda" : "Limpiar búsqueda"}
-              onClick={onSearchClearOrClose}
-            >
-              <CancelOutlinedIcon fontSize="small" />
-            </ToolbarButton>
-          </>
-        ) : null}
-      </Stack>
+      {showFlowQuickFilter ? (
+        <Typography
+          variant="body1"
+          color="text.primary"
+          sx={{
+            flex: 1,
+            minWidth: 0,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            alignSelf: "center",
+            px: 0.5,
+            fontWeight: 700,
+          }}
+        >
+          {activeFlowFilterDescription}
+        </Typography>
+      ) : (
+        searchControls
+      )}
 
-      <Box sx={{ flex: 1 }} />
+      <Box sx={{ flex: showFlowQuickFilter ? 0 : 1 }} />
 
       {showGridActions ? (
         <ColumnsPanelTrigger
@@ -498,7 +568,8 @@ function FlowGridToolbar(props: any) {
         />
       ) : null}
       {showFlowQuickFilter ? (
-        <>
+        <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", minWidth: 0 }}>
+          {searchControls}
           <ToolbarButton aria-label={flowQuickFilterLabel} onClick={onQuickFilterOpen}>
             <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
               <ScheduleRoundedIcon fontSize="small" />
@@ -533,7 +604,7 @@ function FlowGridToolbar(props: any) {
               </MenuItem>
             ))}
           </Menu>
-        </>
+        </Stack>
       ) : null}
       {showGridActions ? (
         <FilterPanelTrigger
@@ -784,6 +855,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const flowSearchActive = flowSearchValue.trim().length > 0;
   const activeFlowQuickFilterLabel =
     flowQuickFilterOptions.find((option) => option.value === flowQuickFilter)?.label ?? "Filtro rápido";
+  const activeFlowFilterDescription = buildActiveFlowFilterDescription(stateFilter, flowQuickFilter);
   const resetFilterAction =
     stateFilter !== "all" ? (
       <Button size="small" variant="outlined" color="inherit" onClick={() => setStateFilter("all")}>
@@ -797,7 +869,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       const stepLabel =
         step && ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado)
           ? "Disparador"
-          : "Última tarea";
+          : "Ãšltima tarea";
       const movementAtValue = getDateValue(item.latestMovementAt);
       const movementAt = movementAtValue ?? Number.MAX_SAFE_INTEGER;
       const movementDateInput = movementAtValue === null ? null : formatLocalDateInput(new Date(movementAtValue));
@@ -833,7 +905,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         requirementsLabel:
           item.linkedRequirements.length === 0
             ? "Sin proyectos"
-            : item.linkedRequirements.map((requirement) => requirement.descripcion?.trim() || `Proyecto ${requirement.id.slice(0, 8)}`).join(" · "),
+            : item.linkedRequirements.map((requirement) => requirement.descripcion?.trim() || `Proyecto ${requirement.id.slice(0, 8)}`).join(" Â· "),
         requirementsCount: item.linkedRequirements.length,
         primaryRequirementLabel: requirementLabels[0] ?? "Sin proyectos",
         extraRequirementCount: Math.max(0, requirementLabels.length - 1),
@@ -1025,7 +1097,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             linkedWorkflows.length === 0
             ? "Sin flows"
             : openCount > 0
-              ? `${linkedWorkflows.length} flows · ${openCount} abiertos`
+              ? `${linkedWorkflows.length} flows Â· ${openCount} abiertos`
               : `${linkedWorkflows.length} flows`,
         waitingLabel: waitingCount > 0 ? `Esperando: ${waitingCount}` : "",
         flowCount: linkedWorkflows.length,
@@ -1039,12 +1111,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   async function handleDeleteTrigger(trigger: TriggerDetail) {
     const detail = trigger.descripcion?.trim() || "Proyecto sin detalle";
     if (trigger.workflow_ids.length > 0) {
-      setError("No se puede eliminar este proyecto porque tiene flows vinculados. Primero desvinculá los flows que quieras conservar, o cancelá/finalizá y eliminá los flows que ya no correspondan.");
+      setError("No se puede eliminar este proyecto porque tiene flows vinculados. Primero desvinculÃ¡ los flows que quieras conservar, o cancelÃ¡/finalizÃ¡ y eliminÃ¡ los flows que ya no correspondan.");
       return;
     }
 
     const confirmed = window.confirm(
-      `¿Eliminar este proyecto?\n\n${detail}\n\nEsta acción no se puede deshacer.\nSolo se eliminará si no tiene flows vinculados.`
+      `Â¿Eliminar este proyecto?\n\n${detail}\n\nEsta acciÃ³n no se puede deshacer.\nSolo se eliminarÃ¡ si no tiene flows vinculados.`
     );
     if (!confirmed) return;
 
@@ -1140,7 +1212,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     const currentTask = pickRelevantStep(workflow)?.nombre?.trim() || workflow.objetivo_final?.trim() || "Flow sin tarea actual";
 
     const confirmed = window.confirm(
-      `¿Cancelar este flow?\n\n${currentTask}\n\nEl flow saldra de la operacion activa y quedara en modo cancelado.\nNo se eliminaran tareas, comentarios ni proyectos vinculados.\nSi fue un error, luego podras reactivarlo.`
+      `Â¿Cancelar este flow?\n\n${currentTask}\n\nEl flow saldra de la operacion activa y quedara en modo cancelado.\nNo se eliminaran tareas, comentarios ni proyectos vinculados.\nSi fue un error, luego podras reactivarlo.`
     );
     if (!confirmed) return;
 
@@ -1164,7 +1236,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     const currentTask = pickRelevantStep(workflow)?.nombre?.trim() || workflow.objetivo_final?.trim() || "Flow sin tarea actual";
 
     const confirmed = window.confirm(
-      `¿Reactivar este flow?\n\n${currentTask}\n\nEl flow volvera a la operacion activa.\nNo se eliminaran tareas, comentarios ni proyectos vinculados.`
+      `Â¿Reactivar este flow?\n\n${currentTask}\n\nEl flow volvera a la operacion activa.\nNo se eliminaran tareas, comentarios ni proyectos vinculados.`
     );
     if (!confirmed) return;
 
@@ -1187,7 +1259,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     if (!workflow || !canDeleteWorkflow(workflow)) return;
 
     const confirmed = window.confirm(
-      "¿Eliminar este flow?\n\nEsta acción eliminará el flow, sus tareas, comentarios, historial, eventos externos y vínculos con proyectos.\n\nEsta acción no se puede deshacer."
+      "Â¿Eliminar este flow?\n\nEsta acciÃ³n eliminarÃ¡ el flow, sus tareas, comentarios, historial, eventos externos y vÃ­nculos con proyectos.\n\nEsta acciÃ³n no se puede deshacer."
     );
     if (!confirmed) return;
 
@@ -1227,7 +1299,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     () => [
       {
         field: "ambito",
-        headerName: "Ámbito",
+        headerName: "Ãmbito",
         width: 128,
         minWidth: 120,
         sortable: false,
@@ -1655,7 +1727,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       },
       {
         field: "ambito",
-        headerName: "Ámbito",
+        headerName: "Ãmbito",
         width: 128,
         minWidth: 120,
         sortable: false,
@@ -1743,13 +1815,13 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     return (
       <Toolbar aria-label="Toolbar del listado" style={{ gap: "6px", justifyContent: "space-between" }}>
         <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", minWidth: 0 }}>
-          <ToolbarButton aria-label={searchOpen ? "Alternar búsqueda" : "Buscar"} onClick={onSearchToggle}>
+          <ToolbarButton aria-label={searchOpen ? "Alternar bÃºsqueda" : "Buscar"} onClick={onSearchToggle}>
             <SearchRoundedIcon fontSize="small" />
           </ToolbarButton>
           {searchOpen ? (
             <>
               <TextField
-                aria-label="Búsqueda rápida"
+                aria-label="BÃºsqueda rÃ¡pida"
                 placeholder={quickFilterPlaceholder}
                 size="small"
                 fullWidth={false}
@@ -1763,7 +1835,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 sx={{ width: { xs: 180, sm: 280 } }}
               />
               <ToolbarButton
-                aria-label={searchIsEmpty ? "Cerrar búsqueda" : "Limpiar búsqueda"}
+                aria-label={searchIsEmpty ? "Cerrar bÃºsqueda" : "Limpiar bÃºsqueda"}
                 onClick={onSearchClearOrClose}
               >
                 <CancelOutlinedIcon fontSize="small" />
@@ -1944,7 +2016,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 )
               }
             >
-              {`Hay ${unclassifiedTriggers.length + unclassifiedWorkflowCards.length} elemento(s) sin ámbito definido fuera del modo ${getAmbitoLabel(activeAmbito)}.`}
+              {`Hay ${unclassifiedTriggers.length + unclassifiedWorkflowCards.length} elemento(s) sin Ã¡mbito definido fuera del modo ${getAmbitoLabel(activeAmbito)}.`}
             </Alert>
           )}
 
@@ -1952,9 +2024,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             <Paper sx={{ p: { xs: 1.5, md: 1.8 } }}>
               <Stack spacing={2}>
                 <Box>
-                  <Typography variant="subtitle1">Clasificar elementos sin ámbito</Typography>
+                  <Typography variant="subtitle1">Clasificar elementos sin Ã¡mbito</Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
-                    Estos registros legacy no aparecen en la operación principal hasta asignarles Laboral o Personal.
+                    Estos registros legacy no aparecen en la operaciÃ³n principal hasta asignarles Laboral o Personal.
                   </Typography>
                 </Box>
                 <Stack spacing={1}>
@@ -1972,9 +2044,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                           sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", md: "center" } }}
                         >
                           <Box>
-                            <Typography variant="body1">{trigger.descripcion?.trim() || "Proyecto sin descripción"}</Typography>
+                            <Typography variant="body1">{trigger.descripcion?.trim() || "Proyecto sin descripciÃ³n"}</Typography>
                             <Typography variant="body2" color="text.secondary">
-                              {trigger.solicitante?.trim() || "Sin solicitante"} · {trigger.workflow_ids.length} flow(s) vinculado(s)
+                              {trigger.solicitante?.trim() || "Sin solicitante"} Â· {trigger.workflow_ids.length} flow(s) vinculado(s)
                             </Typography>
                           </Box>
                           <Stack direction="row" spacing={1}>
@@ -2017,12 +2089,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                             sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", md: "center" } }}
                           >
                             <Box>
-                              <Typography variant="body1">{workflow.objetivo_final?.trim() || "Flow sin título"}</Typography>
+                              <Typography variant="body1">{workflow.objetivo_final?.trim() || "Flow sin tÃ­tulo"}</Typography>
                               <Typography variant="body2" color="text.secondary">
                                 {linkedRequirements.length > 0
                                   ? `Clasificar desde el proyecto asociado: ${linkedRequirements
                                       .map((item) => item.descripcion?.trim() || `Proyecto ${item.id.slice(0, 8)}`)
-                                      .join(" · ")}`
+                                      .join(" Â· ")}`
                                   : "Sin proyecto asociado"}
                               </Typography>
                             </Box>
@@ -2105,7 +2177,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   disabled={creatingRequirement}
                 />
                 <Alert severity="info" sx={{ py: 0.5 }}>
-                  Se creará como: {getAmbitoLabel(activeAmbito)}
+                  Se crearÃ¡ como: {getAmbitoLabel(activeAmbito)}
                 </Alert>
                 {createRequirementError && <Alert severity="error">{createRequirementError}</Alert>}
                 <Stack direction="row" spacing={1}>
@@ -2153,7 +2225,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   value={activeAmbito}
                   onChange={(_, value: ActiveAmbitoMode | null) => handleChangeActiveAmbito(value)}
                   variant="fullWidth"
-                  aria-label="Modo de ámbito"
+                  aria-label="Modo de Ã¡mbito"
                   sx={{
                     minHeight: 64,
                     "& .MuiTabs-indicator": {
@@ -2214,7 +2286,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                     gridTemplateRows: "auto auto",
                   }}
                 >
-                  {/* Row 1 – Grupo Operativos */}
+                  {/* Row 1 â€“ Grupo Operativos */}
                   <ButtonBase
                     onClick={() => setStateFilter("operational")}
                     sx={{
@@ -2258,7 +2330,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                     </Typography>
                   </ButtonBase>
 
-                  {/* Row 1 – Grupo No operativos */}
+                  {/* Row 1 â€“ Grupo No operativos */}
                   <ButtonBase
                     onClick={() => setStateFilter("non_operational")}
                     sx={{
@@ -2302,7 +2374,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                     </Typography>
                   </ButtonBase>
 
-                  {/* Col 5, Rows 1-2 – Todos */}
+                  {/* Col 5, Rows 1-2 â€“ Todos */}
                   <ButtonBase
                     onClick={() => setStateFilter("all")}
                     sx={{
@@ -2347,7 +2419,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                     </Typography>
                   </ButtonBase>
 
-                  {/* Row 2 – Botones individuales */}
+                  {/* Row 2 â€“ Botones individuales */}
                   {(
                     [
                       {
@@ -2438,7 +2510,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   />
                 }
               >
-                {`Programados para más adelante (${futureRows.length})${nearestFutureMs ? ` · próximo ${formatNearestFuture(nearestFutureMs ?? todaySortValue, todaySortValue)}` : ""}`}
+                {`Programados para mÃ¡s adelante (${futureRows.length})${nearestFutureMs ? ` Â· prÃ³ximo ${formatNearestFuture(nearestFutureMs ?? todaySortValue, todaySortValue)}` : ""}`}
               </Button>
               <Collapse in={futuresOpen}>
                 <Stack spacing={0} sx={{ px: 1.25, pb: 1.25 }}>
@@ -2520,21 +2592,21 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       flowSearchActive ? (
                         <DataGridEmptyState
                           icon={<SearchRoundedIcon color="action" />}
-                          title="No hay resultados para esta búsqueda"
-                          description="Probá con otros términos para encontrar el flow, la tarea o el proyecto asociado."
+                          title="No hay resultados para esta bÃºsqueda"
+                          description="ProbÃ¡ con otros tÃ©rminos para encontrar el flow, la tarea o el proyecto asociado."
                         />
                       ) : quickFilteredFlowRows.length === 0 || visibleFlowRows.length === 0 ? (
                         <DataGridEmptyState
                           icon={<InboxRoundedIcon color="action" />}
                           title="No hay flows para este filtro"
-                          description="Probá con otro estado o capturá una nueva tarea para iniciar el flujo."
+                          description="ProbÃ¡ con otro estado o capturÃ¡ una nueva tarea para iniciar el flujo."
                           action={resetFilterAction}
                         />
                       ) : (
                         <DataGridEmptyState
                           icon={<ScheduleRoundedIcon color="action" />}
                           title="Sin flows pendientes en esta tabla"
-                          description="Todos los flows de este filtro están programados para más adelante. Revisalos en la sección superior."
+                          description="Todos los flows de este filtro estÃ¡n programados para mÃ¡s adelante. Revisalos en la secciÃ³n superior."
                         />
                       ),
                   }}
@@ -2545,6 +2617,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       searchValue: flowSearchValue,
                       showGridActions: false,
                       showFlowQuickFilter: true,
+                      activeFlowFilterDescription,
                       flowQuickFilter,
                       flowQuickFilterLabel: flowQuickFilter === "none" ? "Filtro rápido" : activeFlowQuickFilterLabel,
                       quickFilterAnchorEl: flowQuickFilterAnchorEl,
@@ -2613,7 +2686,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       <DataGridEmptyState
                         icon={<InboxRoundedIcon color="action" />}
                         title="No hay proyectos para este filtro"
-                        description="Probá con otro estado o creá un nuevo proyecto para empezar."
+                        description="ProbÃ¡ con otro estado o creÃ¡ un nuevo proyecto para empezar."
                         action={resetFilterAction}
                       />
                     ),
@@ -2671,3 +2744,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     </Stack>
   );
 }
+
+
+
