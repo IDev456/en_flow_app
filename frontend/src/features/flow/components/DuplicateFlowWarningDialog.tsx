@@ -11,6 +11,7 @@ type DuplicateFlowWarningDialogProps = {
   candidates: DuplicateCandidate[];
   busy?: boolean;
   onOpenExisting: (workflowId: string) => void;
+  onOpenRequirement?: (requirementId: string) => void;
   onCreateAnyway: () => void;
   onCancel: () => void;
 };
@@ -20,6 +21,7 @@ export function DuplicateFlowWarningDialog({
   candidates,
   busy = false,
   onOpenExisting,
+  onOpenRequirement,
   onCreateAnyway,
   onCancel,
 }: DuplicateFlowWarningDialogProps) {
@@ -29,9 +31,9 @@ export function DuplicateFlowWarningDialog({
         <Stack direction="row" spacing={1.2} sx={{ alignItems: "center" }}>
           <WarningAmberRoundedIcon color="warning" />
           <Stack spacing={0.35}>
-            <Typography variant="h5">Encontré tareas parecidas</Typography>
+            <Typography variant="h5">Encontre tareas parecidas</Typography>
             <Typography variant="body2" color="text.secondary">
-              Ya existe una o más tareas similares. Revisá si corresponde abrir una existente antes de crear una nueva.
+              Ya existe una o mas tareas similares. Revisa si corresponde abrir una existente antes de crear una nueva.
             </Typography>
           </Stack>
         </Stack>
@@ -62,10 +64,24 @@ export function DuplicateFlowWarningDialog({
                   <StatusBadge value={candidate.displayStatus} />
                 </Stack>
 
-                {candidate.requirementLabels.length > 0 && (
-                  <Typography variant="body2" color="text.secondary">
-                    Proyecto: {candidate.requirementLabels.join(" · ")}
-                  </Typography>
+                {candidate.requirements.length > 0 && (
+                  <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", flexWrap: "wrap", gap: 0.75 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Proyecto:
+                    </Typography>
+                    {candidate.requirements.map((requirement) => (
+                      <Button
+                        key={requirement.id}
+                        size="small"
+                        color="inherit"
+                        onClick={() => onOpenRequirement?.(requirement.id)}
+                        disabled={busy || !onOpenRequirement}
+                        sx={{ px: 0.5, textTransform: "none" }}
+                      >
+                        {requirement.label}
+                      </Button>
+                    ))}
+                  </Stack>
                 )}
 
                 {candidate.reminderAt && (
@@ -76,11 +92,11 @@ export function DuplicateFlowWarningDialog({
 
                 {candidate.latestComment ? (
                   <Alert severity="info" sx={{ py: 0.4 }}>
-                    Último comentario: {candidate.latestComment}
+                    Ultimo comentario: {candidate.latestComment}
                   </Alert>
                 ) : candidate.latestMovementAt ? (
                   <Typography variant="body2" color="text.secondary">
-                    Último movimiento: {formatElapsedTime(candidate.latestMovementAt) ?? "sin actividad reciente"}
+                    Ultimo movimiento: {formatElapsedTime(candidate.latestMovementAt) ?? "sin actividad reciente"}
                   </Typography>
                 ) : null}
 
@@ -111,7 +127,7 @@ export function DuplicateFlowWarningDialog({
 
       <DialogActions sx={{ p: 2.5, justifyContent: "space-between", gap: 1.25, flexWrap: "wrap" }}>
         <Typography variant="body2" color="text.secondary">
-          Podés seguir igual si confirmás que se trata de una tarea nueva.
+          Podes seguir igual si confirmas que se trata de una tarea nueva.
         </Typography>
         <Stack direction="row" spacing={1.25}>
           <Button onClick={onCancel} color="inherit" disabled={busy}>

@@ -70,6 +70,12 @@ import { PageContainer } from "../../../components/layout/PageContainer";
 import { useToastContext } from "../../../components/Toast";
 import { getStatusSemanticKey } from "../../../theme";
 import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, getWorkflow, linkWorkflowRequirement, listTriggers, listWorkflows, reactivateWorkflow, updateStepDate, updateTrigger, updateWorkflow } from "../api";
+import {
+  getNavigationLocationState,
+  mergeNavigationState,
+  navigateWithOrigin,
+  omitNavigationStateKeys,
+} from "../navigation";
 import { AmbitoChip } from "../components/AmbitoChip";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Ambito, Step, TriggerDetail, WorkflowDetail } from "../types";
@@ -107,6 +113,17 @@ type TriggerListPageProps = {
   defaultView?: ViewMode;
   lockView?: boolean;
   title?: string;
+};
+
+type TriggerListRestoreState = {
+  viewMode: ViewMode;
+  stateFilter: FlowFilter;
+  flowQuickFilter: FlowQuickFilter;
+  flowSearchOpen: boolean;
+  flowSearchValue: string;
+  flowSortModel: GridSortModel;
+  requirementSearchOpen: boolean;
+  requirementSearchValue: string;
 };
 
 type FlowCardData = {
@@ -215,6 +232,14 @@ function areStringArraysEqual(left: string[], right: string[]) {
   }
 
   return left.every((value, index) => value === right[index]);
+}
+
+function areSortModelsEqual(left: GridSortModel, right: GridSortModel) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((item, index) => item.field === right[index]?.field && item.sort === right[index]?.sort);
 }
 
 function sanitizeFlowColumnOrder(availableFields: string[], candidateOrder: string[]) {
@@ -1011,10 +1036,17 @@ function FlowListToolbar(props: FlowGridToolbarProps) {
 export function TriggerListPage({ defaultView = "requirements", lockView = false, title = "Proyectos" }: TriggerListPageProps) {
   const theme = useTheme();
   const { showToast } = useToastContext();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const navigationState = getNavigationLocationState<TriggerListRestoreState>(location.state);
+  const restoreState = navigationState.restore;
+  const initialViewMode = lockView ? defaultView : (restoreState?.viewMode ?? defaultView);
   const [triggers, setTriggers] = useState<TriggerDetail[]>([]);
   const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
-  const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
-  const [stateFilter, setStateFilter] = useState<FlowFilter>(() => getDefaultFilterForView(defaultView));
+  const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode);
+  const [stateFilter, setStateFilter] = useState<FlowFilter>(
+    () => restoreState?.stateFilter ?? getDefaultFilterForView(initialViewMode)
+  );
   const [activeAmbito, setActiveAmbito] = useState<ActiveAmbitoMode>(() => getStoredActiveAmbito());
   const [loading, setLoading] = useState(true);
   const [deletingTriggerId, setDeletingTriggerId] = useState<string | null>(null);
@@ -1037,24 +1069,26 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [linkProjectSearch, setLinkProjectSearch] = useState("");
   const [linkProjectLoading, setLinkProjectLoading] = useState(false);
   const [pendingDates, setPendingDates] = useState<Map<string, string>>(new Map());
-  const [flowQuickFilter, setFlowQuickFilter] = useState<FlowQuickFilter>("none");
+  const [flowQuickFilter, setFlowQuickFilter] = useState<FlowQuickFilter>(
+    () => (initialViewMode === "flows" ? restoreState?.flowQuickFilter ?? "none" : "none")
+  );
   const [flowQuickFilterAnchorEl, setFlowQuickFilterAnchorEl] = useState<HTMLElement | null>(null);
   const [flowColumnOrder, setFlowColumnOrder] = useState<string[]>(() => getStoredFlowColumnOrder());
   const [draggedFlowColumnField, setDraggedFlowColumnField] = useState<string | null>(null);
   const [flowColumnDropTargetField, setFlowColumnDropTargetField] = useState<string | null>(null);
-  const [flowSearchOpen, setFlowSearchOpen] = useState(false);
-  const [flowSearchValue, setFlowSearchValue] = useState("");
-  const [requirementSearchOpen, setRequirementSearchOpen] = useState(false);
-  const [requirementSearchValue, setRequirementSearchValue] = useState("");
-  const [flowSortModel, setFlowSortModel] = useState<GridSortModel>([{ field: "movementAt", sort: "asc" }]);
+  const [flowSearchOpen, setFlowSearchOpen] = useState(() => restoreState?.flowSearchOpen ?? false);
+  const [flowSearchValue, setFlowSearchValue] = useState(() => restoreState?.flowSearchValue ?? "");
+  const [requirementSearchOpen, setRequirementSearchOpen] = useState(() => restoreState?.requirementSearchOpen ?? false);
+  const [requirementSearchValue, setRequirementSearchValue] = useState(() => restoreState?.requirementSearchValue ?? "");
+  const [flowSortModel, setFlowSortModel] = useState<GridSortModel>(
+    () => restoreState?.flowSortModel ?? [{ field: "movementAt", sort: "asc" }]
+  );
   const [requirementFilterModel, setRequirementFilterModel] = useState<GridFilterModel>({
     items: [],
-    quickFilterValues: [],
+    quickFilterValues: restoreState?.requirementSearchValue ? toQuickFilterValues(restoreState.requirementSearchValue) : [],
   });
   const [classifyingItemId, setClassifyingItemId] = useState<string | null>(null);
   const pendingDateInputRefs = useRef(new Map<string, HTMLInputElement | null>());
-  const location = useLocation();
-  const navigate = useNavigate();
   const searchParams = new URLSearchParams(location.search);
   const isAmbitoAdminView = defaultView === "requirements" && searchParams.get("admin") === "ambito";
 
@@ -1063,13 +1097,14 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   }, []);
 
   useEffect(() => {
-    setViewMode(defaultView);
-    setStateFilter(getDefaultFilterForView(defaultView));
+    if (lockView) {
+      setViewMode(defaultView);
+    }
     if (defaultView !== "flows") {
       setFlowQuickFilter("none");
       setFlowQuickFilterAnchorEl(null);
     }
-  }, [defaultView]);
+  }, [defaultView, lockView]);
 
   useEffect(() => {
     setStoredActiveAmbito(activeAmbito);
@@ -1078,6 +1113,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   useEffect(() => {
     const state = location.state as { openCreateRequirement?: boolean; toast?: string } | null;
     if (!state) return;
+    if (!state.toast && !state.openCreateRequirement) {
+      return;
+    }
 
     if (state.toast) {
       setRequirementToastMessage(state.toast);
@@ -1089,8 +1127,58 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       setCreateRequirementOpen(true);
     }
 
-    navigate(location.pathname, { replace: true, state: null });
-  }, [defaultView, location.pathname, location.state, navigate]);
+    navigate(`${location.pathname}${location.search}`, {
+      replace: true,
+      state: omitNavigationStateKeys(location.state, ["openCreateRequirement", "toast"]),
+    });
+  }, [defaultView, location.pathname, location.search, location.state, navigate]);
+
+  useEffect(() => {
+    const nextRestore = {
+      viewMode,
+      stateFilter,
+      flowQuickFilter,
+      flowSearchOpen,
+      flowSearchValue,
+      flowSortModel,
+      requirementSearchOpen,
+      requirementSearchValue,
+    } satisfies TriggerListRestoreState;
+
+    if (
+      restoreState?.viewMode === nextRestore.viewMode &&
+      restoreState?.stateFilter === nextRestore.stateFilter &&
+      restoreState?.flowQuickFilter === nextRestore.flowQuickFilter &&
+      restoreState?.flowSearchOpen === nextRestore.flowSearchOpen &&
+      restoreState?.flowSearchValue === nextRestore.flowSearchValue &&
+      areSortModelsEqual(restoreState?.flowSortModel ?? [], nextRestore.flowSortModel) &&
+      restoreState?.requirementSearchOpen === nextRestore.requirementSearchOpen &&
+      restoreState?.requirementSearchValue === nextRestore.requirementSearchValue
+    ) {
+      return;
+    }
+
+    navigate(`${location.pathname}${location.search}`, {
+      replace: true,
+      state: mergeNavigationState(location.state, {
+        restore: nextRestore,
+      }),
+    });
+  }, [
+    flowQuickFilter,
+    flowSearchOpen,
+    flowSearchValue,
+    flowSortModel,
+    location.pathname,
+    location.search,
+    location.state,
+    navigate,
+    requirementSearchOpen,
+    requirementSearchValue,
+    restoreState,
+    stateFilter,
+    viewMode,
+  ]);
 
   async function loadData() {
     try {
@@ -1657,12 +1745,19 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const pageTitle = title || (isFlowsView ? "Flows" : "Proyectos");
   const currentCounts = isFlowsView ? flowCounts : requirementCounts;
 
-  const handleProjectNavigate = useCallback(
-    (requirementId: string, event: React.MouseEvent<HTMLElement>) => {
-      event.stopPropagation();
-      navigate(`/requirements/${requirementId}`);
+  const handleWorkflowNavigate = useCallback(
+    (workflowId: string) => {
+      navigateWithOrigin(navigate, location, `/workflows/${workflowId}`, location.pathname);
     },
-    [navigate]
+    [location, navigate]
+  );
+
+  const handleProjectNavigate = useCallback(
+    (requirementId: string, event?: React.MouseEvent<HTMLElement>) => {
+      event?.stopPropagation();
+      navigateWithOrigin(navigate, location, `/requirements/${requirementId}`, location.pathname);
+    },
+    [location, navigate]
   );
 
   const flowColumns = useMemo<GridColDef<FlowGridRow>[]>(
@@ -2314,7 +2409,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
               label="Abrir proyecto"
               onClick={(event) => {
                 event.stopPropagation();
-                navigate(`/requirements/${row.id}`);
+                handleProjectNavigate(row.id);
               }}
               showInMenu={false}
             />,
@@ -2335,7 +2430,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         },
       },
     ],
-    [deletingTriggerId, navigate, triggers]
+    [deletingTriggerId, handleProjectNavigate, triggers]
   );
 
   function GridToolbar({
@@ -2682,7 +2777,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       onClick={(event: React.MouseEvent<HTMLLIElement>) => {
                         event.stopPropagation();
                         setRequirementsMenu(null);
-                        navigate(`/requirements/${requirement.id}`);
+                        handleProjectNavigate(requirement.id);
                       }}
                     >
                       {requirement.label}
@@ -3237,7 +3332,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                                   }
                                 }}
                                 onRowClick={(params: GridRowParams<FlowGridRow>) => {
-                                  navigate(`/workflows/${params.row.id}`);
+                                  handleWorkflowNavigate(params.row.id);
                                 }}
                                 sx={{
                                   border: 0,
@@ -3283,7 +3378,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                           }
                         }}
                         onRowClick={(params: GridRowParams<FlowGridRow>) => {
-                          navigate(`/workflows/${params.row.id}`);
+                          handleWorkflowNavigate(params.row.id);
                         }}
                         sx={{
                           border: 0,
@@ -3330,7 +3425,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   disableRowSelectionOnClick
                   showToolbar
                   onRowClick={(params: GridRowParams<RequirementGridRow>) => {
-                    navigate(`/requirements/${params.row.id}`);
+                    handleProjectNavigate(params.row.id);
                   }}
                   slots={{
                     toolbar: FlowGridToolbar,

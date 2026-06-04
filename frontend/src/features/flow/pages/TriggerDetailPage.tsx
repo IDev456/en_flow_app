@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
+import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import PlayCircleOutlineRoundedIcon from "@mui/icons-material/PlayCircleOutlineRounded";
 import { alpha } from "@mui/material/styles";
 import {
   Alert,
   Box,
+  Breadcrumbs,
   Button,
   Card,
   CardContent,
@@ -23,8 +25,13 @@ import {
 } from "@mui/material";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
-import { PageContainer } from "../../../components/layout/PageContainer";
 import { deleteTrigger, getTrigger, getWorkflow, updateTrigger } from "../api";
+import {
+  getNavigationLocationState,
+  mergeNavigationState,
+  navigateBackWithOrigin,
+  navigateWithOrigin,
+} from "../navigation";
 import { AmbitoChip } from "../components/AmbitoChip";
 import { FlowTableSection } from "../components/FlowTableSection";
 import { StatusBadge } from "../components/StatusBadge";
@@ -34,6 +41,9 @@ import { getAmbitoLabel, getVisibleTriggerStatus, getVisibleWorkflowStatus } fro
 
 const SOLICITANTE_MAX = 150;
 const TRIGGER_DESCRIPTION_MAX = 1000;
+type TriggerDetailRestoreState = {
+  projectFlowFilter: FlowFilter;
+};
 
 function SlideUp(props: SlideProps) {
   return <Slide {...props} direction="up" />;
@@ -41,6 +51,10 @@ function SlideUp(props: SlideProps) {
 
 export function TriggerDetailPage() {
   const { triggerId = "" } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const navigationState = getNavigationLocationState<TriggerDetailRestoreState>(location.state);
+  const restoreState = navigationState.restore;
   const [trigger, setTrigger] = useState<TriggerDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,9 +69,7 @@ export function TriggerDetailPage() {
   const [requirementError, setRequirementError] = useState<string | null>(null);
   const [requirementToastOpen, setRequirementToastOpen] = useState(false);
   const [ambitoConfirmOpen, setAmbitoConfirmOpen] = useState(false);
-  const [projectFlowFilter, setProjectFlowFilter] = useState<FlowFilter>("operational");
-  const location = useLocation();
-  const navigate = useNavigate();
+  const [projectFlowFilter, setProjectFlowFilter] = useState<FlowFilter>(() => restoreState?.projectFlowFilter ?? "operational");
 
   function getPrimaryDetail(currentTrigger: TriggerDetail) {
     return currentTrigger.descripcion?.trim() || "Proyecto sin detalle";
@@ -77,6 +89,21 @@ export function TriggerDetailPage() {
     setEditDescripcion(trigger.descripcion ?? "");
     setEditAmbito(trigger.ambito);
   }, [trigger?.id, trigger?.solicitante, trigger?.descripcion, trigger?.ambito]);
+
+  useEffect(() => {
+    if (restoreState?.projectFlowFilter === projectFlowFilter) {
+      return;
+    }
+
+    navigate(`${location.pathname}${location.search}`, {
+      replace: true,
+      state: mergeNavigationState(location.state, {
+        restore: {
+          projectFlowFilter,
+        } satisfies TriggerDetailRestoreState,
+      }),
+    });
+  }, [location.pathname, location.search, location.state, navigate, projectFlowFilter, restoreState]);
 
   async function loadTrigger() {
     try {
@@ -251,13 +278,31 @@ export function TriggerDetailPage() {
   }
 
   return (
-    <PageContainer
-      breadcrumbs={[
-        { label: "Proyectos", to: "/requirements" },
-        { label: "Detalle" },
-      ]}
-      title="Proyecto"
-    >
+    <Stack spacing={3}>
+      <Box>
+        <Button
+          variant="outlined"
+          color="inherit"
+          startIcon={<ArrowBackRoundedIcon />}
+          onClick={() => navigateBackWithOrigin(navigate, location.state, "/requirements")}
+        >
+          Volver
+        </Button>
+      </Box>
+
+      <Breadcrumbs
+        separator=">"
+        aria-label="breadcrumb"
+        sx={{ "& .MuiBreadcrumbs-separator": { mx: 0.75, color: "text.disabled" } }}
+      >
+        <Typography color="text.secondary" variant="caption">
+          Proyectos
+        </Typography>
+        <Typography color="text.primary" variant="caption">
+          Detalle
+        </Typography>
+      </Breadcrumbs>
+
       <Stack spacing={2}>
         <Snackbar
           open={requirementToastOpen}
@@ -479,12 +524,12 @@ export function TriggerDetailPage() {
               noRowsDescription="Probá con otro estado o capturá una nueva tarea para este proyecto."
               noSearchTitle="No hay resultados para esta búsqueda"
               noSearchDescription="Probá con otros términos para encontrar un flow o tarea de este proyecto."
-              onRowNavigate={(workflowId) => navigate(`/workflows/${workflowId}`)}
+              onRowNavigate={(workflowId) => navigateWithOrigin(navigate, location, `/workflows/${workflowId}`, "/requirements")}
               onWorkflowStepDatePatched={handleProjectWorkflowDatePatched}
             />
           </CardContent>
         </Card>
       </Stack>
-    </PageContainer>
+    </Stack>
   );
 }

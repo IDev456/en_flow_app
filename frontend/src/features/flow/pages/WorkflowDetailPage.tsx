@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import ReplayRoundedIcon from "@mui/icons-material/ReplayRounded";
@@ -49,6 +50,14 @@ import {
   updateStepComment,
   updateStepStatus,
 } from "../api";
+import {
+  getNavigationLocationState,
+  mergeNavigationState,
+  navigateBackWithOrigin,
+  navigateWithOrigin,
+  omitNavigationStateKeys,
+  withNavigationOrigin,
+} from "../navigation";
 import { AmbitoChip } from "../components/AmbitoChip";
 import { StepDetailPanel } from "../components/StepDetailPanel";
 import { CompleteStepDialog } from "../components/CompleteStepDialog";
@@ -67,16 +76,22 @@ import type {
 } from "../types";
 import { buildJournalItems, DEFAULT_ACTOR, getAmbitoLabel } from "../utils";
 
+type WorkflowDetailRestoreState = {
+  selectedStepId: string | null;
+};
+
 export function WorkflowDetailPage() {
   const { workflowId = "" } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
+  const navigationState = getNavigationLocationState<WorkflowDetailRestoreState>(location.state);
+  const restoreState = navigationState.restore;
   const { showToast } = useToastContext();
-  const initialToastMessage = (location.state as { toast?: string } | null)?.toast ?? null;
+  const initialToastMessage = typeof navigationState.toast === "string" ? navigationState.toast : null;
   const [workflow, setWorkflow] = useState<WorkflowDetail | null>(null);
   const [trigger, setTrigger] = useState<TriggerDetail | null>(null);
   const [requirements, setRequirements] = useState<TriggerDetail[]>([]);
-  const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+  const [selectedStepId, setSelectedStepId] = useState<string | null>(() => restoreState?.selectedStepId ?? null);
   const [stepHasRecordsById, setStepHasRecordsById] = useState<Record<string, boolean>>({});
   const [pendingCompleteDialogStepId, setPendingCompleteDialogStepId] = useState<string | null>(null);
   const [stepComments, setStepComments] = useState<StepComment[]>([]);
@@ -112,6 +127,10 @@ export function WorkflowDetailPage() {
     return orderedSteps[0]?.id ?? null;
   }
 
+  function handleOpenRequirement(requirementId: string) {
+    navigateWithOrigin(navigate, location, `/requirements/${requirementId}`, "/flows");
+  }
+
   useEffect(() => {
     void loadWorkflow();
   }, [workflowId]);
@@ -132,6 +151,32 @@ export function WorkflowDetailPage() {
     setEditingWorkflowAmbito(false);
     setWorkflowAmbitoConfirmOpen(false);
   }, [workflow?.id, workflow?.ambito]);
+
+  useEffect(() => {
+    if (!initialToastMessage) {
+      return;
+    }
+
+    navigate(`${location.pathname}${location.search}`, {
+      replace: true,
+      state: omitNavigationStateKeys(location.state, ["toast"]),
+    });
+  }, [initialToastMessage, location.pathname, location.search, location.state, navigate]);
+
+  useEffect(() => {
+    if (restoreState?.selectedStepId === selectedStepId) {
+      return;
+    }
+
+    navigate(`${location.pathname}${location.search}`, {
+      replace: true,
+      state: mergeNavigationState(location.state, {
+        restore: {
+          selectedStepId,
+        } satisfies WorkflowDetailRestoreState,
+      }),
+    });
+  }, [location.pathname, location.search, location.state, navigate, restoreState, selectedStepId]);
 
   async function loadWorkflow(preferredStepId?: string) {
     try {
@@ -647,6 +692,16 @@ export function WorkflowDetailPage() {
 
   return (
     <Stack spacing={3}>
+      <Box>
+        <Button
+          variant="outlined"
+          color="inherit"
+          startIcon={<ArrowBackRoundedIcon />}
+          onClick={() => navigateBackWithOrigin(navigate, location.state, "/flows")}
+        >
+          Volver
+        </Button>
+      </Box>
       <Snackbar
         open={toastOpen}
         autoHideDuration={2600}
@@ -680,7 +735,13 @@ export function WorkflowDetailPage() {
           Flows
         </Link>
         {trigger && (
-          <Link component={RouterLink} underline="hover" color="inherit" to={`/requirements/${trigger.id}`}>
+          <Link
+            component={RouterLink}
+            underline="hover"
+            color="inherit"
+            to={`/requirements/${trigger.id}`}
+            state={withNavigationOrigin(location, "/flows")}
+          >
             {getPrimaryRequirementLabel()}
           </Link>
         )}
@@ -806,7 +867,9 @@ export function WorkflowDetailPage() {
                               key={item.id}
                               size="small"
                               variant="outlined"
+                              clickable
                               label={item.descripcion?.trim() || `Proyecto ${item.id.slice(0, 8)}`}
+                              onClick={() => handleOpenRequirement(item.id)}
                               sx={{
                                 maxWidth: { xs: "100%", md: 260 },
                                 "& .MuiChip-label": {
@@ -975,7 +1038,9 @@ export function WorkflowDetailPage() {
                       <Chip
                         size="small"
                         variant="outlined"
+                        clickable
                         label={item.descripcion?.trim() || `Proyecto ${item.id.slice(0, 8)}`}
+                        onClick={() => handleOpenRequirement(item.id)}
                       />
                       <Button
                         size="small"

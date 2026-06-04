@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Alert, Breadcrumbs, CircularProgress, Link, Stack, Typography } from "@mui/material";
-import { Link as RouterLink, useParams } from "react-router-dom";
+import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
+import { Alert, Box, Breadcrumbs, Button, CircularProgress, Link, Stack, Typography } from "@mui/material";
+import { Link as RouterLink, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { useToastContext } from "../../../components/Toast";
 import {
@@ -13,6 +14,7 @@ import {
   resolveExternalResponse,
   updateStepStatus,
 } from "../api";
+import { navigateBackWithOrigin, withNavigationOrigin } from "../navigation";
 import { StepDetailPanel } from "../components/StepDetailPanel";
 import type {
   ExternalEventCreateInput,
@@ -27,6 +29,8 @@ import { DEFAULT_ACTOR } from "../utils";
 
 export function StepDetailPage() {
   const { stepId = "" } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { showToast } = useToastContext();
   const [step, setStep] = useState<Step | null>(null);
   const [comments, setComments] = useState<StepComment[]>([]);
@@ -115,12 +119,30 @@ export function StepDetailPage() {
 
   return (
     <Stack spacing={3}>
+      <Box>
+        <Button
+          variant="outlined"
+          color="inherit"
+          startIcon={<ArrowBackRoundedIcon />}
+          onClick={() =>
+            navigateBackWithOrigin(navigate, location.state, step?.workflow_id ? `/workflows/${step.workflow_id}` : "/flows")
+          }
+        >
+          Volver
+        </Button>
+      </Box>
       <Breadcrumbs>
         <Link component={RouterLink} underline="hover" color="inherit" to="/flows">
           Flows
         </Link>
         {step && (
-          <Link component={RouterLink} underline="hover" color="inherit" to={`/workflows/${step.workflow_id}`}>
+          <Link
+            component={RouterLink}
+            underline="hover"
+            color="inherit"
+            to={`/workflows/${step.workflow_id}`}
+            state={withNavigationOrigin(location, "/flows")}
+          >
             Flow
           </Link>
         )}
@@ -133,6 +155,7 @@ export function StepDetailPage() {
         comments={comments}
         history={history}
         standalone
+        showStandaloneBack={false}
         error={error}
         onSubmitJournal={handleSubmitJournal}
         onCompleteTask={handleCompleteTask}

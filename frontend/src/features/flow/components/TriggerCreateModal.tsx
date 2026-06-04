@@ -18,10 +18,11 @@ import {
   Typography,
 } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { useToastContext } from "../../../components/Toast";
 import { getWorkflow, listTriggers, listWorkflows, quickCaptureFlow, startWorkflow } from "../api";
+import { navigateWithOrigin } from "../navigation";
 import { ReminderDateField } from "./ReminderDateField";
 import { AmbitoChip } from "./AmbitoChip";
 import { DuplicateFlowWarningDialog } from "./DuplicateFlowWarningDialog";
@@ -87,6 +88,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
   const [liveDuplicateCandidates, setLiveDuplicateCandidates] = useState<DuplicateCandidate[]>([]);
   const [pendingCreation, setPendingCreation] = useState<PendingCreation | null>(null);
   const [linkedRequirementAmbito, setLinkedRequirementAmbito] = useState<Ambito>(null);
+  const location = useLocation();
   const navigate = useNavigate();
   const { showToast } = useToastContext();
   const duplicateCatalogRef = useRef<DuplicateCatalog | null>(null);
@@ -102,6 +104,19 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
   const effectiveRequirementLabel = linkedRequirementLabel ?? selectedRequirement?.descripcion?.trim() ?? null;
   const effectiveRequirementAmbito = defaultRequirementId ? linkedRequirementAmbito : (selectedRequirement?.ambito ?? null);
   const isLinkedCapture = Boolean(effectiveRequirementId);
+
+  function getOriginLocationWithoutModal() {
+    const nextParams = new URLSearchParams(location.search);
+    nextParams.delete("modal");
+    nextParams.delete("requirementId");
+    nextParams.delete("requirementLabel");
+
+    return {
+      pathname: location.pathname,
+      search: nextParams.toString() ? `?${nextParams.toString()}` : "",
+      state: location.state,
+    };
+  }
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -327,7 +342,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
         showToast("Tarea capturada.", "success");
       }
       onClose();
-      navigate(`/workflows/${workflow.id}`);
+      navigateWithOrigin(navigate, getOriginLocationWithoutModal(), `/workflows/${workflow.id}`, "/flows");
     } catch (err) {
       setError(
         err instanceof Error
@@ -394,11 +409,15 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
   function handleOpenExisting(workflowId: string) {
     setDuplicateCandidates([]);
     setPendingCreation(null);
-    navigate(`/workflows/${workflowId}`);
+    navigateWithOrigin(navigate, getOriginLocationWithoutModal(), `/workflows/${workflowId}`, "/flows");
   }
 
   function handleOpenExistingFromSuggestions(workflowId: string) {
-    navigate(`/workflows/${workflowId}`);
+    navigateWithOrigin(navigate, getOriginLocationWithoutModal(), `/workflows/${workflowId}`, "/flows");
+  }
+
+  function handleOpenLinkedRequirement(requirementId: string) {
+    navigateWithOrigin(navigate, getOriginLocationWithoutModal(), `/requirements/${requirementId}`, "/requirements");
   }
 
   function handleCancelDuplicateWarning() {
@@ -423,7 +442,19 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
             {isLinkedCapture && effectiveRequirementLabel && (
               <Alert severity={effectiveRequirementAmbito ? "info" : "warning"} sx={{ py: 0.5 }}>
                 <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
-                  <Typography component="span">Proyecto vinculado: {effectiveRequirementLabel}</Typography>
+                  <Typography component="span">Proyecto vinculado:</Typography>
+                  {effectiveRequirementId ? (
+                    <Button
+                      size="small"
+                      color="inherit"
+                      onClick={() => handleOpenLinkedRequirement(effectiveRequirementId)}
+                      sx={{ px: 0.5, textTransform: "none" }}
+                    >
+                      {effectiveRequirementLabel}
+                    </Button>
+                  ) : (
+                    <Typography component="span">{effectiveRequirementLabel}</Typography>
+                  )}
                   <AmbitoChip ambito={effectiveRequirementAmbito} />
                 </Stack>
               </Alert>
@@ -468,6 +499,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
               candidates={liveDuplicateCandidates}
               checking={checkingLiveDuplicates}
               onOpenExisting={handleOpenExistingFromSuggestions}
+              onOpenRequirement={handleOpenLinkedRequirement}
             />
 
             {!defaultRequirementId && (
@@ -569,6 +601,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
         candidates={duplicateCandidates}
         busy={submitting}
         onOpenExisting={handleOpenExisting}
+        onOpenRequirement={handleOpenLinkedRequirement}
         onCreateAnyway={() => void handleCreateAnyway()}
         onCancel={handleCancelDuplicateWarning}
       />

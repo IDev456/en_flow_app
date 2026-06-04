@@ -4,15 +4,23 @@ import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import { Alert, Button, Paper, Stack, TextField, Typography } from "@mui/material";
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
-import { Link as RouterLink } from "react-router-dom";
+import { Link as RouterLink, useLocation, useNavigate } from "react-router-dom";
 
 import { DataGridEmptyState } from "../../../components/feedback/DataGridEmptyState";
 import { PageContainer } from "../../../components/layout/PageContainer";
 import { listWorkLogEntries } from "../api";
+import {
+  getNavigationLocationState,
+  mergeNavigationState,
+  withNavigationOrigin,
+} from "../navigation";
 import type { WorkLogEntry, WorkLogEntryType } from "../types";
 import { formatDate } from "../utils";
 
 type WorkLogRow = WorkLogEntry;
+type WorkLogRestoreState = {
+  searchValue: string;
+};
 
 function getEntryTypeLabel(entryType: WorkLogEntryType) {
   if (entryType === "comment") return "Comentario";
@@ -31,14 +39,34 @@ function normalizeSearch(value: string) {
 }
 
 export function WorkLogPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const navigationState = getNavigationLocationState<WorkLogRestoreState>(location.state);
+  const restoreState = navigationState.restore;
   const [entries, setEntries] = useState<WorkLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchValue, setSearchValue] = useState("");
+  const [searchValue, setSearchValue] = useState(() => restoreState?.searchValue ?? "");
 
   useEffect(() => {
     void loadEntries();
   }, []);
+
+  useEffect(() => {
+    const currentRestore = restoreState;
+    if (currentRestore?.searchValue === searchValue) {
+      return;
+    }
+
+    navigate(`${location.pathname}${location.search}`, {
+      replace: true,
+      state: mergeNavigationState(location.state, {
+        restore: {
+          searchValue,
+        } satisfies WorkLogRestoreState,
+      }),
+    });
+  }, [location.pathname, location.search, location.state, navigate, restoreState, searchValue]);
 
   async function loadEntries() {
     try {
@@ -127,12 +155,13 @@ export function WorkLogPage() {
         minWidth: 220,
         valueGetter: (_, row) => row.step_name,
         renderCell: (params) => (
-          <Button
-            component={RouterLink}
-            to={`/steps/${params.row.step_id}`}
-            size="small"
-            color="inherit"
-            endIcon={<LaunchRoundedIcon fontSize="small" />}
+            <Button
+              component={RouterLink}
+              to={`/steps/${params.row.step_id}`}
+              state={withNavigationOrigin(location, "/bitacora")}
+              size="small"
+              color="inherit"
+              endIcon={<LaunchRoundedIcon fontSize="small" />}
             sx={{ textTransform: "none", justifyContent: "flex-start", px: 0.4 }}
           >
             {params.row.step_name}
@@ -146,12 +175,13 @@ export function WorkLogPage() {
         minWidth: 220,
         valueGetter: (_, row) => row.workflow_title ?? `Flow ${row.workflow_id.slice(0, 8)}`,
         renderCell: (params) => (
-          <Button
-            component={RouterLink}
-            to={`/workflows/${params.row.workflow_id}`}
-            size="small"
-            color="inherit"
-            endIcon={<LaunchRoundedIcon fontSize="small" />}
+            <Button
+              component={RouterLink}
+              to={`/workflows/${params.row.workflow_id}`}
+              state={withNavigationOrigin(location, "/bitacora")}
+              size="small"
+              color="inherit"
+              endIcon={<LaunchRoundedIcon fontSize="small" />}
             sx={{ textTransform: "none", justifyContent: "flex-start", px: 0.4 }}
           >
             {params.row.workflow_title ?? `Flow ${params.row.workflow_id.slice(0, 8)}`}
@@ -176,6 +206,7 @@ export function WorkLogPage() {
             <Button
               component={RouterLink}
               to={`/requirements/${params.row.requirement_id}`}
+              state={withNavigationOrigin(location, "/bitacora")}
               size="small"
               color="inherit"
               endIcon={<LaunchRoundedIcon fontSize="small" />}
@@ -193,7 +224,7 @@ export function WorkLogPage() {
         minWidth: 150,
       },
     ],
-    []
+    [location]
   );
 
   return (

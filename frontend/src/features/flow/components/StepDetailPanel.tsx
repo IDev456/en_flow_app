@@ -73,6 +73,9 @@ type StepDetailPanelProps = {
   onResolveExternalResponse?: (stepId: string, input: ExternalResponseDecisionInput) => Promise<void>;
   operationLocked?: boolean;
   operationLockMessage?: string | null;
+  showStandaloneBack?: boolean;
+  standaloneBackLabel?: string;
+  onStandaloneBack?: () => void;
 };
 
 export function StepDetailPanel({
@@ -91,6 +94,9 @@ export function StepDetailPanel({
   onResolveExternalResponse,
   operationLocked = false,
   operationLockMessage = null,
+  showStandaloneBack = true,
+  standaloneBackLabel = "Volver al flow",
+  onStandaloneBack,
 }: StepDetailPanelProps) {
   const [selectedStatus, setSelectedStatus] = useState<"" | "espera" | "problema">("");
   const [composerExpanded, setComposerExpanded] = useState(false);
@@ -833,13 +839,19 @@ export function StepDetailPanel({
           </>
         )}
 
-        {standalone && (
+        {standalone && showStandaloneBack && (
           <>
             <Divider />
             <Box sx={{ px: { xs: 2.5, md: 3 }, py: 2.25 }}>
-              <Button component={RouterLink} to={`/workflows/${workflowId}`} variant="text" color="inherit">
-                Volver al flow
-              </Button>
+              {onStandaloneBack ? (
+                <Button onClick={onStandaloneBack} variant="text" color="inherit">
+                  {standaloneBackLabel}
+                </Button>
+              ) : (
+                <Button component={RouterLink} to={`/workflows/${workflowId}`} variant="text" color="inherit">
+                  {standaloneBackLabel}
+                </Button>
+              )}
             </Box>
           </>
         )}

@@ -52,7 +52,10 @@ export type DuplicateCandidate = {
   displayStatus: string;
   workflowStatus: WorkflowStatus;
   stepStatus: StepStatus | null;
-  requirementLabels: string[];
+  requirements: Array<{
+    id: string;
+    label: string;
+  }>;
   reminderAt: string | null;
   latestComment: string | null;
   latestMovementAt: string | null;
@@ -228,6 +231,13 @@ function getRequirementLabels(triggers: TriggerDetail[]): string[] {
   return [...new Set(triggers.map((trigger) => trigger.descripcion?.trim() || `Proyecto ${trigger.id.slice(0, 8)}`))];
 }
 
+function getRequirementReferences(triggers: TriggerDetail[]) {
+  return triggers.map((trigger) => ({
+    id: trigger.id,
+    label: trigger.descripcion?.trim() || `Proyecto ${trigger.id.slice(0, 8)}`,
+  }));
+}
+
 function getDateBonus(inputDate: string | null | undefined, candidateDate: string | null | undefined): number {
   if (!candidateDate) return 0;
 
@@ -298,7 +308,9 @@ export function findSimilarFlows(
       continue;
     }
 
-    const requirementLabels = getRequirementLabels(requirementByWorkflowId[workflow.id] ?? []);
+    const linkedRequirements = requirementByWorkflowId[workflow.id] ?? [];
+    const requirementLabels = getRequirementLabels(linkedRequirements);
+    const requirementReferences = getRequirementReferences(linkedRequirements);
     const candidateName = relevantStep.nombre.trim();
     const candidateSecondaryText = [
       relevantStep.descripcion?.trim() ?? "",
@@ -357,7 +369,7 @@ export function findSimilarFlows(
       displayStatus: getVisibleWorkflowStatus(workflow),
       workflowStatus: workflow.estado,
       stepStatus: relevantStep.estado,
-      requirementLabels,
+      requirements: requirementReferences,
       reminderAt: relevantStep.fecha_vencimiento ?? relevantStep.fecha_ejecucion_estimada,
       latestComment: latestComment && !isNoisyAutomaticJournalText(latestComment) ? latestComment : null,
       latestMovementAt: getLatestMovementAt(workflow),

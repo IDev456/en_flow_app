@@ -9,9 +9,15 @@ type LiveDuplicateSuggestionsProps = {
   candidates: DuplicateCandidate[];
   checking: boolean;
   onOpenExisting: (workflowId: string) => void;
+  onOpenRequirement?: (requirementId: string) => void;
 };
 
-export function LiveDuplicateSuggestions({ candidates, checking, onOpenExisting }: LiveDuplicateSuggestionsProps) {
+export function LiveDuplicateSuggestions({
+  candidates,
+  checking,
+  onOpenExisting,
+  onOpenRequirement,
+}: LiveDuplicateSuggestionsProps) {
   if (!checking && candidates.length === 0) {
     return null;
   }
@@ -32,7 +38,7 @@ export function LiveDuplicateSuggestions({ candidates, checking, onOpenExisting 
             Posibles tareas existentes
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Revisá si alguna coincide antes de crear una nueva.
+            Revisa si alguna coincide antes de crear una nueva.
           </Typography>
         </Stack>
 
@@ -57,10 +63,26 @@ export function LiveDuplicateSuggestions({ candidates, checking, onOpenExisting 
             })}
           >
             <Stack spacing={0.85}>
-              {candidate.requirementLabels.length > 0 ? (
-                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: "0.02em" }}>
-                  Proyecto asociado: {candidate.requirementLabels.join(" · ")}
-                </Typography>
+              {candidate.requirements.length > 0 ? (
+                <Stack spacing={0.4}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: "0.02em" }}>
+                    Proyecto asociado:
+                  </Typography>
+                  <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", gap: 0.75 }}>
+                    {candidate.requirements.map((requirement) => (
+                      <Button
+                        key={requirement.id}
+                        size="small"
+                        color="inherit"
+                        onClick={() => onOpenRequirement?.(requirement.id)}
+                        disabled={!onOpenRequirement}
+                        sx={{ px: 0.5, alignSelf: "flex-start", textTransform: "none" }}
+                      >
+                        {requirement.label}
+                      </Button>
+                    ))}
+                  </Stack>
+                </Stack>
               ) : (
                 <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: "0.02em" }}>
                   Proyecto asociado: Sin proyecto asociado
