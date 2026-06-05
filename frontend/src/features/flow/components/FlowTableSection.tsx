@@ -394,7 +394,7 @@ export function FlowTableSection({
       },
       {
         field: "executionAt",
-        headerName: "Fecha",
+        headerName: "Fecha clave",
         width: 172,
         minWidth: 160,
         align: "center",
@@ -402,23 +402,36 @@ export function FlowTableSection({
         valueGetter: (_, row) => row.operationalSortValue,
         renderCell: (params) => {
           const row = params.row;
+          const primaryValue = row.primaryDateInput;
           const originalValue = row.executionDateInput;
           const isEditing = pendingDates.has(row.id);
           const showInput = isEditing;
-          const isFutureRow = Boolean(row.executionDateInput && row.executionDateInput > today);
+          const isFutureRow = Boolean(primaryValue && primaryValue > today);
 
           if (!showInput) {
-            if (originalValue) {
-              const relativeLabel = !isFutureRow ? formatRelativeCalendarDay(originalValue) : null;
-              const dateLabel = relativeLabel ?? formatCalendarDate(originalValue);
-              const absoluteDateLabel = formatCalendarDate(originalValue);
-              const secondaryLabel = relativeLabel ? absoluteDateLabel : null;
+            if (primaryValue || originalValue) {
+              const primaryAbsoluteDateLabel = primaryValue ? formatCalendarDate(primaryValue) : null;
+              const primaryRelativeLabel = primaryValue && !isFutureRow ? formatRelativeCalendarDay(primaryValue) : null;
+              const dateLabel =
+                row.dateContext === "espera"
+                  ? (primaryAbsoluteDateLabel ? `Espera: ${primaryAbsoluteDateLabel}` : "Sin fecha de espera")
+                  : row.dateContext === "cerrado"
+                    ? (primaryAbsoluteDateLabel ? `Cierre: ${primaryAbsoluteDateLabel}` : "Sin fecha de cierre")
+                    : primaryValue
+                      ? (primaryRelativeLabel ?? primaryAbsoluteDateLabel ?? "Sin fecha operativa")
+                      : "Sin fecha operativa";
+              const secondaryLabel =
+                row.dateContext === "espera"
+                  ? (originalValue ? `Seguimiento: ${formatCalendarDate(originalValue)}` : "Sin seguimiento")
+                  : originalValue
+                    ? `Recordatorio: ${formatCalendarDate(originalValue)}`
+                    : null;
               const shouldPulseToday = row.isDueToday && !isEditing;
               const statusHighlight = getStatusHighlight(row.status, theme);
               return (
-                <Tooltip title={absoluteDateLabel}>
+                <Tooltip title={secondaryLabel ?? primaryAbsoluteDateLabel ?? dateLabel}>
                   <ButtonBase
-                    disabled={!row.stepId}
+                    disabled={!row.stepId || row.dateContext === "cerrado"}
                     onClick={(event) => {
                       event.stopPropagation();
                       openPendingDateEditorAndPicker(row.id, originalValue);
@@ -461,7 +474,7 @@ export function FlowTableSection({
             return (
               <IconButton
                 size="small"
-                disabled={!row.stepId}
+                disabled={!row.stepId || row.dateContext === "cerrado"}
                 onClick={(event) => {
                   event.stopPropagation();
                   openPendingDateEditorAndPicker(row.id, "");

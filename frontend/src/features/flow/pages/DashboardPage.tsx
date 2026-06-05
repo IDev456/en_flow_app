@@ -9,7 +9,7 @@ import { Link as RouterLink } from "react-router-dom";
 import { getDailyBoard } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
 import type { DailyBoardData, Step, WorkflowSummary } from "../types";
-import { formatElapsedTime, getVisibleWorkflowStatusValue } from "../utils";
+import { formatCalendarDate, formatElapsedTime, getVisibleWorkflowStatusValue } from "../utils";
 
 export function DashboardPage() {
   const [board, setBoard] = useState<DailyBoardData | null>(null);
@@ -59,7 +59,7 @@ export function DashboardPage() {
               <Typography variant="subtitle2" color="primary.main">
                 Bandeja
               </Typography>
-              <Typography variant="h2">¿Con qué seguís ahora?</Typography>
+              <Typography variant="h2">Con que seguis ahora?</Typography>
             </Box>
             <Button component={RouterLink} to="?modal=capture" variant="contained">
               Capturar tarea
@@ -77,10 +77,10 @@ export function DashboardPage() {
       >
         <SectionCard
           title="Activas"
-          subtitle="Lo más importante para seguir ahora."
+          subtitle="Lo mas importante para seguir ahora."
           items={board.tareas_activas}
           emptyTitle="No hay nada activo ahora"
-          emptyDescription="Capturá una tarea cuando aparezca algo para seguir."
+          emptyDescription="Captura una tarea cuando aparezca algo para seguir."
           emphasized
         />
 
@@ -90,14 +90,14 @@ export function DashboardPage() {
             subtitle="Pendientes de terceros."
             items={board.tareas_esperando_respuesta}
             emptyTitle="No hay respuestas pendientes"
-            emptyDescription="Los temas que dependan de una respuesta externa aparecerán acá."
+            emptyDescription="Los temas que dependan de una respuesta externa apareceran aca."
           />
           <SectionCard
             title="En espera"
             subtitle="Temas que necesitan seguimiento antes de avanzar."
             items={waitingFollowUp}
             emptyTitle="No hay temas en espera"
-            emptyDescription="Cuando algo quede trabado o pendiente de seguimiento, aparecerá en esta sección."
+            emptyDescription="Cuando algo quede trabado o pendiente de seguimiento, aparecera en esta seccion."
           />
         </Stack>
       </Box>
@@ -106,14 +106,14 @@ export function DashboardPage() {
         <FlowSection
           title="Flows recientes"
           items={board.flows_recientes}
-          emptyTitle="Todavía no hay flows recientes"
-          emptyDescription="Capturá una tarea para iniciar el primero."
+          emptyTitle="Todavia no hay flows recientes"
+          emptyDescription="Captura una tarea para iniciar el primero."
         />
         <FlowSection
           title="Cerradas recientes"
           items={board.flows_cerrados_recientes}
           emptyTitle="No hay cierres recientes"
-          emptyDescription="Los flows finalizados aparecerán acá por un tiempo."
+          emptyDescription="Los flows finalizados apareceran aca por un tiempo."
         />
       </Box>
     </Stack>
@@ -162,6 +162,15 @@ function SectionCard({ title, subtitle, items, emptyTitle, emptyDescription, emp
 function WorkItemCard({ step }: { step: Step }) {
   const elapsed = formatElapsedTime(step.ultimo_comentario_fecha ?? step.fecha_estado_actual);
   const latest = step.ultimo_comentario?.trim();
+  const isWaitingExternal = step.estado === "esperando_respuesta";
+  const timingLabel = isWaitingExternal
+    ? `Esperando desde: ${formatCalendarDate(step.fecha_estado_actual)}`
+    : step.fecha_ejecucion_estimada
+      ? `Fecha operativa: ${formatCalendarDate(step.fecha_ejecucion_estimada)}`
+      : "Sin fecha operativa";
+  const followUpLabel = step.fecha_vencimiento
+    ? `${isWaitingExternal ? "Seguimiento" : "Recordatorio"}: ${formatCalendarDate(step.fecha_vencimiento)}`
+    : (isWaitingExternal ? "Sin seguimiento" : "Sin recordatorio");
 
   return (
     <Card
@@ -187,7 +196,13 @@ function WorkItemCard({ step }: { step: Step }) {
           </Stack>
 
           <Typography variant="body2" color="text.secondary">
-            Último registro: {latest || "Sin registros todavía"}
+            Ultimo registro: {latest || "Sin registros todavia"}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {timingLabel}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {followUpLabel}
           </Typography>
 
           <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 0.75 }}>

@@ -42,6 +42,18 @@ class WorkflowStatus(StrEnum):
     CANCELADO = "cancelado"
 
 
+class WorkflowStartMode(StrEnum):
+    TAREA_ACTIVA = "tarea_activa"
+    ESPERANDO = "esperando"
+
+
+class WorkflowDateContext(StrEnum):
+    ACTIVA = "activa"
+    ESPERA = "espera"
+    CERRADO = "cerrado"
+    SIN_FECHA = "sin_fecha"
+
+
 class StepStatus(StrEnum):
     ACTIVO = "activo"
     ESPERA = "espera"
@@ -149,9 +161,28 @@ class InitialStepOverride(BaseModel):
     fecha_ejecucion_estimada: datetime | None = None
 
 
+class WaitingStartInput(BaseModel):
+    que_se_espera: str = Field(min_length=1, max_length=200)
+    esperando_de: str | None = Field(default=None, max_length=160)
+    detalle: str | None = Field(default=None, max_length=1000)
+    referencia_externa: str | None = Field(default=None, max_length=200)
+    fecha_espera_desde: datetime | None = None
+    fecha_recordatorio: datetime | None = None
+
+
 class WorkflowStartRequest(WorkflowInstanceBase):
     workflow_template_id: str | None = None
-    primer_paso: InitialStepOverride
+    modo_inicio: WorkflowStartMode = WorkflowStartMode.TAREA_ACTIVA
+    primer_paso: InitialStepOverride | None = None
+    espera_inicial: WaitingStartInput | None = None
+
+    @model_validator(mode="after")
+    def validate_start_mode(self) -> "WorkflowStartRequest":
+        if self.modo_inicio == WorkflowStartMode.TAREA_ACTIVA and self.primer_paso is None:
+            raise ValueError("Debes indicar la tarea inicial")
+        if self.modo_inicio == WorkflowStartMode.ESPERANDO and self.espera_inicial is None:
+            raise ValueError("Debes indicar la informacion de espera inicial")
+        return self
 
 
 class WorkflowUpdate(BaseModel):
@@ -172,6 +203,10 @@ class WorkflowSummary(WorkflowInstanceBase):
     total_pasos: int = Field(default=0, ge=0)
     fecha_inicio: datetime
     fecha_fin: datetime | None = None
+    fecha_ejecucion_actual: datetime | None = None
+    fecha_recordatorio_actual: datetime | None = None
+    fecha_espera_desde: datetime | None = None
+    contexto_fecha_actual: WorkflowDateContext = WorkflowDateContext.SIN_FECHA
 
 
 class StepInstanceBase(BaseModel):
@@ -185,6 +220,7 @@ class StepInstanceBase(BaseModel):
     action_label: str | None = Field(default=None, max_length=160)
     waits_for_external_response: bool = False
     expected_external_event: str | None = Field(default=None, max_length=120)
+    esperando_de: str | None = Field(default=None, max_length=160)
     external_wait_reason: str | None = Field(default=None, max_length=300)
     external_reference: str | None = Field(default=None, max_length=200)
 
@@ -232,6 +268,7 @@ class StepCreate(BaseModel):
     action_label: str | None = Field(default=None, max_length=160)
     waits_for_external_response: bool = False
     expected_external_event: str | None = Field(default=None, max_length=120)
+    esperando_de: str | None = Field(default=None, max_length=160)
     external_wait_reason: str | None = Field(default=None, max_length=300)
     external_reference: str | None = Field(default=None, max_length=200)
 
@@ -240,6 +277,11 @@ class StepUpdate(BaseModel):
     nombre: str | None = Field(default=None, min_length=1, max_length=120)
     descripcion: str | None = Field(default=None, max_length=1000)
     fecha_ejecucion_estimada: datetime | None = None
+    expected_external_event: str | None = Field(default=None, max_length=120)
+    esperando_de: str | None = Field(default=None, max_length=160)
+    external_wait_reason: str | None = Field(default=None, max_length=300)
+    external_reference: str | None = Field(default=None, max_length=200)
+    fecha_espera_desde: datetime | None = None
 
 
 class StepDateUpdate(BaseModel):
@@ -275,8 +317,10 @@ class NextTaskInput(BaseModel):
 class ExternalWaitInput(BaseModel):
     que_se_espera: str = Field(min_length=1, max_length=200)
     origen: str | None = Field(default=None, max_length=120)
+    esperando_de: str | None = Field(default=None, max_length=160)
     detalle: str | None = Field(default=None, max_length=1000)
     referencia_externa: str | None = Field(default=None, max_length=200)
+    fecha_recordatorio: datetime | None = None
     attachments: list[AttachmentBase] = Field(default_factory=list)
 
 
@@ -291,7 +335,7 @@ class StepCompletePayload(BaseModel):
     resultado_cierre: str | None = Field(default=None, max_length=1000)
     comentario: str | None = Field(default=None, max_length=1000)
     observaciones: str | None = Field(default=None, max_length=1000)
-    transition_type: StepTransitionType
+    transition_type: StepTransitionType = StepTransitionType.NEXT_TASK
     next_task: NextTaskInput | None = None
     external_wait: ExternalWaitInput | None = None
     finish_data: FinishFlowInput | None = None
@@ -303,8 +347,6 @@ class StepCompletePayload(BaseModel):
         if len(closing_note) < 3:
             raise ValueError("Debes indicar un resultado de cierre de al menos 3 caracteres")
 
-        if self.transition_type == StepTransitionType.NEXT_TASK and self.next_task is None:
-            raise ValueError("Debes indicar la proxima tarea")
         if self.transition_type == StepTransitionType.WAIT_EXTERNAL and self.external_wait is None:
             raise ValueError("Debes indicar la informacion de espera externa")
         if self.transition_type == StepTransitionType.FINISH_FLOW and self.finish_data is None:
@@ -341,8 +383,16 @@ class QuickCaptureRequest(BaseModel):
     asignado_a: str | None = Field(default=None, max_length=120)
     fecha_vencimiento: datetime | None = None
     fecha_ejecucion_estimada: datetime | None = None
+    modo_inicio: WorkflowStartMode = WorkflowStartMode.TAREA_ACTIVA
+    espera_inicial: WaitingStartInput | None = None
     creado_por: str = Field(default="sistema", min_length=1, max_length=120)
     ambito: Ambito
+
+    @model_validator(mode="after")
+    def validate_capture_mode(self) -> "QuickCaptureRequest":
+        if self.modo_inicio == WorkflowStartMode.ESPERANDO and self.espera_inicial is None:
+            raise ValueError("Debes indicar la informacion de espera inicial")
+        return self
 
 
 class RequirementLinkPayload(BaseModel):

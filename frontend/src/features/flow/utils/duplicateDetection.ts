@@ -41,6 +41,8 @@ export type DuplicateDetectionInput = {
   requirementId?: string | null;
   requirementLabel?: string | null;
   reminderAt?: string | null;
+  waitingFrom?: string | null;
+  externalReference?: string | null;
   ambito?: "laboral" | "personal" | null;
 };
 
@@ -282,11 +284,23 @@ export function findSimilarFlows(
   requirementByWorkflowId: RequirementByWorkflowId
 ): DuplicateCandidate[] {
   const inputName = input.taskName.trim();
-  const inputDescription = input.taskDescription?.trim() ?? "";
-  const inputObjective = input.workflowObjective?.trim() ?? "";
-  const inputPrimary = [inputName, inputDescription].filter(Boolean).join(" ");
-  const inputSecondary = [inputDescription, inputObjective, input.requirementLabel?.trim() ?? ""].filter(Boolean).join(" ");
-  const inputTokens = getSignificantTokens([inputName, inputDescription, inputObjective].filter(Boolean).join(" "));
+    const inputDescription = input.taskDescription?.trim() ?? "";
+    const inputObjective = input.workflowObjective?.trim() ?? "";
+    const inputWaitingFrom = input.waitingFrom?.trim() ?? "";
+    const inputExternalReference = input.externalReference?.trim() ?? "";
+    const inputPrimary = [inputName, inputDescription].filter(Boolean).join(" ");
+    const inputSecondary = [
+      inputDescription,
+      inputObjective,
+      input.requirementLabel?.trim() ?? "",
+      inputWaitingFrom,
+      inputExternalReference,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const inputTokens = getSignificantTokens(
+      [inputName, inputDescription, inputObjective, inputWaitingFrom, inputExternalReference].filter(Boolean).join(" ")
+    );
 
   if (inputTokens.length === 0 && normalizeText(`${inputName} ${inputDescription}`).length < 3) {
     return [];
@@ -316,6 +330,8 @@ export function findSimilarFlows(
       relevantStep.descripcion?.trim() ?? "",
       workflow.objetivo_final?.trim() ?? "",
       relevantStep.ultimo_comentario?.trim() ?? "",
+      relevantStep.esperando_de?.trim() ?? "",
+      relevantStep.external_reference?.trim() ?? "",
       requirementLabels.join(" "),
     ]
       .filter(Boolean)
@@ -339,7 +355,10 @@ export function findSimilarFlows(
         (requirementByWorkflowId[workflow.id] ?? []).some((trigger) => trigger.id === input.requirementId));
     const operationalBonus = OPERATIONAL_STEP_STATUSES.includes(relevantStep.estado) ? 0.04 : 0;
     const containmentBonus = hasContainmentMatch(inputPrimary, candidateName) ? 0.06 : 0;
-    const dateBonus = getDateBonus(input.reminderAt, relevantStep.fecha_vencimiento ?? relevantStep.fecha_ejecucion_estimada);
+    const dateBonus = getDateBonus(
+      input.reminderAt,
+      workflow.fecha_recordatorio_actual ?? relevantStep.fecha_vencimiento ?? relevantStep.fecha_ejecucion_estimada
+    );
     const matchedTokenBonus = countMatchedTokens(inputTokens, candidateAllTokens) >= 2 ? 0.05 : 0;
 
     const score = Math.min(
@@ -370,7 +389,7 @@ export function findSimilarFlows(
       workflowStatus: workflow.estado,
       stepStatus: relevantStep.estado,
       requirements: requirementReferences,
-      reminderAt: relevantStep.fecha_vencimiento ?? relevantStep.fecha_ejecucion_estimada,
+      reminderAt: workflow.fecha_recordatorio_actual ?? relevantStep.fecha_vencimiento ?? relevantStep.fecha_ejecucion_estimada,
       latestComment: latestComment && !isNoisyAutomaticJournalText(latestComment) ? latestComment : null,
       latestMovementAt: getLatestMovementAt(workflow),
       workflowObjective: workflow.objetivo_final?.trim() || null,

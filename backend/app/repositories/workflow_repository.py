@@ -38,8 +38,10 @@ from app.schemas.workflow import (
     TriggerDetail,
     TriggerPublic,
     TriggerStatus,
+    WorkflowDateContext,
     WorkflowDetail,
     WorkflowInstanceBase,
+    WorkflowStartMode,
     WorkflowStatus,
     WorkflowSummary,
     WorkflowTemplatePublic,
@@ -121,6 +123,12 @@ def _attachment_summary(attachments: list[AttachmentPublic]) -> str | None:
 
 
 def _resolve_first_step_name(payload: WorkflowInstanceBase) -> str:
+    waiting_start = getattr(payload, "espera_inicial", None)
+    if waiting_start:
+        waiting_name = _clean_text(getattr(waiting_start, "que_se_espera", None))
+        if waiting_name:
+            return waiting_name
+
     first_step_override = getattr(payload, "primer_paso", None)
     if first_step_override:
         override_name = _clean_text(getattr(first_step_override, "nombre", None))
@@ -132,6 +140,47 @@ def _resolve_first_step_name(payload: WorkflowInstanceBase) -> str:
         return objective_name
 
     return "Tarea inicial"
+
+
+def _resolve_workflow_date_projection(
+    workflow: WorkflowSummary,
+    steps: list[StepInstancePublic],
+) -> dict[str, object | None]:
+    active_step = next((step for step in _sort_step_instances(steps) if step.estado == StepStatus.ACTIVO), None)
+    if active_step is not None:
+        return {
+            "fecha_ejecucion_actual": active_step.fecha_ejecucion_estimada,
+            "fecha_recordatorio_actual": active_step.fecha_vencimiento,
+            "fecha_espera_desde": None,
+            "contexto_fecha_actual": WorkflowDateContext.ACTIVA,
+        }
+
+    waiting_step = next(
+        (step for step in _sort_step_instances(steps) if step.estado == StepStatus.ESPERANDO_RESPUESTA),
+        None,
+    )
+    if waiting_step is not None:
+        return {
+            "fecha_ejecucion_actual": None,
+            "fecha_recordatorio_actual": waiting_step.fecha_vencimiento,
+            "fecha_espera_desde": workflow.fecha_espera_desde or waiting_step.fecha_estado_actual,
+            "contexto_fecha_actual": WorkflowDateContext.ESPERA,
+        }
+
+    if workflow.fecha_fin is not None:
+        return {
+            "fecha_ejecucion_actual": None,
+            "fecha_recordatorio_actual": None,
+            "fecha_espera_desde": None,
+            "contexto_fecha_actual": WorkflowDateContext.CERRADO,
+        }
+
+    return {
+        "fecha_ejecucion_actual": None,
+        "fecha_recordatorio_actual": None,
+        "fecha_espera_desde": None,
+        "contexto_fecha_actual": WorkflowDateContext.SIN_FECHA,
+    }
 
 
 def _normalize_template_steps(steps: list[StepTemplatePublic]) -> list[StepTemplatePublic]:
@@ -159,6 +208,12 @@ def _normalize_template_steps(steps: list[StepTemplatePublic]) -> list[StepTempl
         previous_code = normalized_step.codigo
 
     return normalized
+
+
+def _initial_template_steps(template: WorkflowTemplatePublic) -> list[StepTemplatePublic]:
+    normalized = _normalize_template_steps(template.steps)
+    initial_steps = [step for step in normalized if len(step.depends_on) == 0]
+    return initial_steps or normalized[:1]
 
 
 class WorkflowRepository(ABC):
@@ -476,6 +531,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
                         "pasos_activos": active_orders,
                         "paso_actual": active_orders[0] if active_orders else None,
                         "total_pasos": len(steps),
+                        **_resolve_workflow_date_projection(workflow, steps),
                     }
                 )
             )
@@ -497,6 +553,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
                 "pasos_activos": active_orders,
                 "paso_actual": active_orders[0] if active_orders else None,
                 "total_pasos": len(steps),
+                **_resolve_workflow_date_projection(workflow, steps),
             }
         )
         return WorkflowDetail(**summary.model_dump(exclude={"steps"}), steps=steps)
@@ -509,19 +566,25 @@ class InMemoryWorkflowRepository(WorkflowRepository):
     ) -> WorkflowDetail:
         now = utc_now()
         first_step_override = getattr(payload, "primer_paso", None)
-        first_step_name = _resolve_first_step_name(payload)
+        waiting_start = getattr(payload, "espera_inicial", None)
+        start_mode = getattr(payload, "modo_inicio", WorkflowStartMode.TAREA_ACTIVA)
+        wait_since = waiting_start.fecha_espera_desde if waiting_start and waiting_start.fecha_espera_desde else now
+        initial_status = WorkflowStatus.ESPERANDO_RESPUESTA if start_mode == WorkflowStartMode.ESPERANDO else WorkflowStatus.EN_PROCESO
+        initial_template_steps = _initial_template_steps(template) if start_mode == WorkflowStartMode.TAREA_ACTIVA else []
+        initial_orders = sorted({step.orden for step in initial_template_steps}) or [1]
         workflow = WorkflowSummary(
             id=str(uuid4()),
             trigger_id=trigger_id,
             requirement_ids=[trigger_id] if trigger_id else [],
             workflow_template_id=template.id,
             workflow_template_nombre=template.nombre,
-            estado=WorkflowStatus.EN_PROCESO,
-            pasos_activos=[1],
-            paso_actual=1,
-            total_pasos=1,
+            estado=initial_status,
+            pasos_activos=initial_orders,
+            paso_actual=initial_orders[0] if initial_orders else 1,
+            total_pasos=len(initial_template_steps) if initial_template_steps else 1,
             fecha_inicio=now,
             fecha_fin=None,
+            fecha_espera_desde=wait_since if initial_status == WorkflowStatus.ESPERANDO_RESPUESTA else None,
             objetivo_final=payload.objetivo_final,
             resolucion_esperada=payload.resolucion_esperada,
             ambito=payload.ambito,
@@ -532,42 +595,87 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         if trigger_id:
             self._workflow_ids_by_trigger.setdefault(trigger_id, []).append(workflow.id)
 
-        step = StepInstancePublic(
-            id=str(uuid4()),
-            workflow_id=workflow.id,
-            step_template_id=None,
-            codigo=None,
-            depends_on=[],
-            nombre=first_step_name,
-            descripcion=first_step_override.descripcion if first_step_override else None,
-            orden=1,
-            tipo="manual",
-            requiere_aprobacion=False,
-            puede_tener_comentarios=True,
-            action_type="continue",
-            action_config=None,
-            action_label="Continuar flow",
-            waits_for_external_response=False,
-            expected_external_event=None,
-            external_wait_reason=None,
-            external_reference=None,
-            estado=StepStatus.ACTIVO,
-            fecha_estado_actual=now,
-            asignado_a=first_step_override.asignado_a if first_step_override else None,
-            fecha_creacion=now,
-            fecha_inicio=now,
-            fecha_vencimiento=first_step_override.fecha_vencimiento if first_step_override else None,
-            fecha_ejecucion_estimada=first_step_override.fecha_ejecucion_estimada if first_step_override else None,
-            fecha_cierre=None,
-            resultado=None,
-            observaciones=None,
-            ambito=workflow.ambito,
-        )
-        self._steps[step.id] = step
-        self._step_ids_by_workflow[workflow.id].append(step.id)
-        self._comments_by_step[step.id] = []
-        self._history_by_step[step.id] = []
-        self._external_events_by_step[step.id] = []
+        created_steps: list[StepInstancePublic] = []
+        if start_mode == WorkflowStartMode.ESPERANDO:
+            created_steps.append(
+                StepInstancePublic(
+                    id=str(uuid4()),
+                    workflow_id=workflow.id,
+                    step_template_id=None,
+                    codigo=None,
+                    depends_on=[],
+                    nombre=_resolve_first_step_name(payload),
+                    descripcion=waiting_start.detalle if waiting_start else None,
+                    orden=1,
+                    tipo="manual",
+                    requiere_aprobacion=False,
+                    puede_tener_comentarios=True,
+                    action_type="wait_external",
+                    action_config=None,
+                    action_label="Esperar respuesta externa",
+                    waits_for_external_response=True,
+                    expected_external_event=waiting_start.que_se_espera if waiting_start else None,
+                    esperando_de=waiting_start.esperando_de if waiting_start else None,
+                    external_wait_reason=waiting_start.detalle if waiting_start else None,
+                    external_reference=waiting_start.referencia_externa if waiting_start else None,
+                    estado=StepStatus.ESPERANDO_RESPUESTA,
+                    fecha_estado_actual=wait_since,
+                    asignado_a=first_step_override.asignado_a if first_step_override else None,
+                    fecha_creacion=now,
+                    fecha_inicio=None,
+                    fecha_vencimiento=waiting_start.fecha_recordatorio if waiting_start else None,
+                    fecha_ejecucion_estimada=None,
+                    fecha_cierre=None,
+                    resultado=None,
+                    observaciones=None,
+                    ambito=workflow.ambito,
+                )
+            )
+        else:
+            for index, template_step in enumerate(initial_template_steps):
+                created_steps.append(
+                    StepInstancePublic(
+                        id=str(uuid4()),
+                        workflow_id=workflow.id,
+                        step_template_id=template_step.id,
+                        codigo=template_step.codigo,
+                        depends_on=list(template_step.depends_on or []),
+                        nombre=first_step_override.nombre if first_step_override and index == 0 else template_step.nombre,
+                        descripcion=first_step_override.descripcion if first_step_override and index == 0 else template_step.descripcion,
+                        orden=template_step.orden,
+                        tipo=template_step.tipo,
+                        requiere_aprobacion=template_step.requiere_aprobacion,
+                        puede_tener_comentarios=template_step.puede_tener_comentarios,
+                        action_type=template_step.action_type,
+                        action_config=template_step.action_config,
+                        action_label=template_step.action_label,
+                        waits_for_external_response=template_step.waits_for_external_response,
+                        expected_external_event=template_step.expected_external_event,
+                        esperando_de=None,
+                        external_wait_reason=template_step.external_wait_reason,
+                        external_reference=template_step.external_reference,
+                        estado=StepStatus.ACTIVO,
+                        fecha_estado_actual=now,
+                        asignado_a=first_step_override.asignado_a if first_step_override and index == 0 else None,
+                        fecha_creacion=now,
+                        fecha_inicio=now,
+                        fecha_vencimiento=first_step_override.fecha_vencimiento if first_step_override and index == 0 else None,
+                        fecha_ejecucion_estimada=(
+                            first_step_override.fecha_ejecucion_estimada if first_step_override and index == 0 else None
+                        ),
+                        fecha_cierre=None,
+                        resultado=None,
+                        observaciones=None,
+                        ambito=workflow.ambito,
+                    )
+                )
+
+        for step in created_steps:
+            self._steps[step.id] = step
+            self._step_ids_by_workflow[workflow.id].append(step.id)
+            self._comments_by_step[step.id] = []
+            self._history_by_step[step.id] = []
+            self._external_events_by_step[step.id] = []
         self._external_events_by_workflow.setdefault(workflow.id, [])
 
         return self.get_workflow(workflow.id)  # type: ignore[return-value]
@@ -648,6 +756,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
             action_label=payload.action_label,
             waits_for_external_response=payload.waits_for_external_response,
             expected_external_event=payload.expected_external_event,
+            esperando_de=payload.esperando_de,
             external_wait_reason=payload.external_wait_reason,
             external_reference=payload.external_reference,
             estado=estado,
@@ -1072,54 +1181,98 @@ class PostgresWorkflowRepository(WorkflowRepository):
     ) -> WorkflowDetail:
         now = utc_now()
         first_step_override = getattr(payload, "primer_paso", None)
-        first_step_name = _resolve_first_step_name(payload)
+        waiting_start = getattr(payload, "espera_inicial", None)
+        start_mode = getattr(payload, "modo_inicio", WorkflowStartMode.TAREA_ACTIVA)
+        wait_since = waiting_start.fecha_espera_desde if waiting_start and waiting_start.fecha_espera_desde else now
+        initial_template_steps = _initial_template_steps(template) if start_mode == WorkflowStartMode.TAREA_ACTIVA else []
+        initial_orders = sorted({step.orden for step in initial_template_steps}) or [1]
         workflow = WorkflowModel(
             id=str(uuid4()),
             trigger_id=trigger_id,
             workflow_template_id=template.id,
             workflow_template_nombre=template.nombre,
-            estado=WorkflowStatus.EN_PROCESO.value,
-            paso_actual=1,
-            total_pasos=1,
+            estado=(WorkflowStatus.ESPERANDO_RESPUESTA if start_mode == WorkflowStartMode.ESPERANDO else WorkflowStatus.EN_PROCESO).value,
+            paso_actual=initial_orders[0] if initial_orders else 1,
+            total_pasos=len(initial_template_steps) if initial_template_steps else 1,
             fecha_inicio=now,
             fecha_fin=None,
+            fecha_espera_desde=wait_since if start_mode == WorkflowStartMode.ESPERANDO else None,
             objetivo_final=payload.objetivo_final,
             resolucion_esperada=payload.resolucion_esperada,
             ambito=payload.ambito.value if payload.ambito else None,
         )
 
-        workflow.steps.append(
-            StepModel(
-                id=str(uuid4()),
-                step_template_id=None,
-                codigo=None,
-                depends_on=[],
-                nombre=first_step_name,
-                descripcion=first_step_override.descripcion if first_step_override else None,
-                orden=1,
-                tipo="manual",
-                requiere_aprobacion=False,
-                puede_tener_comentarios=True,
-                action_type="continue",
-                action_config=None,
-                action_label="Continuar flow",
-                waits_for_external_response=False,
-                expected_external_event=None,
-                external_wait_reason=None,
-                external_reference=None,
-                estado=StepStatus.ACTIVO.value,
-                fecha_estado_actual=now,
-                asignado_a=first_step_override.asignado_a if first_step_override else None,
-                fecha_creacion=now,
-                fecha_inicio=now,
-                fecha_vencimiento=first_step_override.fecha_vencimiento if first_step_override else None,
-                fecha_ejecucion_estimada=first_step_override.fecha_ejecucion_estimada if first_step_override else None,
-                fecha_cierre=None,
-                resultado=None,
-                observaciones=None,
-                ambito=payload.ambito.value if payload.ambito else None,
+        if start_mode == WorkflowStartMode.ESPERANDO:
+            workflow.steps.append(
+                StepModel(
+                    id=str(uuid4()),
+                    step_template_id=None,
+                    codigo=None,
+                    depends_on=[],
+                    nombre=_resolve_first_step_name(payload),
+                    descripcion=waiting_start.detalle if waiting_start else None,
+                    orden=1,
+                    tipo="manual",
+                    requiere_aprobacion=False,
+                    puede_tener_comentarios=True,
+                    action_type="wait_external",
+                    action_config=None,
+                    action_label="Esperar respuesta externa",
+                    waits_for_external_response=True,
+                    expected_external_event=waiting_start.que_se_espera if waiting_start else None,
+                    esperando_de=waiting_start.esperando_de if waiting_start else None,
+                    external_wait_reason=waiting_start.detalle if waiting_start else None,
+                    external_reference=waiting_start.referencia_externa if waiting_start else None,
+                    estado=StepStatus.ESPERANDO_RESPUESTA.value,
+                    fecha_estado_actual=wait_since,
+                    asignado_a=first_step_override.asignado_a if first_step_override else None,
+                    fecha_creacion=now,
+                    fecha_inicio=None,
+                    fecha_vencimiento=waiting_start.fecha_recordatorio if waiting_start else None,
+                    fecha_ejecucion_estimada=None,
+                    fecha_cierre=None,
+                    resultado=None,
+                    observaciones=None,
+                    ambito=payload.ambito.value if payload.ambito else None,
+                )
             )
-        )
+        else:
+            for index, template_step in enumerate(initial_template_steps):
+                workflow.steps.append(
+                    StepModel(
+                        id=str(uuid4()),
+                        step_template_id=template_step.id,
+                        codigo=template_step.codigo,
+                        depends_on=list(template_step.depends_on or []),
+                        nombre=first_step_override.nombre if first_step_override and index == 0 else template_step.nombre,
+                        descripcion=first_step_override.descripcion if first_step_override and index == 0 else template_step.descripcion,
+                        orden=template_step.orden,
+                        tipo=template_step.tipo,
+                        requiere_aprobacion=template_step.requiere_aprobacion,
+                        puede_tener_comentarios=template_step.puede_tener_comentarios,
+                        action_type=template_step.action_type,
+                        action_config=template_step.action_config,
+                        action_label=template_step.action_label,
+                        waits_for_external_response=template_step.waits_for_external_response,
+                        expected_external_event=template_step.expected_external_event,
+                        esperando_de=None,
+                        external_wait_reason=template_step.external_wait_reason,
+                        external_reference=template_step.external_reference,
+                        estado=StepStatus.ACTIVO.value,
+                        fecha_estado_actual=now,
+                        asignado_a=first_step_override.asignado_a if first_step_override and index == 0 else None,
+                        fecha_creacion=now,
+                        fecha_inicio=now,
+                        fecha_vencimiento=first_step_override.fecha_vencimiento if first_step_override and index == 0 else None,
+                        fecha_ejecucion_estimada=(
+                            first_step_override.fecha_ejecucion_estimada if first_step_override and index == 0 else None
+                        ),
+                        fecha_cierre=None,
+                        resultado=None,
+                        observaciones=None,
+                        ambito=payload.ambito.value if payload.ambito else None,
+                    )
+                )
 
         with session_scope() as session:
             session.add(workflow)
@@ -1200,6 +1353,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             existing.total_pasos = workflow.total_pasos
             existing.fecha_inicio = workflow.fecha_inicio
             existing.fecha_fin = workflow.fecha_fin
+            existing.fecha_espera_desde = workflow.fecha_espera_desde
             existing.objetivo_final = workflow.objetivo_final
             existing.resolucion_esperada = workflow.resolucion_esperada
             existing.ambito = workflow.ambito.value if workflow.ambito else None
@@ -1259,6 +1413,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             action_label=payload.action_label,
             waits_for_external_response=payload.waits_for_external_response,
             expected_external_event=payload.expected_external_event,
+            esperando_de=payload.esperando_de,
             external_wait_reason=payload.external_wait_reason,
             external_reference=payload.external_reference,
             estado=estado.value,
@@ -1304,6 +1459,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             existing.action_label = step.action_label
             existing.waits_for_external_response = step.waits_for_external_response
             existing.expected_external_event = step.expected_external_event
+            existing.esperando_de = step.esperando_de
             existing.external_wait_reason = step.external_wait_reason
             existing.external_reference = step.external_reference
             existing.estado = step.estado.value
@@ -1649,7 +1805,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
         active_orders = _active_step_orders(steps)
         requirement_ids = [item.id for item in sorted(workflow.requirements, key=lambda requirement: requirement.fecha_creacion)]
         primary_requirement_id = workflow.trigger_id or (requirement_ids[0] if requirement_ids else None)
-        return WorkflowSummary(
+        summary = WorkflowSummary(
             id=workflow.id,
             trigger_id=primary_requirement_id,
             requirement_ids=requirement_ids,
@@ -1661,10 +1817,12 @@ class PostgresWorkflowRepository(WorkflowRepository):
             total_pasos=len(steps) if steps else workflow.total_pasos,
             fecha_inicio=workflow.fecha_inicio,
             fecha_fin=workflow.fecha_fin,
+            fecha_espera_desde=workflow.fecha_espera_desde,
             objetivo_final=workflow.objetivo_final,
             resolucion_esperada=workflow.resolucion_esperada,
             ambito=Ambito(workflow.ambito) if workflow.ambito else None,
         )
+        return summary.model_copy(update=_resolve_workflow_date_projection(summary, steps))
 
     def _workflow_to_detail(self, workflow: WorkflowModel) -> WorkflowDetail:
         steps = _sort_step_instances([self._step_to_public(step) for step in workflow.steps])
@@ -1716,6 +1874,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             action_label=step.action_label,
             waits_for_external_response=bool(step.waits_for_external_response),
             expected_external_event=step.expected_external_event,
+            esperando_de=step.esperando_de,
             external_wait_reason=step.external_wait_reason,
             external_reference=step.external_reference,
             estado=StepStatus(step.estado),

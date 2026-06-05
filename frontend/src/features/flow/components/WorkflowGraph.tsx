@@ -150,7 +150,10 @@ function renderStepRecordsIndicator(hasRecords: boolean): React.ReactElement {
 
 function renderStepReminder(step: Step): React.ReactElement {
   const reminder = step.fecha_vencimiento;
-  const valueLabel = reminder ? formatCalendarDate(reminder) : "Sin recordatorio";
+  const isWaitingExternal = step.estado === "esperando_respuesta";
+  const valueLabel = reminder
+    ? `${isWaitingExternal ? "Seguimiento" : "Recordatorio"}: ${formatCalendarDate(reminder)}`
+    : (isWaitingExternal ? "Sin seguimiento" : "Sin recordatorio");
 
   return (
     <Stack

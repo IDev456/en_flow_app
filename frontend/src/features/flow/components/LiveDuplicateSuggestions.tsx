@@ -107,7 +107,7 @@ export function LiveDuplicateSuggestions({
 
               {candidate.reminderAt && (
                 <Typography variant="body2" color="text.secondary">
-                  Recordatorio: {formatCalendarDate(candidate.reminderAt)}
+                  Seguimiento: {formatCalendarDate(candidate.reminderAt)}
                 </Typography>
               )}
 

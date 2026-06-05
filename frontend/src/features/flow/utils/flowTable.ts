@@ -34,6 +34,8 @@ export type FlowGridRow = {
   status: string;
   taskName: string;
   stepLabel: string;
+  dateContext: WorkflowDetail["contexto_fecha_actual"];
+  primaryDateInput: string;
   executionDateInput: string;
   executionAt: number;
   operationalSortValue: number;
@@ -66,7 +68,7 @@ export const flowQuickFilterOptions = [
   { value: "past", label: "Pasados" },
   { value: "future", label: "Futuros" },
   { value: "without_project", label: "Sin proyecto" },
-  { value: "without_reminder", label: "Sin recordatorio" },
+  { value: "without_reminder", label: "Sin seguimiento" },
 ] as const satisfies ReadonlyArray<{ value: FlowQuickFilter; label: string }>;
 
 export const selectableFlowQuickFilterOptions = flowQuickFilterOptions.filter((option) => option.value !== "none");
@@ -82,6 +84,19 @@ function getDateValue(value: string | null | undefined) {
 function toDateSortValue(dateInput: string) {
   const dayValue = toCalendarDayValue(dateInput);
   return dayValue ?? Number.MAX_SAFE_INTEGER;
+}
+
+function resolvePrimaryDateInput(workflow: WorkflowDetail, step: Step | null) {
+  if (workflow.contexto_fecha_actual === "espera") {
+    return toCalendarDateInputValue(workflow.fecha_espera_desde ?? step?.fecha_estado_actual);
+  }
+  if (workflow.contexto_fecha_actual === "activa") {
+    return toCalendarDateInputValue(workflow.fecha_ejecucion_actual ?? step?.fecha_ejecucion_estimada);
+  }
+  if (workflow.contexto_fecha_actual === "cerrado") {
+    return toCalendarDateInputValue(workflow.fecha_fin);
+  }
+  return "";
 }
 
 export function pickRelevantStep(workflow: WorkflowDetail): Step | null {
@@ -190,7 +205,7 @@ export function getFlowQuickFilterDescription(filter: FlowQuickFilter) {
     case "without_project":
       return "sin proyecto";
     case "without_reminder":
-      return "sin recordatorio";
+      return "sin seguimiento";
     case "none":
     default:
       return "";
@@ -259,7 +274,8 @@ export function buildFlowRows(items: FlowTableItem[], today: string = getTodayLo
     const step = item.relevantStep ?? pickRelevantStep(workflow);
     const displayStatus = item.displayStatus ?? getVisibleWorkflowStatus(workflow);
     const latestMovementAt = item.latestMovementAt ?? getLatestMovementAt(workflow);
-    const executionDateInput = toCalendarDateInputValue(step?.fecha_vencimiento);
+    const primaryDateInput = resolvePrimaryDateInput(workflow, step);
+    const executionDateInput = toCalendarDateInputValue(workflow.fecha_recordatorio_actual ?? step?.fecha_vencimiento);
     const stepLabel =
       step && ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado)
         ? "Disparador"
@@ -289,6 +305,8 @@ export function buildFlowRows(items: FlowTableItem[], today: string = getTodayLo
       status: displayStatus,
       taskName: step?.nombre ?? "Sin tarea registrada",
       stepLabel,
+      dateContext: workflow.contexto_fecha_actual,
+      primaryDateInput,
       executionDateInput,
       executionAt: executionDateInput ? toDateSortValue(executionDateInput) : Number.MAX_SAFE_INTEGER,
       operationalSortValue,

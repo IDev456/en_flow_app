@@ -86,7 +86,7 @@ export function DuplicateFlowWarningDialog({
 
                 {candidate.reminderAt && (
                   <Typography variant="body2" color="text.secondary">
-                    Fecha / recordatorio: {formatCalendarDate(candidate.reminderAt)}
+                    Seguimiento: {formatCalendarDate(candidate.reminderAt)}
                   </Typography>
                 )}
 

@@ -1,5 +1,7 @@
 export type TriggerStatus = "sin_flows" | "en_proceso" | "esperando_respuesta" | "con_problema" | "resuelto" | "cancelado";
 export type WorkflowStatus = "pendiente" | "en_proceso" | "esperando_respuesta" | "en_espera" | "con_problema" | "finalizado" | "cancelado";
+export type WorkflowStartMode = "tarea_activa" | "esperando";
+export type WorkflowDateContext = "activa" | "espera" | "cerrado" | "sin_fecha";
 export type StepStatus = "activo" | "espera" | "problema" | "esperando_respuesta" | "completado" | "cancelada";
 export type StepTransitionType = "next_task" | "wait_external" | "finish_flow";
 export type WorkLogEntryType = "comment" | "status_change" | "field_change" | "external_event";
@@ -51,6 +53,10 @@ export type WorkflowSummary = {
   total_pasos: number;
   fecha_inicio: string;
   fecha_fin: string | null;
+  fecha_ejecucion_actual: string | null;
+  fecha_recordatorio_actual: string | null;
+  fecha_espera_desde: string | null;
+  contexto_fecha_actual: WorkflowDateContext;
   objetivo_final: string | null;
   resolucion_esperada: string | null;
 };
@@ -72,6 +78,7 @@ export type Step = {
   action_label: string | null;
   waits_for_external_response: boolean;
   expected_external_event: string | null;
+  esperando_de: string | null;
   external_wait_reason: string | null;
   external_reference: string | null;
   estado: StepStatus;
@@ -178,13 +185,15 @@ export type WorkflowStartInput = {
   objetivo_final?: string | null;
   resolucion_esperada?: string | null;
   ambito?: Ambito;
-  primer_paso: {
+  modo_inicio?: WorkflowStartMode;
+  primer_paso?: {
     nombre: string;
     descripcion?: string | null;
     asignado_a?: string | null;
     fecha_vencimiento?: string | null;
     fecha_ejecucion_estimada?: string | null;
   };
+  espera_inicial?: WaitingStartInput | null;
 };
 
 export type StepCompleteInput = {
@@ -210,9 +219,20 @@ export type NextTaskInput = {
 export type ExternalWaitInput = {
   que_se_espera: string;
   origen?: string | null;
+  esperando_de?: string | null;
   detalle?: string | null;
   referencia_externa?: string | null;
+  fecha_recordatorio?: string | null;
   attachments?: AttachmentInput[];
+};
+
+export type WaitingStartInput = {
+  que_se_espera: string;
+  esperando_de?: string | null;
+  detalle?: string | null;
+  referencia_externa?: string | null;
+  fecha_espera_desde?: string | null;
+  fecha_recordatorio?: string | null;
 };
 
 export type FinishFlowInput = {
@@ -274,6 +294,8 @@ export type QuickCaptureInput = {
   asignado_a?: string | null;
   fecha_vencimiento?: string | null;
   fecha_ejecucion_estimada?: string | null;
+  modo_inicio?: WorkflowStartMode;
+  espera_inicial?: WaitingStartInput | null;
   creado_por?: string;
   ambito: Exclude<Ambito, null>;
 };
@@ -292,4 +314,15 @@ export type WorkflowUpdateInput = {
   objetivo_final?: string | null;
   ambito?: Ambito;
   propagate_ambito?: boolean;
+};
+
+export type StepUpdateInput = {
+  nombre?: string;
+  descripcion?: string | null;
+  fecha_ejecucion_estimada?: string | null;
+  expected_external_event?: string | null;
+  esperando_de?: string | null;
+  external_wait_reason?: string | null;
+  external_reference?: string | null;
+  fecha_espera_desde?: string | null;
 };

@@ -148,11 +148,13 @@ def _migrate_workflow_schema() -> None:
         "ALTER TABLE steps ADD COLUMN IF NOT EXISTS action_label VARCHAR(160)",
         "ALTER TABLE steps ADD COLUMN IF NOT EXISTS waits_for_external_response BOOLEAN",
         "ALTER TABLE steps ADD COLUMN IF NOT EXISTS expected_external_event VARCHAR(120)",
+        "ALTER TABLE steps ADD COLUMN IF NOT EXISTS esperando_de VARCHAR(160)",
         "ALTER TABLE steps ADD COLUMN IF NOT EXISTS external_wait_reason VARCHAR(300)",
         "ALTER TABLE steps ADD COLUMN IF NOT EXISTS external_reference VARCHAR(200)",
         "ALTER TABLE steps ADD COLUMN IF NOT EXISTS fecha_ejecucion_estimada TIMESTAMPTZ",
         "ALTER TABLE triggers ADD COLUMN IF NOT EXISTS ambito VARCHAR(20)",
         "ALTER TABLE workflows ADD COLUMN IF NOT EXISTS ambito VARCHAR(20)",
+        "ALTER TABLE workflows ADD COLUMN IF NOT EXISTS fecha_espera_desde TIMESTAMPTZ",
         "ALTER TABLE steps ADD COLUMN IF NOT EXISTS ambito VARCHAR(20)",
         f"UPDATE workflow_template_steps SET depends_on = {empty_json_literal} WHERE depends_on IS NULL",
         "UPDATE workflow_template_steps SET action_type = 'continue' WHERE action_type IS NULL",
@@ -166,6 +168,19 @@ def _migrate_workflow_schema() -> None:
         FROM workflows w
         WHERE w.trigger_id IS NOT NULL
         ON CONFLICT (requirement_id, workflow_id) DO NOTHING
+        """,
+        """
+        UPDATE workflows
+        SET fecha_espera_desde = source.fecha_estado_actual
+        FROM (
+            SELECT workflow_id, MIN(fecha_estado_actual) AS fecha_estado_actual
+            FROM steps
+            WHERE estado = 'esperando_respuesta'
+            GROUP BY workflow_id
+        ) AS source
+        WHERE workflows.id = source.workflow_id
+          AND workflows.estado = 'esperando_respuesta'
+          AND workflows.fecha_espera_desde IS NULL
         """,
     ]
     if is_postgres:

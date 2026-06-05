@@ -27,12 +27,20 @@ import { ReminderDateField } from "./ReminderDateField";
 import { AmbitoChip } from "./AmbitoChip";
 import { DuplicateFlowWarningDialog } from "./DuplicateFlowWarningDialog";
 import { LiveDuplicateSuggestions } from "./LiveDuplicateSuggestions";
-import type { Ambito, QuickCaptureInput, TriggerDetail, WorkflowDetail, WorkflowStartInput } from "../types";
+import type {
+  Ambito,
+  QuickCaptureInput,
+  TriggerDetail,
+  WorkflowDetail,
+  WorkflowStartInput,
+  WorkflowStartMode,
+} from "../types";
 import {
   DEFAULT_ACTOR,
   getAmbitoLabel,
   getReminderDateError,
   getStoredActiveAmbito,
+  getTodayLocalDateInput,
   toCalendarDateUtcIso,
 } from "../utils";
 import {
@@ -71,10 +79,17 @@ type PendingCreation =
 
 export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequirementLabel }: TriggerCreateModalProps) {
   const theme = useTheme();
+  const [captureMode, setCaptureMode] = useState<WorkflowStartMode>("tarea_activa");
   const [title, setTitle] = useState("");
   const [detail, setDetail] = useState("");
   const [assignee, setAssignee] = useState("");
   const [executionDate, setExecutionDate] = useState("");
+  const [reminderDate, setReminderDate] = useState("");
+  const [waitingWhat, setWaitingWhat] = useState("");
+  const [waitingFrom, setWaitingFrom] = useState("");
+  const [waitingReference, setWaitingReference] = useState("");
+  const [waitingSince, setWaitingSince] = useState(getTodayLocalDateInput());
+  const [waitingFollowUpDate, setWaitingFollowUpDate] = useState("");
   const [selectedRequirementId, setSelectedRequirementId] = useState("");
   const [availableRequirements, setAvailableRequirements] = useState<TriggerDetail[]>([]);
   const [loadingRequirements, setLoadingRequirements] = useState(false);
@@ -93,8 +108,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
   const { showToast } = useToastContext();
   const duplicateCatalogRef = useRef<DuplicateCatalog | null>(null);
   const liveRequestIdRef = useRef(0);
-  const titleInputRef = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
-  const canSubmit = title.trim().length >= 3;
+  const primaryInputRef = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
   const linkedRequirementLabel = defaultRequirementLabel?.trim() || null;
   const selectedRequirement =
     !defaultRequirementId && selectedRequirementId
@@ -104,6 +118,8 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
   const effectiveRequirementLabel = linkedRequirementLabel ?? selectedRequirement?.descripcion?.trim() ?? null;
   const effectiveRequirementAmbito = defaultRequirementId ? linkedRequirementAmbito : (selectedRequirement?.ambito ?? null);
   const isLinkedCapture = Boolean(effectiveRequirementId);
+  const canSubmit =
+    captureMode === "tarea_activa" ? title.trim().length >= 3 : waitingWhat.trim().length >= 3;
 
   function getOriginLocationWithoutModal() {
     const nextParams = new URLSearchParams(location.search);
@@ -120,13 +136,13 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      titleInputRef.current?.focus();
+      primaryInputRef.current?.focus();
     }, 40);
 
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, []);
+  }, [captureMode]);
 
   useEffect(() => {
     if (defaultRequirementId) {
@@ -143,7 +159,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
         setAvailableRequirements(requirements);
       } catch (err) {
         if (cancelled) return;
-        console.warn("No se pudieron cargar los proyectos para la captura rápida.", err);
+        console.warn("No se pudieron cargar los proyectos para la captura rapida.", err);
         setAvailableRequirements([]);
       } finally {
         if (!cancelled) {
@@ -168,9 +184,40 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
     }
   }, [ambito, availableRequirements, defaultRequirementId, selectedRequirementId]);
 
+  useEffect(() => {
+    if (!defaultRequirementId) {
+      setLinkedRequirementAmbito(null);
+      return;
+    }
+
+    void loadDuplicateCatalog()
+      .then((catalog) => {
+        setLinkedRequirementAmbito(catalog.triggersById[defaultRequirementId]?.ambito ?? null);
+      })
+      .catch(() => {
+        setLinkedRequirementAmbito(null);
+      });
+  }, [defaultRequirementId]);
+
+  function hasDraft() {
+    return Boolean(
+      title.trim() ||
+        detail.trim() ||
+        assignee.trim() ||
+        executionDate ||
+        reminderDate ||
+        waitingWhat.trim() ||
+        waitingFrom.trim() ||
+        waitingReference.trim() ||
+        waitingFollowUpDate ||
+        (waitingSince && waitingSince !== getTodayLocalDateInput()) ||
+        selectedRequirementId
+    );
+  }
+
   function handleClose() {
-    if (title.trim() || detail.trim() || assignee.trim() || executionDate || selectedRequirementId) {
-      if (!window.confirm("¿Cerrar sin guardar? Se perderán los datos ingresados.")) {
+    if (hasDraft()) {
+      if (!window.confirm("Cerrar sin guardar? Se perderan los datos ingresados.")) {
         return;
       }
     }
@@ -197,7 +244,51 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
   }
 
   function buildCreation(): PendingCreation {
-    const selectedDateIso = toCalendarDateUtcIso(executionDate);
+    const executionDateIso = toCalendarDateUtcIso(executionDate);
+    const reminderDateIso = toCalendarDateUtcIso(reminderDate);
+    const waitingSinceIso = toCalendarDateUtcIso(waitingSince);
+    const waitingFollowUpIso = toCalendarDateUtcIso(waitingFollowUpDate);
+    const normalizedDetail = detail.trim() || null;
+
+    if (captureMode === "esperando") {
+      const waitingPayload = {
+        modo_inicio: "esperando" as const,
+        objetivo_final: waitingWhat.trim(),
+        resolucion_esperada: "Flow completado con validacion final",
+        espera_inicial: {
+          que_se_espera: waitingWhat.trim(),
+          esperando_de: waitingFrom.trim() || null,
+          detalle: normalizedDetail,
+          referencia_externa: waitingReference.trim() || null,
+          fecha_espera_desde: waitingSinceIso,
+          fecha_recordatorio: waitingFollowUpIso,
+        },
+      };
+
+      if (effectiveRequirementId) {
+        return {
+          kind: "linked",
+          requirementId: effectiveRequirementId,
+          requirementLabel: effectiveRequirementLabel,
+          payload: {
+            ...waitingPayload,
+            ambito: effectiveRequirementAmbito,
+          },
+        };
+      }
+
+      return {
+        kind: "quick",
+        payload: {
+          titulo: waitingWhat.trim(),
+          detalle: normalizedDetail,
+          modo_inicio: "esperando",
+          espera_inicial: waitingPayload.espera_inicial,
+          creado_por: DEFAULT_ACTOR,
+          ambito,
+        },
+      };
+    }
 
     if (effectiveRequirementId) {
       return {
@@ -206,14 +297,15 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
         requirementLabel: effectiveRequirementLabel,
         payload: {
           objetivo_final: title.trim(),
-          resolucion_esperada: "Flujo completado con validacion final",
+          resolucion_esperada: "Flow completado con validacion final",
           ambito: effectiveRequirementAmbito,
+          modo_inicio: "tarea_activa",
           primer_paso: {
             nombre: title.trim(),
-            descripcion: detail.trim() || null,
+            descripcion: normalizedDetail,
             asignado_a: assignee.trim() || DEFAULT_ACTOR,
-            fecha_vencimiento: selectedDateIso,
-            fecha_ejecucion_estimada: selectedDateIso,
+            fecha_vencimiento: reminderDateIso,
+            fecha_ejecucion_estimada: executionDateIso,
           },
         },
       };
@@ -223,10 +315,11 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
       kind: "quick",
       payload: {
         titulo: title.trim(),
-        detalle: detail.trim() || null,
+        detalle: normalizedDetail,
         asignado_a: assignee.trim() || DEFAULT_ACTOR,
-        fecha_vencimiento: selectedDateIso,
-        fecha_ejecucion_estimada: selectedDateIso,
+        fecha_vencimiento: reminderDateIso,
+        fecha_ejecucion_estimada: executionDateIso,
+        modo_inicio: "tarea_activa",
         creado_por: DEFAULT_ACTOR,
         ambito,
       },
@@ -235,44 +328,55 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
 
   function buildDuplicateInput(creation: PendingCreation) {
     if (creation.kind === "linked") {
+      if (creation.payload.modo_inicio === "esperando") {
+        return {
+          taskName: creation.payload.espera_inicial?.que_se_espera ?? creation.payload.objetivo_final ?? "",
+          taskDescription: creation.payload.espera_inicial?.detalle ?? null,
+          workflowObjective: creation.payload.objetivo_final,
+          requirementId: creation.requirementId,
+          requirementLabel: creation.requirementLabel,
+          reminderAt: creation.payload.espera_inicial?.fecha_recordatorio ?? null,
+          waitingFrom: creation.payload.espera_inicial?.esperando_de ?? null,
+          externalReference: creation.payload.espera_inicial?.referencia_externa ?? null,
+          ambito: creation.payload.ambito ?? null,
+        };
+      }
+
       return {
-        taskName: creation.payload.primer_paso.nombre,
-        taskDescription: creation.payload.primer_paso.descripcion,
+        taskName: creation.payload.primer_paso?.nombre ?? "",
+        taskDescription: creation.payload.primer_paso?.descripcion ?? null,
         workflowObjective: creation.payload.objetivo_final,
         requirementId: creation.requirementId,
         requirementLabel: creation.requirementLabel,
-        reminderAt: creation.payload.primer_paso.fecha_vencimiento ?? null,
+        reminderAt: creation.payload.primer_paso?.fecha_vencimiento ?? null,
         ambito: creation.payload.ambito ?? null,
+      };
+    }
+
+    if (creation.payload.modo_inicio === "esperando") {
+      return {
+        taskName: creation.payload.espera_inicial?.que_se_espera ?? creation.payload.titulo,
+        taskDescription: creation.payload.espera_inicial?.detalle ?? creation.payload.detalle,
+        reminderAt: creation.payload.espera_inicial?.fecha_recordatorio ?? null,
+        waitingFrom: creation.payload.espera_inicial?.esperando_de ?? null,
+        externalReference: creation.payload.espera_inicial?.referencia_externa ?? null,
+        ambito: creation.payload.ambito,
       };
     }
 
     return {
       taskName: creation.payload.titulo,
       taskDescription: creation.payload.detalle,
-      reminderAt: creation.payload.fecha_ejecucion_estimada ?? null,
+      reminderAt: creation.payload.fecha_vencimiento ?? null,
       ambito: creation.payload.ambito,
     };
   }
 
   useEffect(() => {
-    if (!defaultRequirementId) {
-      setLinkedRequirementAmbito(null);
-      return;
-    }
-
-    void loadDuplicateCatalog()
-      .then((catalog) => {
-        setLinkedRequirementAmbito(catalog.triggersById[defaultRequirementId]?.ambito ?? null);
-      })
-      .catch(() => {
-        setLinkedRequirementAmbito(null);
-      });
-  }, [defaultRequirementId]);
-
-  useEffect(() => {
-    const inputText = `${title} ${detail}`.trim();
-    const normalizedInput = normalizeText(inputText);
-    const significantTokens = getSignificantTokens(inputText);
+    const primaryText = captureMode === "tarea_activa" ? title : waitingWhat;
+    const duplicateText = `${primaryText} ${detail}`.trim();
+    const normalizedInput = normalizeText(duplicateText);
+    const significantTokens = getSignificantTokens(`${primaryText} ${detail} ${waitingFrom} ${waitingReference}`.trim());
 
     if (significantTokens.length === 0 || normalizedInput.length < 3 || (isLinkedCapture && effectiveRequirementAmbito === null)) {
       liveRequestIdRef.current += 1;
@@ -293,12 +397,14 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
 
         const candidates = findSimilarFlows(
           {
-            taskName: title.trim(),
+            taskName: captureMode === "tarea_activa" ? title.trim() : waitingWhat.trim(),
             taskDescription: detail.trim() || null,
-            workflowObjective: isLinkedCapture ? title.trim() : null,
+            workflowObjective: isLinkedCapture ? (captureMode === "tarea_activa" ? title.trim() : waitingWhat.trim()) : null,
             requirementId: effectiveRequirementId,
             requirementLabel: effectiveRequirementLabel,
-            reminderAt: toCalendarDateUtcIso(executionDate),
+            reminderAt: toCalendarDateUtcIso(captureMode === "tarea_activa" ? reminderDate : waitingFollowUpDate),
+            waitingFrom: captureMode === "esperando" ? waitingFrom.trim() || null : null,
+            externalReference: captureMode === "esperando" ? waitingReference.trim() || null : null,
             ambito: isLinkedCapture ? effectiveRequirementAmbito : ambito,
           },
           catalog.workflowsById,
@@ -321,7 +427,21 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [title, detail, executionDate, ambito, isLinkedCapture, effectiveRequirementAmbito, effectiveRequirementId, effectiveRequirementLabel]);
+  }, [
+    ambito,
+    captureMode,
+    detail,
+    effectiveRequirementAmbito,
+    effectiveRequirementId,
+    effectiveRequirementLabel,
+    isLinkedCapture,
+    reminderDate,
+    title,
+    waitingFollowUpDate,
+    waitingFrom,
+    waitingReference,
+    waitingWhat,
+  ]);
 
   async function performCreate(creation: PendingCreation) {
     try {
@@ -332,14 +452,14 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
           ? await startWorkflow(creation.requirementId, creation.payload)
           : await quickCaptureFlow(creation.payload);
       if (creation.kind === "linked") {
-        showToast("Tarea vinculada al proyecto.", "success");
+        showToast("Flow vinculado al proyecto.", "success");
       } else if (creation.payload.ambito !== getStoredActiveAmbito()) {
         showToast(
-          `Tarea capturada como ${getAmbitoLabel(creation.payload.ambito)}. Cambiá a ${getAmbitoLabel(creation.payload.ambito)} para verla en la lista.`,
+          `Tarea capturada como ${getAmbitoLabel(creation.payload.ambito)}. Cambia a ${getAmbitoLabel(creation.payload.ambito)} para verla en la lista.`,
           "info"
         );
       } else {
-        showToast("Tarea capturada.", "success");
+        showToast(captureMode === "esperando" ? "Espera capturada." : "Tarea capturada.", "success");
       }
       onClose();
       navigateWithOrigin(navigate, getOriginLocationWithoutModal(), `/workflows/${workflow.id}`, "/flows");
@@ -348,8 +468,8 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
         err instanceof Error
           ? err.message
           : creation.kind === "linked"
-            ? "No se pudo crear la tarea vinculada"
-            : "No se pudo capturar la tarea"
+            ? "No se pudo crear el flow vinculado"
+            : "No se pudo capturar el flow"
       );
     } finally {
       setSubmitting(false);
@@ -379,16 +499,34 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
 
   async function handleSubmit() {
     if (!canSubmit) {
-      setError("Escribe la tarea principal para capturar el flow.");
+      setError(
+        captureMode === "tarea_activa"
+          ? "Escribe la tarea principal para capturar el flow."
+          : "Escribe que estas esperando para capturar el flow."
+      );
       return;
     }
-    const reminderError = getReminderDateError(executionDate);
-    if (reminderError) {
-      setError(reminderError);
-      return;
+
+    if (captureMode === "tarea_activa") {
+      const reminderError = getReminderDateError(reminderDate);
+      if (reminderError) {
+        setError(reminderError);
+        return;
+      }
+    } else {
+      const waitingFollowUpError = getReminderDateError(waitingFollowUpDate);
+      if (waitingFollowUpError) {
+        setError(waitingFollowUpError);
+        return;
+      }
+      if (waitingSince && waitingSince > getTodayLocalDateInput()) {
+        setError("La fecha de espera no puede estar en el futuro.");
+        return;
+      }
     }
+
     if (isLinkedCapture && effectiveRequirementAmbito === null) {
-      setError("Debes definir el ámbito del proyecto antes de crear un flow vinculado.");
+      setError("Debes definir el ambito del proyecto antes de crear un flow vinculado.");
       return;
     }
 
@@ -431,9 +569,11 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
         <DialogTitle sx={{ pb: 1 }}>
           <Stack spacing={1}>
             <Typography variant="subtitle2" color="text.secondary">
-              Captura rápida
+              Captura rapida
             </Typography>
-            <Typography variant="h4">Capturar tarea</Typography>
+            <Typography variant="h4">
+              {captureMode === "tarea_activa" ? "Capturar tarea" : "Capturar espera"}
+            </Typography>
           </Stack>
         </DialogTitle>
 
@@ -459,6 +599,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
                 </Stack>
               </Alert>
             )}
+
             {!defaultRequirementId && (
               <Stack spacing={1}>
                 <ToggleButtonGroup
@@ -477,23 +618,71 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
                 </ToggleButtonGroup>
                 <Alert severity="info" sx={{ py: 0.5 }}>
                   <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
-                    <Typography component="span">Se creará como:</Typography>
+                    <Typography component="span">Se creara como:</Typography>
                     <AmbitoChip ambito={ambito} />
                   </Stack>
                 </Alert>
               </Stack>
             )}
-            <TextField
-              autoFocus
-              inputRef={titleInputRef}
-              label="¿Qué tenés que hacer? *"
-              multiline
-              minRows={3}
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Ej. Pedir layout actualizado al proveedor"
-              disabled={isLinkedCapture && effectiveRequirementAmbito === null}
-            />
+
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              value={captureMode}
+              onChange={(_, value: WorkflowStartMode | null) => {
+                if (!value) return;
+                setCaptureMode(value);
+                setError(null);
+              }}
+              sx={{ alignSelf: "flex-start" }}
+            >
+              <ToggleButton value="tarea_activa">Tarea para hacer</ToggleButton>
+              <ToggleButton value="esperando">Estoy esperando algo</ToggleButton>
+            </ToggleButtonGroup>
+
+            {captureMode === "tarea_activa" ? (
+              <TextField
+                autoFocus
+                inputRef={primaryInputRef}
+                label="Que tenes que hacer? *"
+                multiline
+                minRows={3}
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="Ej. Pedir layout actualizado al proveedor"
+                disabled={isLinkedCapture && effectiveRequirementAmbito === null}
+              />
+            ) : (
+              <Stack spacing={1.5}>
+                <TextField
+                  autoFocus
+                  inputRef={primaryInputRef}
+                  label="Que estas esperando? *"
+                  multiline
+                  minRows={3}
+                  value={waitingWhat}
+                  onChange={(event) => setWaitingWhat(event.target.value)}
+                  placeholder="Ej. Confirmacion del proveedor sobre el layout"
+                  disabled={isLinkedCapture && effectiveRequirementAmbito === null}
+                />
+                <Stack direction={{ xs: "column", md: "row" }} spacing={1.25}>
+                  <TextField
+                    label="De quien?"
+                    value={waitingFrom}
+                    onChange={(event) => setWaitingFrom(event.target.value)}
+                    fullWidth
+                  />
+                  <TextField
+                    label="Esperando desde"
+                    type="date"
+                    value={waitingSince}
+                    onChange={(event) => setWaitingSince(event.target.value)}
+                    fullWidth
+                    slotProps={{ inputLabel: { shrink: true } }}
+                  />
+                </Stack>
+              </Stack>
+            )}
 
             <LiveDuplicateSuggestions
               candidates={liveDuplicateCandidates}
@@ -512,7 +701,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
                 helperText={
                   loadingRequirements
                     ? "Cargando proyectos..."
-                    : "Opcional. Si seleccionás un proyecto, el flow quedará vinculado a ese proyecto."
+                    : "Opcional. Si seleccionas un proyecto, el flow quedara vinculado a ese proyecto."
                 }
               >
                 <MenuItem value="">Sin proyecto asociado</MenuItem>
@@ -538,18 +727,22 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
 
             <Collapse in={showOptional} timeout={theme.appMotion.short}>
               <Box
-                sx={(theme) => ({
+                sx={(currentTheme) => ({
                   p: { xs: 2, md: 2.5 },
-                  borderRadius: theme.appShape.md,
+                  borderRadius: currentTheme.appShape.md,
                   border: "1px solid",
-                  borderColor: theme.palette.outlineVariant,
-                  backgroundColor: alpha(theme.palette.surfaceContainerLow, theme.palette.mode === "dark" ? 0.84 : 0.98),
+                  borderColor: currentTheme.palette.outlineVariant,
+                  backgroundColor: alpha(
+                    currentTheme.palette.surfaceContainerLow,
+                    currentTheme.palette.mode === "dark" ? 0.84 : 0.98
+                  ),
                 })}
               >
                 <Stack spacing={1.5}>
                   <Typography variant="subtitle2" color="text.secondary">
                     Datos opcionales
                   </Typography>
+
                   <TextField
                     label="Detalle"
                     multiline
@@ -557,17 +750,43 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
                     value={detail}
                     onChange={(event) => setDetail(event.target.value)}
                   />
-                  <TextField label="Asignado a" value={assignee} onChange={(event) => setAssignee(event.target.value)} />
-                  <ReminderDateField
-                    value={executionDate}
-                    onChange={(value) => {
-                      setExecutionDate(value);
-                      if (error) {
-                        setError(null);
-                      }
-                    }}
-                    helperText="Fecha recordatorio"
-                  />
+
+                  {captureMode === "tarea_activa" ? (
+                    <>
+                      <TextField label="Asignado a" value={assignee} onChange={(event) => setAssignee(event.target.value)} />
+                      <TextField
+                        label="Fecha operativa"
+                        type="date"
+                        value={executionDate}
+                        onChange={(event) => setExecutionDate(event.target.value)}
+                        slotProps={{ inputLabel: { shrink: true } }}
+                      />
+                      <ReminderDateField
+                        value={reminderDate}
+                        onChange={(value) => {
+                          setReminderDate(value);
+                          if (error) setError(null);
+                        }}
+                        helperText="Recordatorio"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <TextField
+                        label="Referencia"
+                        value={waitingReference}
+                        onChange={(event) => setWaitingReference(event.target.value)}
+                      />
+                      <ReminderDateField
+                        value={waitingFollowUpDate}
+                        onChange={(value) => {
+                          setWaitingFollowUpDate(value);
+                          if (error) setError(null);
+                        }}
+                        helperText="Seguimiento opcional"
+                      />
+                    </>
+                  )}
                 </Stack>
               </Box>
             </Collapse>
@@ -578,7 +797,11 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
 
         <DialogActions sx={{ p: 3, justifyContent: "space-between", gap: 1.5, flexWrap: "wrap" }}>
           <Typography variant="body2" color="text.secondary">
-            {isLinkedCapture ? "Se creará un flow vinculado a este proyecto." : "Se crea un flow con una tarea activa inicial."}
+            {isLinkedCapture
+              ? "Se creara un flow vinculado a este proyecto."
+              : captureMode === "esperando"
+                ? "Se crea un flow que arranca esperando respuesta externa."
+                : "Se crea un flow con una tarea activa inicial."}
           </Typography>
           <Stack direction="row" spacing={1.25}>
             <Button variant="text" color="inherit" onClick={handleClose} disabled={submitting || checkingDuplicates}>
@@ -590,7 +813,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
               disabled={submitting || checkingDuplicates || !canSubmit || (isLinkedCapture && effectiveRequirementAmbito === null)}
               startIcon={<AddTaskRoundedIcon />}
             >
-              {checkingDuplicates ? "Revisando..." : submitting ? "Guardando..." : "Capturar tarea"}
+              {checkingDuplicates ? "Revisando..." : submitting ? "Guardando..." : "Capturar"}
             </Button>
           </Stack>
         </DialogActions>

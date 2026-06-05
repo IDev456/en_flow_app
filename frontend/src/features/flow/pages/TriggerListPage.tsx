@@ -146,6 +146,8 @@ type FlowGridRow = {
   status: string;
   taskName: string;
   stepLabel: string;
+  dateContext: WorkflowDetail["contexto_fecha_actual"];
+  primaryDateInput: string;
   executionDateInput: string;
   executionAt: number;
   operationalSortValue: number;
@@ -193,7 +195,7 @@ const flowQuickFilterOptions = [
   { value: "past", label: "Pasados" },
   { value: "future", label: "Futuros" },
   { value: "without_project", label: "Sin proyecto" },
-  { value: "without_reminder", label: "Sin recordatorio" },
+  { value: "without_reminder", label: "Sin seguimiento" },
 ] as const satisfies ReadonlyArray<{ value: FlowQuickFilter; label: string }>;
 const selectableFlowQuickFilterOptions = flowQuickFilterOptions.filter((option) => option.value !== "none");
 const FLOW_PRIMARY_COLUMN_FIELD = "taskName";
@@ -494,6 +496,19 @@ function toDateSortValue(dateInput: string) {
   return dayValue ?? Number.MAX_SAFE_INTEGER;
 }
 
+function resolvePrimaryDateInput(workflow: WorkflowDetail, step: Step | null) {
+  if (workflow.contexto_fecha_actual === "espera") {
+    return toDateInputValue(workflow.fecha_espera_desde ?? step?.fecha_estado_actual);
+  }
+  if (workflow.contexto_fecha_actual === "activa") {
+    return toDateInputValue(workflow.fecha_ejecucion_actual ?? step?.fecha_ejecucion_estimada);
+  }
+  if (workflow.contexto_fecha_actual === "cerrado") {
+    return toDateInputValue(workflow.fecha_fin);
+  }
+  return "";
+}
+
 function getMovementHeatVisual(days: number | null) {
   if (days === null) {
     return null;
@@ -680,7 +695,7 @@ function getFlowQuickFilterDescription(filter: FlowQuickFilter) {
     case "without_project":
       return "sin proyecto";
     case "without_reminder":
-      return "sin recordatorio";
+      return "sin seguimiento";
     case "none":
     default:
       return "";
@@ -1337,7 +1352,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const flowRows = useMemo<FlowGridRow[]>(() => {
     return allFlowCards.map((item) => {
       const step = item.relevantStep;
-      const executionDateInput = toDateInputValue(step?.fecha_vencimiento);
+      const primaryDateInput = resolvePrimaryDateInput(item.workflow, step);
+      const executionDateInput = toDateInputValue(item.workflow.fecha_recordatorio_actual ?? step?.fecha_vencimiento);
       const stepLabel =
         step && ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado)
           ? "Disparador"
@@ -1366,6 +1382,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
           status: item.displayStatus,
         taskName: step?.nombre ?? "Sin tarea registrada",
         stepLabel,
+        dateContext: item.workflow.contexto_fecha_actual,
+        primaryDateInput,
         executionDateInput,
         executionAt: executionDateInput ? toDateSortValue(executionDateInput) : Number.MAX_SAFE_INTEGER,
         operationalSortValue,
@@ -1847,7 +1865,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       },
       {
         field: "executionAt",
-        headerName: "Fecha",
+        headerName: "Fecha clave",
         width: 172,
         minWidth: 160,
         align: "center",
@@ -1855,23 +1873,36 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         valueGetter: (_, row) => row.operationalSortValue,
         renderCell: (params) => {
           const row = params.row;
+          const primaryValue = row.primaryDateInput;
           const originalValue = row.executionDateInput;
           const isEditing = pendingDates.has(row.id);
           const showInput = isEditing;
-          const isFutureRow = Boolean(row.executionDateInput && row.executionDateInput > today);
+          const isFutureRow = Boolean(primaryValue && primaryValue > today);
 
           if (!showInput) {
-            if (originalValue) {
-              const relativeLabel = !isFutureRow ? formatRelativeCalendarDay(originalValue) : null;
-              const dateLabel = relativeLabel ?? formatCalendarDate(originalValue);
-              const absoluteDateLabel = formatCalendarDate(originalValue);
-              const secondaryLabel = relativeLabel ? absoluteDateLabel : null;
+            if (primaryValue || originalValue) {
+              const primaryAbsoluteDateLabel = primaryValue ? formatCalendarDate(primaryValue) : null;
+              const primaryRelativeLabel = primaryValue && !isFutureRow ? formatRelativeCalendarDay(primaryValue) : null;
+              const dateLabel =
+                row.dateContext === "espera"
+                  ? (primaryAbsoluteDateLabel ? `Espera: ${primaryAbsoluteDateLabel}` : "Sin fecha de espera")
+                  : row.dateContext === "cerrado"
+                    ? (primaryAbsoluteDateLabel ? `Cierre: ${primaryAbsoluteDateLabel}` : "Sin fecha de cierre")
+                    : primaryValue
+                      ? (primaryRelativeLabel ?? primaryAbsoluteDateLabel ?? "Sin fecha operativa")
+                      : "Sin fecha operativa";
+              const secondaryLabel =
+                row.dateContext === "espera"
+                  ? (originalValue ? `Seguimiento: ${formatCalendarDate(originalValue)}` : "Sin seguimiento")
+                  : originalValue
+                    ? `Recordatorio: ${formatCalendarDate(originalValue)}`
+                    : null;
               const shouldPulseToday = row.isDueToday && !isEditing;
               const statusHighlight = getStatusHighlight(row.status, theme);
               return (
-                <Tooltip title={absoluteDateLabel}>
+                <Tooltip title={secondaryLabel ?? primaryAbsoluteDateLabel ?? dateLabel}>
                     <ButtonBase
-                    disabled={!row.stepId}
+                    disabled={!row.stepId || row.dateContext === "cerrado"}
                     onClick={(event) => {
                       event.stopPropagation();
                       openPendingDateEditorAndPicker(row.id, originalValue);
@@ -1914,7 +1945,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             return (
               <IconButton
                 size="small"
-                disabled={!row.stepId}
+                disabled={!row.stepId || row.dateContext === "cerrado"}
                 onClick={(event) => {
                   event.stopPropagation();
                   openPendingDateEditorAndPicker(row.id, "");

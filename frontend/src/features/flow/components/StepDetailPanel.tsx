@@ -128,6 +128,10 @@ export function StepDetailPanel({
   const [stepDraftDescription, setStepDraftDescription] = useState("");
   const [stepDraftExecutionDate, setStepDraftExecutionDate] = useState("");
   const [stepDraftReminderDate, setStepDraftReminderDate] = useState("");
+  const [stepDraftWaitingWhat, setStepDraftWaitingWhat] = useState("");
+  const [stepDraftWaitingFrom, setStepDraftWaitingFrom] = useState("");
+  const [stepDraftWaitingReference, setStepDraftWaitingReference] = useState("");
+  const [stepDraftWaitingSince, setStepDraftWaitingSince] = useState("");
   const [stepEditError, setStepEditError] = useState<string | null>(null);
   const [savingStep, setSavingStep] = useState(false);
   const [stepToastOpen, setStepToastOpen] = useState(false);
@@ -167,6 +171,10 @@ export function StepDetailPanel({
     setStepDraftDescription(step.descripcion ?? "");
     setStepDraftExecutionDate(toCalendarDateInputValue(step.fecha_ejecucion_estimada));
     setStepDraftReminderDate(toCalendarDateInputValue(step.fecha_vencimiento));
+    setStepDraftWaitingWhat(step.expected_external_event ?? "");
+    setStepDraftWaitingFrom(step.esperando_de ?? "");
+    setStepDraftWaitingReference(step.external_reference ?? "");
+    setStepDraftWaitingSince(toCalendarDateInputValue(step.fecha_estado_actual));
     setIsReminderEditing(false);
     setReminderDraft(toCalendarDateInputValue(step.fecha_vencimiento));
     setSavingReminder(false);
@@ -358,6 +366,10 @@ export function StepDetailPanel({
     setStepDraftDescription(step.descripcion ?? "");
     setStepDraftExecutionDate(toCalendarDateInputValue(step.fecha_ejecucion_estimada));
     setStepDraftReminderDate(toCalendarDateInputValue(step.fecha_vencimiento));
+    setStepDraftWaitingWhat(step.expected_external_event ?? "");
+    setStepDraftWaitingFrom(step.esperando_de ?? "");
+    setStepDraftWaitingReference(step.external_reference ?? "");
+    setStepDraftWaitingSince(toCalendarDateInputValue(step.fecha_estado_actual));
     setStepEditError(null);
     setEditingStep(true);
   }
@@ -368,6 +380,10 @@ export function StepDetailPanel({
     setStepDraftDescription(step.descripcion ?? "");
     setStepDraftExecutionDate(toCalendarDateInputValue(step.fecha_ejecucion_estimada));
     setStepDraftReminderDate(toCalendarDateInputValue(step.fecha_vencimiento));
+    setStepDraftWaitingWhat(step.expected_external_event ?? "");
+    setStepDraftWaitingFrom(step.esperando_de ?? "");
+    setStepDraftWaitingReference(step.external_reference ?? "");
+    setStepDraftWaitingSince(toCalendarDateInputValue(step.fecha_estado_actual));
     setStepEditError(null);
     setEditingStep(false);
   }
@@ -383,11 +399,19 @@ export function StepDetailPanel({
     const nextDescription = stepDraftDescription.trim();
     const nextExecutionDate = toCalendarDateUtcIso(stepDraftExecutionDate);
     const nextReminderDate = toCalendarDateUtcIso(stepDraftReminderDate);
+    const nextWaitingSince = toCalendarDateUtcIso(stepDraftWaitingSince);
+    const nextWaitingWhat = stepDraftWaitingWhat.trim();
+    const nextWaitingFrom = stepDraftWaitingFrom.trim();
+    const nextWaitingReference = stepDraftWaitingReference.trim();
     const currentReminderInput = toCalendarDateInputValue(step.fecha_vencimiento);
     const hasMetadataChanges =
       nextName !== step.nombre ||
       nextDescription !== (step.descripcion ?? "") ||
-      nextExecutionDate !== step.fecha_ejecucion_estimada;
+      nextExecutionDate !== step.fecha_ejecucion_estimada ||
+      nextWaitingWhat !== (step.expected_external_event ?? "") ||
+      nextWaitingFrom !== (step.esperando_de ?? "") ||
+      nextWaitingReference !== (step.external_reference ?? "") ||
+      (isWaitingExternal && nextWaitingSince !== step.fecha_estado_actual);
     const hasReminderChanges = stepDraftReminderDate !== currentReminderInput;
 
     if (!nextName) {
@@ -397,6 +421,10 @@ export function StepDetailPanel({
     const reminderError = getReminderDateError(stepDraftReminderDate, todayLocalDateInput);
     if (reminderError) {
       setStepEditError(reminderError);
+      return;
+    }
+    if (isWaitingExternal && stepDraftWaitingSince && stepDraftWaitingSince > todayLocalDateInput) {
+      setStepEditError("La fecha de espera no puede estar en el futuro.");
       return;
     }
 
@@ -415,6 +443,11 @@ export function StepDetailPanel({
           nombre: nextName,
           descripcion: nextDescription || null,
           fecha_ejecucion_estimada: nextExecutionDate,
+          expected_external_event: isWaitingExternal ? nextWaitingWhat || null : undefined,
+          esperando_de: isWaitingExternal ? nextWaitingFrom || null : undefined,
+          external_reference: isWaitingExternal ? nextWaitingReference || null : undefined,
+          external_wait_reason: isWaitingExternal ? (nextDescription || null) : undefined,
+          fecha_espera_desde: isWaitingExternal ? nextWaitingSince : undefined,
         });
       }
       if (hasReminderChanges) {
@@ -426,6 +459,10 @@ export function StepDetailPanel({
       setStepDraftDescription(updatedStep.descripcion ?? "");
       setStepDraftExecutionDate(toCalendarDateInputValue(updatedStep.fecha_ejecucion_estimada));
       setStepDraftReminderDate(toCalendarDateInputValue(updatedStep.fecha_vencimiento));
+      setStepDraftWaitingWhat(updatedStep.expected_external_event ?? "");
+      setStepDraftWaitingFrom(updatedStep.esperando_de ?? "");
+      setStepDraftWaitingReference(updatedStep.external_reference ?? "");
+      setStepDraftWaitingSince(toCalendarDateInputValue(updatedStep.fecha_estado_actual));
       await onStepUpdated?.(updatedStep);
       setEditingStep(false);
       setStepToastOpen(true);
@@ -659,10 +696,40 @@ export function StepDetailPanel({
                         slotProps={{ inputLabel: { shrink: true } }}
                         disabled={savingStep}
                       />
+                      {isWaitingExternal ? (
+                        <>
+                          <TextField
+                            label="Que se espera"
+                            value={stepDraftWaitingWhat}
+                            onChange={(event) => setStepDraftWaitingWhat(event.target.value)}
+                            disabled={savingStep}
+                          />
+                          <TextField
+                            label="De quien"
+                            value={stepDraftWaitingFrom}
+                            onChange={(event) => setStepDraftWaitingFrom(event.target.value)}
+                            disabled={savingStep}
+                          />
+                          <TextField
+                            label="Referencia"
+                            value={stepDraftWaitingReference}
+                            onChange={(event) => setStepDraftWaitingReference(event.target.value)}
+                            disabled={savingStep}
+                          />
+                          <TextField
+                            label="Esperando desde"
+                            type="date"
+                            value={stepDraftWaitingSince}
+                            onChange={(event) => setStepDraftWaitingSince(event.target.value)}
+                            slotProps={{ inputLabel: { shrink: true } }}
+                            disabled={savingStep}
+                          />
+                        </>
+                      ) : null}
                       <ReminderDateField
                         value={stepDraftReminderDate}
                         onChange={setStepDraftReminderDate}
-                        helperText="Fecha recordatorio"
+                        helperText={isWaitingExternal ? "Fecha de seguimiento" : "Fecha recordatorio"}
                         disabled={savingStep}
                         minDate={todayLocalDateInput}
                         shortcutVariant="chips"
@@ -763,9 +830,17 @@ export function StepDetailPanel({
                   <CardContent sx={{ p: 1.75 }}>
                     <Stack spacing={1}>
                       <Alert severity="info">Esperando respuesta externa</Alert>
+                      <Typography variant="body2" color="text.secondary">
+                        Esperando desde: {formatCalendarDate(step.fecha_estado_actual)}
+                      </Typography>
                       {step.expected_external_event && (
                         <Typography variant="body2" color="text.secondary">
                           Qué se espera: {step.expected_external_event}
+                        </Typography>
+                      )}
+                      {step.esperando_de && (
+                        <Typography variant="body2" color="text.secondary">
+                          De quien: {step.esperando_de}
                         </Typography>
                       )}
                       {step.external_wait_reason && (
@@ -778,6 +853,9 @@ export function StepDetailPanel({
                           Referencia: {step.external_reference}
                         </Typography>
                       )}
+                      <Typography variant="body2" color="text.secondary">
+                        {step.fecha_vencimiento ? `Seguimiento: ${formatCalendarDate(step.fecha_vencimiento)}` : "Sin seguimiento"}
+                      </Typography>
                     </Stack>
                   </CardContent>
                 </Card>

@@ -43,7 +43,9 @@ from app.schemas.workflow import (
     TriggerCreate,
     TriggerStatus,
     TriggerUpdate,
+    WaitingStartInput,
     WorkLogEntryType,
+    WorkflowStartMode,
     WorkflowStartRequest,
     WorkflowStatus,
     WorkflowTemplatePublic,
@@ -357,6 +359,34 @@ class WorkflowDagTestCase(unittest.TestCase):
         self.assertEqual(workflow.ambito, Ambito.PERSONAL)
         self.assertEqual(workflow.steps[0].ambito, Ambito.PERSONAL)
 
+    def test_quick_capture_can_start_waiting(self) -> None:
+        workflow = self.service.quick_capture_flow(
+            QuickCaptureRequest(
+                titulo="Confirmacion de proveedor",
+                detalle="Esperando la aprobacion final",
+                modo_inicio=WorkflowStartMode.ESPERANDO,
+                espera_inicial=WaitingStartInput(
+                    que_se_espera="Confirmacion de proveedor",
+                    esperando_de="Proveedor",
+                    detalle="Esperando la aprobacion final",
+                    referencia_externa="MAIL-123",
+                    fecha_espera_desde=start_of_utc_day(0),
+                    fecha_recordatorio=start_of_utc_day(1),
+                ),
+                creado_por="tester",
+                ambito=Ambito.LABORAL,
+            )
+        )
+
+        first_step = workflow.steps[0]
+        self.assertEqual(workflow.estado, WorkflowStatus.ESPERANDO_RESPUESTA)
+        self.assertEqual(workflow.fecha_espera_desde.date(), start_of_utc_day(0).date())
+        self.assertEqual(first_step.estado, StepStatus.ESPERANDO_RESPUESTA)
+        self.assertEqual(first_step.esperando_de, "Proveedor")
+        self.assertEqual(first_step.expected_external_event, "Confirmacion de proveedor")
+        self.assertIsNone(first_step.fecha_ejecucion_estimada)
+        self.assertEqual(first_step.fecha_vencimiento.date(), start_of_utc_day(1).date())
+
     def test_start_workflow_inherits_trigger_ambito(self) -> None:
         template = build_linear_template()
         self.repository._workflow_templates = {template.id: template}  # type: ignore[attr-defined]
@@ -421,6 +451,33 @@ class WorkflowDagTestCase(unittest.TestCase):
                 ),
             )
 
+    def test_start_workflow_rejects_future_waiting_since(self) -> None:
+        template = build_linear_template()
+        self.repository._workflow_templates = {template.id: template}  # type: ignore[attr-defined]
+        trigger = self.service.create_trigger(
+            TriggerCreate(
+                solicitante="QA",
+                descripcion="Proyecto laboral",
+                tipo="requerimiento",
+                ambito=Ambito.LABORAL,
+                creado_por="tester",
+                metadata=None,
+            )
+        )
+
+        with self.assertRaises(BusinessRuleError):
+            self.service.start_workflow(
+                trigger.id,
+                WorkflowStartRequest(
+                    workflow_template_id=template.id,
+                    modo_inicio=WorkflowStartMode.ESPERANDO,
+                    espera_inicial=WaitingStartInput(
+                        que_se_espera="Respuesta legal",
+                        fecha_espera_desde=start_of_utc_day(1),
+                    ),
+                ),
+            )
+
     def test_update_step_date_rejects_past_reminder(self) -> None:
         workflow_id = self._start_workflow(build_linear_template())
         step = self.service.get_workflow(workflow_id).steps[0]
@@ -447,6 +504,35 @@ class WorkflowDagTestCase(unittest.TestCase):
                     ),
                 ),
             )
+
+    def test_wait_external_updates_follow_up_and_wait_projection(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        step = self.service.get_workflow(workflow_id).steps[0]
+
+        updated_step = self.service.complete_step(
+            step.id,
+            StepCompletePayload(
+                usuario="tester",
+                comentario="Queda pendiente respuesta externa",
+                resultado_cierre="Queda pendiente respuesta externa",
+                observaciones=None,
+                transition_type=StepTransitionType.WAIT_EXTERNAL,
+                external_wait=ExternalWaitInput(
+                    que_se_espera="Layout aprobado",
+                    esperando_de="Proveedor",
+                    detalle="Esperando confirmacion final",
+                    referencia_externa="LAYOUT-44",
+                    fecha_recordatorio=start_of_utc_day(2),
+                ),
+            ),
+        )
+
+        workflow = self.service.get_workflow(workflow_id)
+        self.assertEqual(updated_step.estado, StepStatus.ESPERANDO_RESPUESTA)
+        self.assertEqual(updated_step.esperando_de, "Proveedor")
+        self.assertEqual(updated_step.fecha_vencimiento.date(), start_of_utc_day(2).date())
+        self.assertEqual(workflow.estado, WorkflowStatus.ESPERANDO_RESPUESTA)
+        self.assertEqual(workflow.fecha_espera_desde.date(), updated_step.fecha_estado_actual.date())
 
     def test_today_reminder_is_allowed(self) -> None:
         workflow = self.service.quick_capture_flow(

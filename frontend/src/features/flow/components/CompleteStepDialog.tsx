@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   Button,
@@ -28,6 +28,11 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
   const [transition, setTransition] = useState<StepTransitionType>("next_task");
   const [nextTaskName, setNextTaskName] = useState("");
   const [nextTaskReminderDate, setNextTaskReminderDate] = useState("");
+  const [waitWhat, setWaitWhat] = useState("");
+  const [waitFrom, setWaitFrom] = useState("");
+  const [waitReference, setWaitReference] = useState("");
+  const [waitDetail, setWaitDetail] = useState("");
+  const [waitFollowUpDate, setWaitFollowUpDate] = useState("");
   const [comment, setComment] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -39,6 +44,11 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
       setTransition("next_task");
       setNextTaskName("");
       setNextTaskReminderDate("");
+      setWaitWhat("");
+      setWaitFrom("");
+      setWaitReference("");
+      setWaitDetail("");
+      setWaitFollowUpDate("");
       setComment("");
       setError(null);
       setSubmitting(false);
@@ -48,8 +58,18 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
   if (!step) return null;
 
   async function handleConfirm() {
+    const currentStep = step;
+    if (!currentStep) {
+      return;
+    }
+
     if (transition === "next_task" && !nextTaskName.trim()) {
-      setError("Debes indicar el nombre de la próxima tarea.");
+      setError("Debes indicar el nombre de la proxima tarea.");
+      return;
+    }
+
+    if (transition === "wait_external" && !waitWhat.trim()) {
+      setError("Debes indicar que estas esperando.");
       return;
     }
 
@@ -61,10 +81,18 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
       }
     }
 
+    if (transition === "wait_external") {
+      const reminderError = getReminderDateError(waitFollowUpDate);
+      if (reminderError) {
+        setError(reminderError);
+        return;
+      }
+    }
+
     try {
       setSubmitting(true);
       setError(null);
-      await onSubmit(step!.id, {
+      await onSubmit(currentStep.id, {
         usuario: DEFAULT_ACTOR,
         resultado_cierre: "Tarea completada",
         comentario: comment.trim() || null,
@@ -78,7 +106,16 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
                 fecha_vencimiento: toCalendarDateUtcIso(nextTaskReminderDate),
               }
             : null,
-        external_wait: transition === "wait_external" ? { que_se_espera: "Esperando respuesta externa" } : null,
+        external_wait:
+          transition === "wait_external"
+            ? {
+                que_se_espera: waitWhat.trim(),
+                esperando_de: waitFrom.trim() || null,
+                detalle: waitDetail.trim() || null,
+                referencia_externa: waitReference.trim() || null,
+                fecha_recordatorio: toCalendarDateUtcIso(waitFollowUpDate),
+              }
+            : null,
         finish_data: transition === "finish_flow" ? { resultado_final: "Flow finalizado" } : null,
       });
       onClose();
@@ -94,31 +131,33 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
       <DialogTitle>Completar tarea</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2.5}>
-          <Typography variant="subtitle2" color="text.secondary">¿Qué sigue?</Typography>
+          <Typography variant="subtitle2" color="text.secondary">
+            Que sigue?
+          </Typography>
           <ToggleButtonGroup
             exclusive
             value={transition}
-            onChange={(_, v) => v && setTransition(v)}
+            onChange={(_, value) => value && setTransition(value)}
             fullWidth
             disabled={submitting}
           >
-            <ToggleButton value="next_task">Crear próxima tarea</ToggleButton>
+            <ToggleButton value="next_task">Crear proxima tarea</ToggleButton>
             {!isWaitingExternal && <ToggleButton value="wait_external">Esperar respuesta externa</ToggleButton>}
             <ToggleButton value="finish_flow">Finalizar flow</ToggleButton>
           </ToggleButtonGroup>
 
           <Typography variant="body2" color="text.secondary">
-            {transition === "next_task" && "Hay algo más para hacer."}
+            {transition === "next_task" && "Hay algo mas para hacer."}
             {transition === "wait_external" && "Queda pendiente una respuesta o dato externo."}
-            {transition === "finish_flow" && "El tema ya quedó resuelto."}
+            {transition === "finish_flow" && "El tema ya quedo resuelto."}
           </Typography>
 
           {transition === "next_task" && (
             <Stack spacing={1.5}>
               <TextField
-                label="Nombre de la próxima tarea *"
+                label="Nombre de la proxima tarea *"
                 value={nextTaskName}
-                onChange={(e) => setNextTaskName(e.target.value)}
+                onChange={(event) => setNextTaskName(event.target.value)}
                 disabled={submitting}
                 autoFocus
               />
@@ -126,11 +165,51 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
                 value={nextTaskReminderDate}
                 onChange={(value) => {
                   setNextTaskReminderDate(value);
-                  if (error) {
-                    setError(null);
-                  }
+                  if (error) setError(null);
                 }}
                 disabled={submitting}
+                helperText="Recordatorio"
+              />
+            </Stack>
+          )}
+
+          {transition === "wait_external" && (
+            <Stack spacing={1.5}>
+              <TextField
+                label="Que estas esperando? *"
+                value={waitWhat}
+                onChange={(event) => setWaitWhat(event.target.value)}
+                disabled={submitting}
+                autoFocus
+              />
+              <TextField
+                label="De quien?"
+                value={waitFrom}
+                onChange={(event) => setWaitFrom(event.target.value)}
+                disabled={submitting}
+              />
+              <TextField
+                label="Referencia"
+                value={waitReference}
+                onChange={(event) => setWaitReference(event.target.value)}
+                disabled={submitting}
+              />
+              <TextField
+                label="Detalle"
+                multiline
+                minRows={2}
+                value={waitDetail}
+                onChange={(event) => setWaitDetail(event.target.value)}
+                disabled={submitting}
+              />
+              <ReminderDateField
+                value={waitFollowUpDate}
+                onChange={(value) => {
+                  setWaitFollowUpDate(value);
+                  if (error) setError(null);
+                }}
+                disabled={submitting}
+                helperText="Seguimiento opcional"
               />
             </Stack>
           )}
@@ -138,7 +217,7 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
           <TextField
             label={isWaitingExternal ? "Respuesta / comentario (opcional)" : "Comentario (opcional)"}
             value={comment}
-            onChange={(e) => setComment(e.target.value)}
+            onChange={(event) => setComment(event.target.value)}
             multiline
             minRows={2}
             disabled={submitting}
@@ -149,9 +228,11 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
         </Stack>
       </DialogContent>
       <DialogActions sx={{ p: 2.5 }}>
-        <Button onClick={onClose} disabled={submitting} color="inherit">Cancelar</Button>
+        <Button onClick={onClose} disabled={submitting} color="inherit">
+          Cancelar
+        </Button>
         <Button onClick={() => void handleConfirm()} disabled={submitting} variant="contained">
-          {submitting ? "Guardando..." : "Guardar decisión"}
+          {submitting ? "Guardando..." : "Guardar decision"}
         </Button>
       </DialogActions>
     </Dialog>

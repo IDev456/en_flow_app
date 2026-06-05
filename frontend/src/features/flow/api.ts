@@ -15,6 +15,7 @@ import type {
   StepDateUpdateInput,
   QuickCaptureInput,
   StepStatusUpdateInput,
+  StepUpdateInput,
   Trigger,
   TriggerCreateInput,
   TriggerDetail,
@@ -116,7 +117,7 @@ export function getStep(stepId: string) {
 
 export function updateStep(
   stepId: string,
-  input: { nombre?: string; descripcion?: string | null; fecha_ejecucion_estimada?: string | null }
+  input: StepUpdateInput
 ) {
   return apiPatch<Step>(`/steps/${stepId}`, input);
 }
