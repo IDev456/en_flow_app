@@ -42,6 +42,7 @@ import {
   isDateGroupedQuickFilter,
   matchesFlowQuickFilter,
   matchesFlowStateFilter,
+  normalizeVisibleFlowFilter,
   selectableFlowQuickFilterOptions,
   type FlowCountSummary,
   type FlowFilter,
@@ -207,6 +208,13 @@ export function FlowTableSection({
   const today = getTodayLocalDateInput();
   const flowRows = useMemo(() => buildFlowRows(items, today), [items, today]);
   const resolvedCounts = useMemo(() => currentCounts ?? getFlowCounts(items), [currentCounts, items]);
+  const visibleStateFilter = normalizeVisibleFlowFilter(stateFilter);
+
+  useEffect(() => {
+    if (visibleStateFilter !== stateFilter) {
+      onStateFilterChange(visibleStateFilter);
+    }
+  }, [onStateFilterChange, stateFilter, visibleStateFilter]);
 
   useEffect(() => {
     if (!flowSearchOpen) {
@@ -232,16 +240,16 @@ export function FlowTableSection({
 
   const activeFlowQuickFilterLabel =
     flowQuickFilterOptions.find((option) => option.value === flowQuickFilter)?.label ?? "Filtro rápido";
-  const activeFlowFilterDescription = buildActiveFlowFilterDescription(stateFilter, flowQuickFilter);
+  const activeFlowFilterDescription = buildActiveFlowFilterDescription(visibleStateFilter, flowQuickFilter);
   const flowSearchActive = flowSearchValue.trim().length > 0;
 
   const allowedQuickFilterValues = useMemo(
     () => {
-      const stateAllowedValues = getAllowedFlowQuickFiltersForStateFilter(stateFilter);
+      const stateAllowedValues = getAllowedFlowQuickFiltersForStateFilter(visibleStateFilter);
       const configuredValues = allowedQuickFilters ?? selectableFlowQuickFilterOptions.map((option) => option.value);
       return configuredValues.filter((value) => stateAllowedValues.includes(value));
     },
-    [allowedQuickFilters, stateFilter]
+    [allowedQuickFilters, visibleStateFilter]
   );
 
   useEffect(() => {
@@ -252,8 +260,8 @@ export function FlowTableSection({
   }, [allowedQuickFilterValues, flowQuickFilter]);
 
   const stateFilteredFlowRows = useMemo(
-    () => flowRows.filter((row) => matchesFlowStateFilter(row.status, stateFilter)),
-    [flowRows, stateFilter]
+    () => flowRows.filter((row) => matchesFlowStateFilter(row.status, visibleStateFilter)),
+    [flowRows, visibleStateFilter]
   );
 
   const quickFilterCountsByValue = useMemo<Record<FlowQuickFilter, number>>(
@@ -265,6 +273,11 @@ export function FlowTableSection({
       future: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "future", today)).length,
       without_project: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "without_project", today)).length,
       without_date: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "without_date", today)).length,
+      waiting_today: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "waiting_today", today)).length,
+      waiting_days: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "waiting_days", today)).length,
+      waiting_week: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "waiting_week", today)).length,
+      waiting_15_plus: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "waiting_15_plus", today)).length,
+      waiting_month_plus: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "waiting_month_plus", today)).length,
     }),
     [stateFilteredFlowRows, today]
   );
@@ -363,8 +376,8 @@ export function FlowTableSection({
     }
   }
 
-  const dateColumnVisibility = getFlowDateColumnVisibility(stateFilter);
-  const showStatusColumn = shouldShowStatusColumn(stateFilter);
+  const dateColumnVisibility = getFlowDateColumnVisibility(visibleStateFilter);
+  const showStatusColumn = shouldShowStatusColumn(visibleStateFilter);
 
   const flowColumns = useMemo<GridColDef<FlowGridRow>[]>(() => {
     const columns: GridColDef<FlowGridRow>[] = [
@@ -848,16 +861,16 @@ export function FlowTableSection({
       groupedFlowSections.flatMap((group) => group.rows).find((row) => row.id === requirementsMenu.rowId) ??
       null
     : null;
-  const operationalHighlight = getStatusHighlight("activo", theme);
+  const activeHighlight = getStatusHighlight("activo", theme);
+  const waitingHighlight = getStatusHighlight("esperando_respuesta", theme);
   const nonOperationalHighlight = getStatusHighlight("cancelado", theme);
-  const neutralHighlight = theme.palette.status.neutral;
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {showStateTabs ? (
         <Box sx={{ px: 1.5, pt: 1.25, borderBottom: "1px solid", borderColor: "divider" }}>
           <Tabs
-            value={stateFilter}
+            value={visibleStateFilter}
             onChange={(_, value: FlowFilter) => onStateFilterChange(value)}
             variant="scrollable"
             scrollButtons="auto"
@@ -880,10 +893,16 @@ export function FlowTableSection({
             {stateTabsVariant === "summary" ? (
               [
                 <Tab
-                  key="summary_operational"
-                  value="operational"
-                  label={`Operativos (${resolvedCounts.active + resolvedCounts.waiting})`}
-                  sx={getSemanticTabSx(operationalHighlight.accent, operationalHighlight.soft)}
+                  key="summary_active"
+                  value="active"
+                  label={`Activos (${resolvedCounts.active})`}
+                  sx={getSemanticTabSx(activeHighlight.accent, activeHighlight.soft)}
+                />,
+                <Tab
+                  key="summary_waiting"
+                  value="waiting"
+                  label={`Esperando (${resolvedCounts.waiting})`}
+                  sx={getSemanticTabSx(waitingHighlight.accent, waitingHighlight.soft)}
                 />,
                 <Tab
                   key="summary_non_operational"
@@ -891,24 +910,14 @@ export function FlowTableSection({
                   label={`No operativos (${resolvedCounts.cancelled + resolvedCounts.finalized})`}
                   sx={getSemanticTabSx(nonOperationalHighlight.accent, nonOperationalHighlight.soft)}
                 />,
-                <Tab
-                  key="summary_all"
-                  value="all"
-                  label={`Todos (${resolvedCounts.active + resolvedCounts.waiting + resolvedCounts.cancelled + resolvedCounts.finalized})`}
-                  sx={getSemanticTabSx(neutralHighlight.accent, neutralHighlight.soft)}
-                />,
               ]
             ) : (
               [
                 <Tab key="tab_active" value="active" label={`Activos (${resolvedCounts.active})`} />,
                 <Tab key="tab_waiting" value="waiting" label={`Esperando (${resolvedCounts.waiting})`} />,
+                <Tab key="tab_non_operational" value="non_operational" label={`No operativos (${resolvedCounts.cancelled + resolvedCounts.finalized})`} />,
                 <Tab key="tab_cancelled" value="cancelled" label={`Cancelados (${resolvedCounts.cancelled})`} />,
                 <Tab key="tab_finalized" value="finalized" label={`Finalizados (${resolvedCounts.finalized})`} />,
-                <Tab
-                  key="tab_all"
-                  value="all"
-                  label={`Todos (${resolvedCounts.active + resolvedCounts.waiting + resolvedCounts.cancelled + resolvedCounts.finalized})`}
-                />,
               ]
             )}
           </Tabs>

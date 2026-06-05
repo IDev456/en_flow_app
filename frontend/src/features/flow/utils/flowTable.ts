@@ -12,7 +12,19 @@ import {
 } from "../utils";
 
 export type FlowFilter = "all" | "operational" | "non_operational" | "active" | "waiting" | "cancelled" | "finalized";
-export type FlowQuickFilter = "none" | "today" | "this_week" | "past" | "future" | "without_project" | "without_date";
+export type FlowQuickFilter =
+  | "none"
+  | "today"
+  | "this_week"
+  | "past"
+  | "future"
+  | "without_project"
+  | "without_date"
+  | "waiting_today"
+  | "waiting_days"
+  | "waiting_week"
+  | "waiting_15_plus"
+  | "waiting_month_plus";
 
 export type LinkedRequirementRow = {
   id: string;
@@ -71,6 +83,11 @@ export const flowQuickFilterOptions = [
   { value: "this_week", label: "Esta semana" },
   { value: "past", label: "Pasados" },
   { value: "future", label: "Futuros" },
+  { value: "waiting_today", label: "Hoy" },
+  { value: "waiting_days", label: "Hace 1-6 dias" },
+  { value: "waiting_week", label: "Hace 1 semana" },
+  { value: "waiting_15_plus", label: "Mas de 15 dias" },
+  { value: "waiting_month_plus", label: "Mas de 1 mes" },
   { value: "without_project", label: "Sin proyecto" },
   { value: "without_date", label: "Sin fecha de ejecución" },
 ] as const satisfies ReadonlyArray<{ value: FlowQuickFilter; label: string }>;
@@ -82,7 +99,7 @@ export function getAllowedFlowQuickFiltersForStateFilter(stateFilter: FlowFilter
     case "active":
       return ["today", "this_week", "past", "future", "without_project", "without_date"];
     case "waiting":
-      return ["today", "this_week", "past", "without_project"];
+      return ["waiting_today", "waiting_days", "waiting_week", "waiting_15_plus", "waiting_month_plus", "without_project"];
     case "finalized":
     case "cancelled":
     case "non_operational":
@@ -92,6 +109,13 @@ export function getAllowedFlowQuickFiltersForStateFilter(stateFilter: FlowFilter
     default:
       return ["today", "this_week", "past", "future", "without_project", "without_date"];
   }
+}
+
+export function normalizeVisibleFlowFilter(filter: FlowFilter | null | undefined): FlowFilter {
+  if (!filter || filter === "all" || filter === "operational") {
+    return "active";
+  }
+  return filter;
 }
 
 function getDateValue(value: string | null | undefined) {
@@ -227,6 +251,16 @@ export function getFlowQuickFilterDescription(filter: FlowQuickFilter) {
       return "sin proyecto";
     case "without_date":
       return "sin fecha de ejecución";
+    case "waiting_today":
+      return "hoy";
+    case "waiting_days":
+      return "hace 1-6 dias";
+    case "waiting_week":
+      return "hace 1 semana";
+    case "waiting_15_plus":
+      return "mas de 15 dias";
+    case "waiting_month_plus":
+      return "mas de 1 mes";
     case "none":
     default:
       return "";
@@ -251,6 +285,29 @@ function rowMatchesWithoutDateFilter(row: FlowGridRow) {
   return getFlowFilterFromStatus(row.status) === "active" && !row.executionDateInput;
 }
 
+function getWaitingAgeDays(row: FlowGridRow, today: string) {
+  if (getFlowFilterFromStatus(row.status) !== "waiting" || !row.waitingSinceInput) {
+    return null;
+  }
+
+  const diffDays = getCalendarDayDiff(row.waitingSinceInput, today);
+  return diffDays === null ? null : Math.max(0, -diffDays);
+}
+
+function matchesWaitingAgeQuickFilter(row: FlowGridRow, filter: FlowQuickFilter, today: string) {
+  const waitingAgeDays = getWaitingAgeDays(row, today);
+  if (waitingAgeDays === null) {
+    return false;
+  }
+
+  if (filter === "waiting_today") return waitingAgeDays === 0;
+  if (filter === "waiting_days") return waitingAgeDays >= 1 && waitingAgeDays <= 6;
+  if (filter === "waiting_week") return waitingAgeDays >= 7 && waitingAgeDays <= 14;
+  if (filter === "waiting_15_plus") return waitingAgeDays >= 15 && waitingAgeDays <= 30;
+  if (filter === "waiting_month_plus") return waitingAgeDays >= 31;
+  return false;
+}
+
 export function matchesFlowQuickFilter(row: FlowGridRow, filter: FlowQuickFilter, today: string) {
   if (filter === "none") {
     return true;
@@ -262,6 +319,16 @@ export function matchesFlowQuickFilter(row: FlowGridRow, filter: FlowQuickFilter
 
   if (filter === "without_date") {
     return rowMatchesWithoutDateFilter(row);
+  }
+
+  if (
+    filter === "waiting_today" ||
+    filter === "waiting_days" ||
+    filter === "waiting_week" ||
+    filter === "waiting_15_plus" ||
+    filter === "waiting_month_plus"
+  ) {
+    return matchesWaitingAgeQuickFilter(row, filter, today);
   }
 
   const rowDay = toCalendarDayValue(getRowContextualDateInput(row) || null);

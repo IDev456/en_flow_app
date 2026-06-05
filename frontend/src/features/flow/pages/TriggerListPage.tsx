@@ -108,7 +108,19 @@ import {
 
 type ViewMode = "requirements" | "flows";
 type FlowFilter = "all" | "operational" | "non_operational" | "active" | "waiting" | "cancelled" | "finalized";
-type FlowQuickFilter = "none" | "today" | "this_week" | "past" | "future" | "without_project" | "without_date";
+type FlowQuickFilter =
+  | "none"
+  | "today"
+  | "this_week"
+  | "past"
+  | "future"
+  | "without_project"
+  | "without_date"
+  | "waiting_today"
+  | "waiting_days"
+  | "waiting_week"
+  | "waiting_15_plus"
+  | "waiting_month_plus";
 
 type TriggerListPageProps = {
   defaultView?: ViewMode;
@@ -199,13 +211,24 @@ const flowQuickFilterOptions = [
   { value: "this_week", label: "Esta semana" },
   { value: "past", label: "Pasados" },
   { value: "future", label: "Futuros" },
+  { value: "waiting_today", label: "Hoy" },
+  { value: "waiting_days", label: "Hace 1-6 dias" },
+  { value: "waiting_week", label: "Hace 1 semana" },
+  { value: "waiting_15_plus", label: "Mas de 15 dias" },
+  { value: "waiting_month_plus", label: "Mas de 1 mes" },
   { value: "without_project", label: "Sin proyecto" },
   { value: "without_date", label: "Sin fecha de ejecución" },
 ] as const satisfies ReadonlyArray<{ value: FlowQuickFilter; label: string }>;
 const selectableFlowQuickFilterOptions = flowQuickFilterOptions.filter((option) => option.value !== "none");
 const FLOW_PRIMARY_COLUMN_FIELD = "taskName";
 const FLOW_COLUMN_ORDER_STORAGE_KEY = "en-flow.trigger-list.flow-column-order";
-const attentionFlowQuickFilters = new Set<FlowQuickFilter>(["past", "without_project", "without_date"]);
+const attentionFlowQuickFilters = new Set<FlowQuickFilter>([
+  "past",
+  "without_project",
+  "without_date",
+  "waiting_15_plus",
+  "waiting_month_plus",
+]);
 
 function getStoredFlowColumnOrder() {
   if (typeof window === "undefined") {
@@ -317,7 +340,7 @@ function getGroupedHeaderMinWidth(columns: GridColDef<FlowGridRow>[]) {
 }
 
 function isOperationalFlowQuickFilter(filter: FlowQuickFilter) {
-  return filter === "today" || filter === "this_week";
+  return filter === "today" || filter === "this_week" || filter === "waiting_today" || filter === "waiting_days" || filter === "waiting_week";
 }
 
 function getAllowedFlowQuickFiltersForStateFilter(stateFilter: FlowFilter): FlowQuickFilter[] {
@@ -325,7 +348,7 @@ function getAllowedFlowQuickFiltersForStateFilter(stateFilter: FlowFilter): Flow
     case "active":
       return ["today", "this_week", "past", "future", "without_project", "without_date"];
     case "waiting":
-      return ["today", "this_week", "past", "without_project"];
+      return ["waiting_today", "waiting_days", "waiting_week", "waiting_15_plus", "waiting_month_plus", "without_project"];
     case "finalized":
     case "cancelled":
     case "non_operational":
@@ -335,6 +358,13 @@ function getAllowedFlowQuickFiltersForStateFilter(stateFilter: FlowFilter): Flow
     default:
       return ["today", "this_week", "past", "future", "without_project", "without_date"];
   }
+}
+
+function normalizeVisibleFlowFilter(filter: FlowFilter | null | undefined): FlowFilter {
+  if (!filter || filter === "all" || filter === "operational") {
+    return "active";
+  }
+  return filter;
 }
 
 function renderFlowQuickFilterOptionLabel(
@@ -412,8 +442,8 @@ function matchesFlowStateFilter(statusValue: string, filter: FlowFilter): boolea
   return resolved === filter;
 }
 
-function getDefaultFilterForView(view: ViewMode): FlowFilter {
-  return view === "flows" ? "active" : "all";
+function getDefaultFilterForView(_view: ViewMode): FlowFilter {
+  return "active";
 }
 
 function pickRelevantStep(workflow: WorkflowDetail): Step | null {
@@ -626,6 +656,29 @@ function rowMatchesWithoutDateFilter(row: FlowGridRow) {
   return getFlowFilterFromStatus(row.status) === "active" && !row.executionDateInput;
 }
 
+function getWaitingAgeDays(row: FlowGridRow, today: string) {
+  if (getFlowFilterFromStatus(row.status) !== "waiting" || !row.waitingSinceInput) {
+    return null;
+  }
+
+  const diffDays = getCalendarDayDiff(row.waitingSinceInput, today);
+  return diffDays === null ? null : Math.max(0, -diffDays);
+}
+
+function matchesWaitingAgeQuickFilter(row: FlowGridRow, filter: FlowQuickFilter, today: string) {
+  const waitingAgeDays = getWaitingAgeDays(row, today);
+  if (waitingAgeDays === null) {
+    return false;
+  }
+
+  if (filter === "waiting_today") return waitingAgeDays === 0;
+  if (filter === "waiting_days") return waitingAgeDays >= 1 && waitingAgeDays <= 6;
+  if (filter === "waiting_week") return waitingAgeDays >= 7 && waitingAgeDays <= 14;
+  if (filter === "waiting_15_plus") return waitingAgeDays >= 15 && waitingAgeDays <= 30;
+  if (filter === "waiting_month_plus") return waitingAgeDays >= 31;
+  return false;
+}
+
 function matchesFlowQuickFilter(row: FlowGridRow, filter: FlowQuickFilter, today: string) {
   if (filter === "none") {
     return true;
@@ -637,6 +690,16 @@ function matchesFlowQuickFilter(row: FlowGridRow, filter: FlowQuickFilter, today
 
   if (filter === "without_date") {
     return rowMatchesWithoutDateFilter(row);
+  }
+
+  if (
+    filter === "waiting_today" ||
+    filter === "waiting_days" ||
+    filter === "waiting_week" ||
+    filter === "waiting_15_plus" ||
+    filter === "waiting_month_plus"
+  ) {
+    return matchesWaitingAgeQuickFilter(row, filter, today);
   }
 
   const rowDay = toCalendarDayValue(getRowContextualDateInput(row) || null);
@@ -742,6 +805,16 @@ function getFlowQuickFilterDescription(filter: FlowQuickFilter) {
       return "sin proyecto";
     case "without_date":
       return "sin fecha de ejecución";
+    case "waiting_today":
+      return "hoy";
+    case "waiting_days":
+      return "hace 1-6 dias";
+    case "waiting_week":
+      return "hace 1 semana";
+    case "waiting_15_plus":
+      return "mas de 15 dias";
+    case "waiting_month_plus":
+      return "mas de 1 mes";
     case "none":
     default:
       return "";
@@ -1108,7 +1181,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
   const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode);
   const [stateFilter, setStateFilter] = useState<FlowFilter>(
-    () => restoreState?.stateFilter ?? getDefaultFilterForView(initialViewMode)
+    () => normalizeVisibleFlowFilter(restoreState?.stateFilter ?? getDefaultFilterForView(initialViewMode))
   );
   const [activeAmbito, setActiveAmbito] = useState<ActiveAmbitoMode>(() => getStoredActiveAmbito());
   const [loading, setLoading] = useState(true);
@@ -1154,6 +1227,13 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const pendingDateInputRefs = useRef(new Map<string, HTMLInputElement | null>());
   const searchParams = new URLSearchParams(location.search);
   const isAmbitoAdminView = defaultView === "requirements" && searchParams.get("admin") === "ambito";
+
+  useEffect(() => {
+    const normalizedFilter = normalizeVisibleFlowFilter(stateFilter);
+    if (normalizedFilter !== stateFilter) {
+      setStateFilter(normalizedFilter);
+    }
+  }, [stateFilter]);
 
   useEffect(() => {
     void loadData();
@@ -1399,9 +1479,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     }
   }, [allowedFlowQuickFilterValues, flowQuickFilter]);
   const resetFilterAction =
-    stateFilter !== "all" ? (
-      <Button size="small" variant="outlined" color="inherit" onClick={() => setStateFilter("all")}>
-        Ver todos
+    stateFilter !== "active" ? (
+      <Button size="small" variant="outlined" color="inherit" onClick={() => setStateFilter("active")}>
+        Ver activos
       </Button>
     ) : undefined;
   const flowRows = useMemo<FlowGridRow[]>(() => {
@@ -1511,6 +1591,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       future: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "future", today)).length,
       without_project: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "without_project", today)).length,
       without_date: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "without_date", today)).length,
+      waiting_today: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "waiting_today", today)).length,
+      waiting_days: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "waiting_days", today)).length,
+      waiting_week: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "waiting_week", today)).length,
+      waiting_15_plus: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "waiting_15_plus", today)).length,
+      waiting_month_plus: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "waiting_month_plus", today)).length,
     }),
     [stateFilteredFlowRows, today]
   );
@@ -3094,174 +3179,52 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
               </Paper>
             </Box>
 
-            <Box sx={{ width: "100%", maxWidth: 560, ml: { lg: "auto" } }}>
+            <Box sx={{ width: "100%", maxWidth: 620, ml: { lg: "auto" } }}>
               <Paper variant="outlined" sx={{ overflow: "hidden" }}>
                 <Box
                   sx={{
                     display: "grid",
-                    gridTemplateColumns: "1fr 1fr 1fr 1fr auto",
+                    gridTemplateColumns: { xs: "1fr 1fr", sm: "repeat(5, minmax(0, 1fr))" },
                     gridTemplateRows: "auto auto",
                   }}
                 >
-                  {/* Row 1 â€“ Grupo Operativos */}
-                  <ButtonBase
-                    onClick={() => setStateFilter("operational")}
-                    sx={{
-                      gridColumn: "1 / 3",
-                      gridRow: 1,
-                      py: 0.5,
-                      px: 0.75,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderRight: "1px solid",
-                      borderBottom: "1px solid",
-                      borderColor: "divider",
-                      backgroundColor:
-                        stateFilter === "operational"
-                          ? alpha(theme.palette.status.active.container, 0.65)
-                          : stateFilter === "active" || stateFilter === "waiting"
-                            ? alpha(theme.palette.status.active.container, 0.2)
-                            : "transparent",
-                      color:
-                        stateFilter === "operational"
-                          ? theme.palette.status.active.onContainer
-                          : "text.secondary",
-                      transition: "background-color 0.15s",
-                      "&:hover": {
-                        backgroundColor: alpha(theme.palette.status.active.container, 0.35),
-                      },
-                    }}
-                  >
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        fontWeight: stateFilter === "operational" ? 600 : 400,
-                        fontSize: "0.70rem",
-                        lineHeight: 1.2,
-                        letterSpacing: "0.02em",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      Operativos ({currentCounts.active + currentCounts.waiting})
-                    </Typography>
-                  </ButtonBase>
-
-                  {/* Row 1 â€“ Grupo No operativos */}
-                  <ButtonBase
-                    onClick={() => setStateFilter("non_operational")}
-                    sx={{
-                      gridColumn: "3 / 5",
-                      gridRow: 1,
-                      py: 0.5,
-                      px: 0.75,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderRight: "1px solid",
-                      borderBottom: "1px solid",
-                      borderColor: "divider",
-                      backgroundColor:
-                        stateFilter === "non_operational"
-                          ? alpha(theme.palette.status.cancelled.container, 0.65)
-                          : stateFilter === "cancelled" || stateFilter === "finalized"
-                            ? alpha(theme.palette.status.cancelled.container, 0.2)
-                            : "transparent",
-                      color:
-                        stateFilter === "non_operational"
-                          ? theme.palette.status.cancelled.onContainer
-                          : "text.secondary",
-                      transition: "background-color 0.15s",
-                      "&:hover": {
-                        backgroundColor: alpha(theme.palette.status.cancelled.container, 0.35),
-                      },
-                    }}
-                  >
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        fontWeight: stateFilter === "non_operational" ? 600 : 400,
-                        fontSize: "0.70rem",
-                        lineHeight: 1.2,
-                        letterSpacing: "0.02em",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      No operativos ({currentCounts.cancelled + currentCounts.finalized})
-                    </Typography>
-                  </ButtonBase>
-
-                  {/* Col 5, Rows 1-2 â€“ Todos */}
-                  <ButtonBase
-                    onClick={() => setStateFilter("all")}
-                    sx={{
-                      gridColumn: 5,
-                      gridRow: "1 / 3",
-                      px: 1.5,
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      minWidth: 68,
-                      backgroundColor:
-                        stateFilter === "all"
-                          ? alpha(theme.palette.status.neutral.container, 0.65)
-                          : "transparent",
-                      color:
-                        stateFilter === "all"
-                          ? theme.palette.status.neutral.onContainer
-                          : "text.secondary",
-                      transition: "background-color 0.15s",
-                      "&:hover": {
-                        backgroundColor: alpha(theme.palette.status.neutral.container, 0.35),
-                      },
-                    }}
-                  >
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        fontWeight: stateFilter === "all" ? 600 : 400,
-                        fontSize: "0.70rem",
-                        lineHeight: 1.2,
-                        letterSpacing: "0.02em",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      Todos (
-                      {currentCounts.active +
-                        currentCounts.waiting +
-                        currentCounts.cancelled +
-                        currentCounts.finalized}
-                      )
-                    </Typography>
-                  </ButtonBase>
-
-                  {/* Row 2 â€“ Botones individuales */}
                   {(
                     [
                       {
                         value: "active" as const,
                         label: "Activos",
                         token: theme.palette.status.active,
+                        count: currentCounts.active,
                       },
                       {
                         value: "waiting" as const,
                         label: "Esperando",
                         token: theme.palette.status.waiting,
+                        count: currentCounts.waiting,
+                      },
+                      {
+                        value: "non_operational" as const,
+                        label: "No operativos",
+                        token: theme.palette.status.cancelled,
+                        count: currentCounts.cancelled + currentCounts.finalized,
                       },
                       {
                         value: "cancelled" as const,
                         label: "Cancelados",
                         token: theme.palette.status.cancelled,
+                        count: currentCounts.cancelled,
                       },
                       {
                         value: "finalized" as const,
                         label: "Finalizados",
                         token: theme.palette.status.finalized,
+                        count: currentCounts.finalized,
                       },
                     ] as const
                   ).map((option, idx) => {
-                    const isSelected = stateFilter === option.value;
+                    const isSelected =
+                      stateFilter === option.value ||
+                      (option.value === "non_operational" && (stateFilter === "cancelled" || stateFilter === "finalized"));
                     const iconColor = isSelected ? option.token.accent : "text.disabled";
                     const iconSx = { fontSize: 13, mb: 0.25, color: iconColor };
                     return (
@@ -3269,17 +3232,23 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                         key={option.value}
                         onClick={() => setStateFilter(option.value)}
                         sx={{
-                          gridColumn: idx + 1,
-                          gridRow: 2,
+                          gridColumn: { xs: idx === 4 ? "1 / 3" : undefined, sm: idx + 1 },
+                          gridRow: { xs: Math.floor(idx / 2) + 1, sm: 1 },
                           py: 1,
                           px: 0.5,
                           display: "flex",
                           flexDirection: "column",
                           alignItems: "center",
                           justifyContent: "center",
-                          ...(idx < 3
-                            ? { borderRight: "1px solid", borderColor: "divider" }
-                            : {}),
+                          borderRight: {
+                            xs: idx % 2 === 0 && idx !== 4 ? "1px solid" : "none",
+                            sm: idx < 4 ? "1px solid" : "none",
+                          },
+                          borderBottom: {
+                            xs: idx < 4 ? "1px solid" : "none",
+                            sm: "none",
+                          },
+                          borderColor: "divider",
                           backgroundColor: isSelected
                             ? option.token.container
                             : "transparent",
@@ -3292,6 +3261,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       >
                         {option.value === "active" && <BoltRoundedIcon sx={iconSx} />}
                         {option.value === "waiting" && <HourglassTopRoundedIcon sx={iconSx} />}
+                        {option.value === "non_operational" && <CancelOutlinedIcon sx={iconSx} />}
                         {option.value === "cancelled" && <CancelOutlinedIcon sx={iconSx} />}
                         {option.value === "finalized" && <CheckCircleRoundedIcon sx={iconSx} />}
                         <Typography
@@ -3303,7 +3273,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                             whiteSpace: "nowrap",
                           }}
                         >
-                          {option.label} ({currentCounts[option.value] ?? 0})
+                          {option.label} ({option.count})
                         </Typography>
                       </ButtonBase>
                     );

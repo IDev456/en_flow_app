@@ -36,7 +36,7 @@ import { AmbitoChip } from "../components/AmbitoChip";
 import { FlowTableSection } from "../components/FlowTableSection";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Ambito, TriggerDetail, WorkflowDetail } from "../types";
-import { type FlowFilter, getFlowCounts } from "../utils/flowTable";
+import { type FlowFilter, getFlowCounts, normalizeVisibleFlowFilter } from "../utils/flowTable";
 import { getAmbitoLabel, getVisibleTriggerStatus, getVisibleWorkflowStatus } from "../utils";
 
 const SOLICITANTE_MAX = 150;
@@ -69,7 +69,9 @@ export function TriggerDetailPage() {
   const [requirementError, setRequirementError] = useState<string | null>(null);
   const [requirementToastOpen, setRequirementToastOpen] = useState(false);
   const [ambitoConfirmOpen, setAmbitoConfirmOpen] = useState(false);
-  const [projectFlowFilter, setProjectFlowFilter] = useState<FlowFilter>(() => restoreState?.projectFlowFilter ?? "operational");
+  const [projectFlowFilter, setProjectFlowFilter] = useState<FlowFilter>(() =>
+    normalizeVisibleFlowFilter(restoreState?.projectFlowFilter ?? "active")
+  );
 
   function getPrimaryDetail(currentTrigger: TriggerDetail) {
     return currentTrigger.descripcion?.trim() || "Proyecto sin detalle";
@@ -91,6 +93,12 @@ export function TriggerDetailPage() {
   }, [trigger?.id, trigger?.solicitante, trigger?.descripcion, trigger?.ambito]);
 
   useEffect(() => {
+    const normalizedFilter = normalizeVisibleFlowFilter(projectFlowFilter);
+    if (normalizedFilter !== projectFlowFilter) {
+      setProjectFlowFilter(normalizedFilter);
+      return;
+    }
+
     if (restoreState?.projectFlowFilter === projectFlowFilter) {
       return;
     }
@@ -518,7 +526,18 @@ export function TriggerDetailPage() {
               showStateTabs
               stateTabsVariant="summary"
               showProjectColumn={false}
-              allowedQuickFilters={["today", "this_week", "past", "future", "without_date"]}
+              allowedQuickFilters={[
+                "today",
+                "this_week",
+                "past",
+                "future",
+                "without_date",
+                "waiting_today",
+                "waiting_days",
+                "waiting_week",
+                "waiting_15_plus",
+                "waiting_month_plus",
+              ]}
               quickFilterPlaceholder="Buscar flow o tarea del proyecto..."
               noRowsTitle="No hay flows para este filtro"
               noRowsDescription="Probá con otro estado o capturá una nueva tarea para este proyecto."
