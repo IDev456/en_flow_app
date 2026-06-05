@@ -27,7 +27,7 @@ import {
 import { flushSync } from "react-dom";
 import { Link as RouterLink } from "react-router-dom";
 
-import { updateStep, updateStepDate } from "../api";
+import { updateStep } from "../api";
 import { ReminderDateField } from "./ReminderDateField";
 import type {
   AttachmentInput,
@@ -46,9 +46,9 @@ import {
   formatCalendarDate,
   toCalendarDateInputValue,
   formatDateOnly,
-  formatRelativeCalendarDay,
-  getReminderDateError,
+  formatElapsedTime,
   getTodayLocalDateInput,
+  isPastCalendarDateInput,
   openNativeDateInputPicker,
   toCalendarDateUtcIso,
 } from "../utils";
@@ -127,17 +127,16 @@ export function StepDetailPanel({
   const [stepDraftName, setStepDraftName] = useState("");
   const [stepDraftDescription, setStepDraftDescription] = useState("");
   const [stepDraftExecutionDate, setStepDraftExecutionDate] = useState("");
-  const [stepDraftReminderDate, setStepDraftReminderDate] = useState("");
   const [stepDraftWaitingWhat, setStepDraftWaitingWhat] = useState("");
   const [stepDraftWaitingFrom, setStepDraftWaitingFrom] = useState("");
   const [stepDraftWaitingReference, setStepDraftWaitingReference] = useState("");
   const [stepEditError, setStepEditError] = useState<string | null>(null);
   const [savingStep, setSavingStep] = useState(false);
   const [stepToastOpen, setStepToastOpen] = useState(false);
-  const [isReminderEditing, setIsReminderEditing] = useState(false);
-  const [reminderDraft, setReminderDraft] = useState("");
-  const [savingReminder, setSavingReminder] = useState(false);
-  const reminderInputRef = useRef<HTMLInputElement | null>(null);
+  const [isExecutionDateEditing, setIsExecutionDateEditing] = useState(false);
+  const [executionDateDraft, setExecutionDateDraft] = useState("");
+  const [savingExecutionDate, setSavingExecutionDate] = useState(false);
+  const executionDateInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!step) {
@@ -169,13 +168,12 @@ export function StepDetailPanel({
     setStepDraftName(step.nombre);
     setStepDraftDescription(step.descripcion ?? "");
     setStepDraftExecutionDate(toCalendarDateInputValue(step.fecha_ejecucion_estimada));
-    setStepDraftReminderDate(toCalendarDateInputValue(step.fecha_vencimiento));
     setStepDraftWaitingWhat(step.expected_external_event ?? "");
     setStepDraftWaitingFrom(step.esperando_de ?? "");
     setStepDraftWaitingReference(step.external_reference ?? "");
-    setIsReminderEditing(false);
-    setReminderDraft(toCalendarDateInputValue(step.fecha_vencimiento));
-    setSavingReminder(false);
+    setIsExecutionDateEditing(false);
+    setExecutionDateDraft(toCalendarDateInputValue(step.fecha_ejecucion_estimada));
+    setSavingExecutionDate(false);
     setStepEditError(null);
     setStepToastOpen(false);
   }, [step?.id, step?.estado, step?.expected_external_event, step?.external_reference, step?.external_wait_reason]);
@@ -191,7 +189,7 @@ export function StepDetailPanel({
         <CardContent sx={{ p: { xs: 3, md: 4 } }}>
           <Stack spacing={1}>
             <Typography variant="h5">Sin tarea seleccionada</Typography>
-            <Typography color="text.secondary">Seleccioná un paso para ver sus registros y recordatorios.</Typography>
+            <Typography color="text.secondary">Seleccioná un paso para ver sus registros y fechas operativas.</Typography>
           </Stack>
         </CardContent>
       </Card>
@@ -314,12 +312,9 @@ export function StepDetailPanel({
       return;
     }
 
-    if (resolveTransition === "next_task") {
-      const reminderError = getReminderDateError(resolveNextTaskDueDate);
-      if (reminderError) {
-        setResolveError(reminderError);
-        return;
-      }
+    if (resolveTransition === "next_task" && isPastCalendarDateInput(resolveNextTaskDueDate, todayLocalDateInput)) {
+      setResolveError("La fecha de ejecucion no puede ser una fecha pasada.");
+      return;
     }
 
     try {
@@ -336,7 +331,7 @@ export function StepDetailPanel({
                 nombre: resolveNextTaskName.trim(),
                 descripcion: resolveNextTaskDescription.trim() || null,
                 asignado_a: resolveNextTaskAssignee.trim() || null,
-                fecha_vencimiento: toCalendarDateUtcIso(resolveNextTaskDueDate),
+                fecha_ejecucion_estimada: toCalendarDateUtcIso(resolveNextTaskDueDate),
               }
             : null,
         finish_data:
@@ -363,7 +358,6 @@ export function StepDetailPanel({
     setStepDraftName(step.nombre);
     setStepDraftDescription(step.descripcion ?? "");
     setStepDraftExecutionDate(toCalendarDateInputValue(step.fecha_ejecucion_estimada));
-    setStepDraftReminderDate(toCalendarDateInputValue(step.fecha_vencimiento));
     setStepDraftWaitingWhat(step.expected_external_event ?? "");
     setStepDraftWaitingFrom(step.esperando_de ?? "");
     setStepDraftWaitingReference(step.external_reference ?? "");
@@ -376,7 +370,6 @@ export function StepDetailPanel({
     setStepDraftName(step.nombre);
     setStepDraftDescription(step.descripcion ?? "");
     setStepDraftExecutionDate(toCalendarDateInputValue(step.fecha_ejecucion_estimada));
-    setStepDraftReminderDate(toCalendarDateInputValue(step.fecha_vencimiento));
     setStepDraftWaitingWhat(step.expected_external_event ?? "");
     setStepDraftWaitingFrom(step.esperando_de ?? "");
     setStepDraftWaitingReference(step.external_reference ?? "");
@@ -393,31 +386,23 @@ export function StepDetailPanel({
 
     const nextName = stepDraftName.trim();
     const nextDescription = stepDraftDescription.trim();
-    const nextExecutionDate = toCalendarDateUtcIso(stepDraftExecutionDate);
-    const nextReminderDate = toCalendarDateUtcIso(stepDraftReminderDate);
+    const nextExecutionDate = isWaitingExternal ? step.fecha_ejecucion_estimada : toCalendarDateUtcIso(stepDraftExecutionDate);
     const nextWaitingWhat = stepDraftWaitingWhat.trim();
     const nextWaitingFrom = stepDraftWaitingFrom.trim();
     const nextWaitingReference = stepDraftWaitingReference.trim();
-    const currentReminderInput = toCalendarDateInputValue(step.fecha_vencimiento);
     const hasMetadataChanges =
       nextName !== step.nombre ||
       nextDescription !== (step.descripcion ?? "") ||
-      nextExecutionDate !== step.fecha_ejecucion_estimada ||
+      (!isWaitingExternal && nextExecutionDate !== step.fecha_ejecucion_estimada) ||
       nextWaitingWhat !== (step.expected_external_event ?? "") ||
       nextWaitingFrom !== (step.esperando_de ?? "") ||
       nextWaitingReference !== (step.external_reference ?? "");
-    const hasReminderChanges = stepDraftReminderDate !== currentReminderInput;
 
     if (!nextName) {
       setStepEditError("Debes indicar el nombre de la tarea.");
       return;
     }
-    const reminderError = getReminderDateError(stepDraftReminderDate, todayLocalDateInput);
-    if (reminderError) {
-      setStepEditError(reminderError);
-      return;
-    }
-    if (!hasMetadataChanges && !hasReminderChanges) {
+    if (!hasMetadataChanges) {
       setEditingStep(false);
       setStepEditError(null);
       return;
@@ -431,22 +416,16 @@ export function StepDetailPanel({
         updatedStep = await updateStep(step.id, {
           nombre: nextName,
           descripcion: nextDescription || null,
-          fecha_ejecucion_estimada: nextExecutionDate,
+          fecha_ejecucion_estimada: isWaitingExternal ? undefined : nextExecutionDate,
           expected_external_event: isWaitingExternal ? nextWaitingWhat || null : undefined,
           esperando_de: isWaitingExternal ? nextWaitingFrom || null : undefined,
           external_reference: isWaitingExternal ? nextWaitingReference || null : undefined,
           external_wait_reason: isWaitingExternal ? (nextDescription || null) : undefined,
         });
       }
-      if (hasReminderChanges) {
-        updatedStep = await updateStepDate(step.id, {
-          fecha_vencimiento: nextReminderDate,
-        });
-      }
       setStepDraftName(updatedStep.nombre);
       setStepDraftDescription(updatedStep.descripcion ?? "");
       setStepDraftExecutionDate(toCalendarDateInputValue(updatedStep.fecha_ejecucion_estimada));
-      setStepDraftReminderDate(toCalendarDateInputValue(updatedStep.fecha_vencimiento));
       setStepDraftWaitingWhat(updatedStep.expected_external_event ?? "");
       setStepDraftWaitingFrom(updatedStep.esperando_de ?? "");
       setStepDraftWaitingReference(updatedStep.external_reference ?? "");
@@ -460,102 +439,63 @@ export function StepDetailPanel({
     }
   }
 
-  function startReminderEdit() {
+  function startExecutionDateEdit() {
     if (operationLocked) return;
     if (!step) return;
-    const currentValue = toCalendarDateInputValue(step.fecha_vencimiento);
-    setReminderDraft(currentValue);
+    const currentValue = toCalendarDateInputValue(step.fecha_ejecucion_estimada);
+    setExecutionDateDraft(currentValue);
     setStepEditError(null);
-    setIsReminderEditing(true);
+    setIsExecutionDateEditing(true);
   }
 
-  function openReminderEditorAndPicker() {
+  function openExecutionDateEditorAndPicker() {
     if (operationLocked || !step) return;
     flushSync(() => {
-      startReminderEdit();
+      startExecutionDateEdit();
     });
-    openNativeDateInputPicker(reminderInputRef.current);
+    openNativeDateInputPicker(executionDateInputRef.current);
   }
 
-  function cancelReminderEdit() {
+  function cancelExecutionDateEdit() {
     if (!step) return;
-    const currentValue = toCalendarDateInputValue(step.fecha_vencimiento);
-    setReminderDraft(currentValue);
+    const currentValue = toCalendarDateInputValue(step.fecha_ejecucion_estimada);
+    setExecutionDateDraft(currentValue);
     setStepEditError(null);
-    setIsReminderEditing(false);
+    setIsExecutionDateEditing(false);
   }
 
-  async function saveReminderEdit() {
+  async function saveExecutionDateEdit() {
     if (!step) return;
     if (operationLocked) {
       setStepEditError(operationLockMessage ?? "El flow está en modo solo lectura.");
       return;
     }
-    const currentValue = toCalendarDateInputValue(step.fecha_vencimiento);
-    const nextDraft = reminderDraft.trim();
+    const currentValue = toCalendarDateInputValue(step.fecha_ejecucion_estimada);
+    const nextDraft = executionDateDraft.trim();
     if (nextDraft === currentValue) {
-      setIsReminderEditing(false);
+      setIsExecutionDateEditing(false);
       return;
     }
-    const reminderError = getReminderDateError(nextDraft, todayLocalDateInput);
-    if (reminderError) {
-      setStepEditError(reminderError);
+    if (isPastCalendarDateInput(nextDraft, todayLocalDateInput)) {
+      setStepEditError("La fecha de ejecucion no puede ser una fecha pasada.");
       return;
     }
 
-    const nextReminderDate = toCalendarDateUtcIso(nextDraft);
+    const nextExecutionDate = toCalendarDateUtcIso(nextDraft);
 
     try {
-      setSavingReminder(true);
+      setSavingExecutionDate(true);
       setStepEditError(null);
-      const updatedStep = await updateStepDate(step.id, { fecha_vencimiento: nextReminderDate });
-      setStepDraftReminderDate(toCalendarDateInputValue(updatedStep.fecha_vencimiento));
-      setReminderDraft(toCalendarDateInputValue(updatedStep.fecha_vencimiento));
+      const updatedStep = await updateStep(step.id, { fecha_ejecucion_estimada: nextExecutionDate });
+      setStepDraftExecutionDate(toCalendarDateInputValue(updatedStep.fecha_ejecucion_estimada));
+      setExecutionDateDraft(toCalendarDateInputValue(updatedStep.fecha_ejecucion_estimada));
       await onStepUpdated?.(updatedStep);
-      setIsReminderEditing(false);
+      setIsExecutionDateEditing(false);
       setStepToastOpen(true);
     } catch (err) {
       setStepEditError(err instanceof Error ? err.message : "No se pudo actualizar la tarea");
     } finally {
-      setSavingReminder(false);
-    }
-  }
-
-  async function handleReminderShortcutSelect(value: string) {
-    if (!step) return;
-    if (operationLocked) {
-      setStepEditError(operationLockMessage ?? "El flow estÃ¡ en modo solo lectura.");
-      return;
-    }
-
-    const currentValue = toCalendarDateInputValue(step.fecha_vencimiento);
-    if (value === currentValue) {
-      setReminderDraft(value);
-      setIsReminderEditing(false);
-      return;
-    }
-
-    const reminderError = getReminderDateError(value, todayLocalDateInput);
-    if (reminderError) {
-      setStepEditError(reminderError);
-      return;
-    }
-
-    const nextReminderDate = toCalendarDateUtcIso(value);
-
-    try {
-      setSavingReminder(true);
-      setStepEditError(null);
-      const updatedStep = await updateStepDate(step.id, { fecha_vencimiento: nextReminderDate });
-      setStepDraftReminderDate(toCalendarDateInputValue(updatedStep.fecha_vencimiento));
-      setReminderDraft(toCalendarDateInputValue(updatedStep.fecha_vencimiento));
-      await onStepUpdated?.(updatedStep);
-      setIsReminderEditing(false);
-      setStepToastOpen(true);
-    } catch (err) {
-      setStepEditError(err instanceof Error ? err.message : "No se pudo actualizar la tarea");
-    } finally {
-      setSavingReminder(false);
+      setSavingExecutionDate(false);
     }
   }
 
@@ -581,30 +521,34 @@ export function StepDetailPanel({
               <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", justifyContent: "space-between" }}>
                 <Typography variant="h6" sx={{ letterSpacing: "-0.01em" }}>Registro de la tarea</Typography>
                 <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
-                  <Typography variant="body2" color="text.secondary">
-                    Recordatorio
-                  </Typography>
-                  {step.fecha_vencimiento && !isReminderEditing ? (
-                    <Button
-                      variant="text"
-                      color="inherit"
-                      size="small"
-                      onClick={openReminderEditorAndPicker}
-                      sx={{ minWidth: 0, px: 0.5, textTransform: "none" }}
-                    >
-                      {formatCalendarDate(step.fecha_vencimiento)}
-                    </Button>
-                  ) : (
-                    <IconButton
-                      size="small"
-                      color="inherit"
-                      onClick={isReminderEditing ? () => void saveReminderEdit() : openReminderEditorAndPicker}
-                      disabled={savingReminder || operationLocked}
-                      aria-label={step.fecha_vencimiento ? "Editar recordatorio" : "Agregar recordatorio"}
-                    >
-                      <EditCalendarRoundedIcon fontSize="small" />
-                    </IconButton>
-                  )}
+                  {!isWaitingExternal ? (
+                    <>
+                      <Typography variant="body2" color="text.secondary">
+                        Fecha de ejecucion
+                      </Typography>
+                      {step.fecha_ejecucion_estimada && !isExecutionDateEditing ? (
+                        <Button
+                          variant="text"
+                          color="inherit"
+                          size="small"
+                          onClick={openExecutionDateEditorAndPicker}
+                          sx={{ minWidth: 0, px: 0.5, textTransform: "none" }}
+                        >
+                          {formatCalendarDate(step.fecha_ejecucion_estimada)}
+                        </Button>
+                      ) : (
+                        <IconButton
+                          size="small"
+                          color="inherit"
+                          onClick={isExecutionDateEditing ? () => void saveExecutionDateEdit() : openExecutionDateEditorAndPicker}
+                          disabled={savingExecutionDate || operationLocked}
+                          aria-label={step.fecha_ejecucion_estimada ? "Editar fecha de ejecucion" : "Agregar fecha de ejecucion"}
+                        >
+                          <EditCalendarRoundedIcon fontSize="small" />
+                        </IconButton>
+                      )}
+                    </>
+                  ) : null}
                   {onClose ? (
                     <IconButton onClick={onClose} aria-label="Cerrar panel de registros">
                       <CloseRoundedIcon />
@@ -618,26 +562,23 @@ export function StepDetailPanel({
                 </Typography>
                 <AmbitoChip ambito={step.ambito} />
               </Stack>
-              {isReminderEditing ? (
-                <ReminderDateField
-                  value={reminderDraft}
-                  onChange={setReminderDraft}
-                  onShortcutSelect={(value) => {
-                    void handleReminderShortcutSelect(value);
-                  }}
-                  disabled={savingReminder || operationLocked}
+              {isExecutionDateEditing && !isWaitingExternal ? (
+                <TextField
+                  value={executionDateDraft}
+                  onChange={(event) => setExecutionDateDraft(event.target.value)}
+                  disabled={savingExecutionDate || operationLocked}
                   autoFocus
-                  inputRef={reminderInputRef}
-                  compact
+                  inputRef={executionDateInputRef}
+                  type="date"
                   label=""
-                  helperText={null}
-                  minDate={todayLocalDateInput}
+                  size="small"
+                  slotProps={{ inputLabel: { shrink: true } }}
                   onBlur={() => {
-                    void saveReminderEdit();
+                    void saveExecutionDateEdit();
                   }}
                   onKeyDown={(event) => {
                     if (event.key === "Escape") {
-                      cancelReminderEdit();
+                      cancelExecutionDateEdit();
                       (event.target as HTMLInputElement).blur();
                     }
                     if (event.key === "Enter") {
@@ -674,6 +615,7 @@ export function StepDetailPanel({
                         onChange={(event) => setStepDraftDescription(event.target.value)}
                         disabled={savingStep}
                       />
+                      {!isWaitingExternal ? (
                       <TextField
                         label="Fecha"
                         type="date"
@@ -683,6 +625,7 @@ export function StepDetailPanel({
                         slotProps={{ inputLabel: { shrink: true } }}
                         disabled={savingStep}
                       />
+                      ) : null}
                       {isWaitingExternal ? (
                         <>
                           <TextField
@@ -705,14 +648,6 @@ export function StepDetailPanel({
                           />
                         </>
                       ) : null}
-                      <ReminderDateField
-                        value={stepDraftReminderDate}
-                        onChange={setStepDraftReminderDate}
-                        helperText={isWaitingExternal ? "Fecha de seguimiento" : "Fecha recordatorio"}
-                        disabled={savingStep}
-                        minDate={todayLocalDateInput}
-                        shortcutVariant="chips"
-                      />
                     </Stack>
                   ) : (
                     <>
@@ -765,8 +700,8 @@ export function StepDetailPanel({
               {stepEditError && <Alert severity="error">{stepEditError}</Alert>}
               {operationLocked && operationLockMessage && <Alert severity="warning">{operationLockMessage}</Alert>}
 
-              {isReminderEditing ? (
-              <Card variant="outlined" sx={{ display: isReminderEditing ? undefined : "none" }}>
+              {isExecutionDateEditing ? (
+              <Card variant="outlined" sx={{ display: isExecutionDateEditing ? undefined : "none" }}>
                 <CardContent sx={{ p: 1.75 }}>
                   <Stack spacing={1}>
                     <Typography variant="subtitle2" color="text.secondary">
@@ -781,22 +716,34 @@ export function StepDetailPanel({
                         {latestMessage}
                       </Typography>
                     </Stack>
+                    {isWaitingExternal ? (
+                      <Stack spacing={0.25}>
+                        <Typography variant="body2" color="text.secondary">
+                          En espera desde
+                        </Typography>
+                        <Typography sx={{ fontSize: "0.84rem", fontWeight: 500, color: "text.primary", lineHeight: 1.25 }}>
+                          {formatElapsedTime(step.fecha_estado_actual) ?? "En espera"}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {formatCalendarDate(step.fecha_estado_actual)}
+                        </Typography>
+                      </Stack>
+                    ) : (
+                      <Stack spacing={0.5}>
+                        <Typography variant="body2" color="text.secondary">
+                          Fecha operativa
+                        </Typography>
+                        <Typography variant="body2" color={step.fecha_ejecucion_estimada ? "text.primary" : "text.secondary"}>
+                          {step.fecha_ejecucion_estimada ? formatDateOnly(step.fecha_ejecucion_estimada) : "Sin fecha definida"}
+                        </Typography>
+                      </Stack>
+                    )}
                     <Stack spacing={0.5}>
                       <Typography variant="body2" color="text.secondary">
-                        Fecha operativa
+                        Fecha de ejecucion
                       </Typography>
                       <Typography variant="body2" color={step.fecha_ejecucion_estimada ? "text.primary" : "text.secondary"}>
-                        {step.fecha_ejecucion_estimada ? formatDateOnly(step.fecha_ejecucion_estimada) : "Sin fecha definida"}
-                      </Typography>
-                    </Stack>
-                    <Stack spacing={0.5}>
-                      <Typography variant="body2" color="text.secondary">
-                        Recordatorio
-                      </Typography>
-                      <Typography variant="body2" color={step.fecha_vencimiento ? "text.primary" : "text.secondary"}>
-                        {step.fecha_vencimiento
-                          ? `${formatRelativeCalendarDay(step.fecha_vencimiento) ?? formatCalendarDate(step.fecha_vencimiento)} · ${formatCalendarDate(step.fecha_vencimiento)}`
-                          : "Sin recordatorio"}
+                        {step.fecha_ejecucion_estimada ? formatCalendarDate(step.fecha_ejecucion_estimada) : "Sin fecha definida"}
                       </Typography>
                     </Stack>
                   </Stack>
@@ -809,9 +756,17 @@ export function StepDetailPanel({
                   <CardContent sx={{ p: 1.75 }}>
                     <Stack spacing={1}>
                       <Alert severity="info">Esperando respuesta externa</Alert>
-                      <Typography variant="body2" color="text.secondary">
-                        Esperando desde: {formatCalendarDate(step.fecha_estado_actual)}
-                      </Typography>
+                      <Stack spacing={0.25}>
+                        <Typography variant="body2" color="text.secondary">
+                          En espera desde
+                        </Typography>
+                        <Typography sx={{ fontSize: "0.84rem", fontWeight: 500, color: "text.primary", lineHeight: 1.25 }}>
+                          {formatElapsedTime(step.fecha_estado_actual) ?? "En espera"}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {formatCalendarDate(step.fecha_estado_actual)}
+                        </Typography>
+                      </Stack>
                       {step.expected_external_event && (
                         <Typography variant="body2" color="text.secondary">
                           Qué se espera: {step.expected_external_event}
@@ -832,9 +787,6 @@ export function StepDetailPanel({
                           Referencia: {step.external_reference}
                         </Typography>
                       )}
-                      <Typography variant="body2" color="text.secondary">
-                        {step.fecha_vencimiento ? `Seguimiento: ${formatCalendarDate(step.fecha_vencimiento)}` : "Sin seguimiento"}
-                      </Typography>
                     </Stack>
                   </CardContent>
                 </Card>
@@ -1001,7 +953,7 @@ export function StepDetailPanel({
                     <ReminderDateField
                       value={resolveNextTaskDueDate}
                       onChange={setResolveNextTaskDueDate}
-                      helperText="Fecha recordatorio"
+                      helperText="Fecha de ejecucion"
                       disabled={resolving}
                       minDate={todayLocalDateInput}
                       shortcutVariant="chips"

@@ -27,13 +27,14 @@ import { DataGrid, type GridColDef, type GridRowParams, type GridSortModel } fro
 import { DataGridEmptyState } from "../../../components/feedback/DataGridEmptyState";
 import { useToastContext } from "../../../components/Toast";
 import { getStatusSemanticKey } from "../../../theme";
-import { updateStepDate } from "../api";
+import { updateStep } from "../api";
 import { StatusBadge } from "./StatusBadge";
 import {
   buildActiveFlowFilterDescription,
   buildFlowRows,
   flowQuickFilterOptions,
   getFlowDateGroupSortKey,
+  getAllowedFlowQuickFiltersForStateFilter,
   getFlowFilterFromStatus,
   getFlowCounts,
   getFlowSearchableContent,
@@ -52,10 +53,10 @@ import {
   formatCalendarDate,
   formatElapsedTime,
   formatRelativeCalendarDay,
-  getReminderDateError,
   getStatusTone,
   getTodayLocalDateInput,
   humanizeStatus,
+  isPastCalendarDateInput,
   openNativeDateInputPicker,
   toCalendarDateUtcIso,
 } from "../utils";
@@ -112,7 +113,7 @@ function getMovementHeatVisual(days: number | null) {
 function getSemanticTabSx(accent: string, soft: string) {
   return {
     minHeight: 46,
-    borderRadius: 1.15,
+    borderRadius: (theme: Theme) => theme.appShape.sm,
     border: "1px solid",
     borderColor: alpha(accent, 0.18),
     textTransform: "none",
@@ -235,9 +236,12 @@ export function FlowTableSection({
   const flowSearchActive = flowSearchValue.trim().length > 0;
 
   const allowedQuickFilterValues = useMemo(
-    () =>
-      allowedQuickFilters ?? selectableFlowQuickFilterOptions.map((option) => option.value),
-    [allowedQuickFilters]
+    () => {
+      const stateAllowedValues = getAllowedFlowQuickFiltersForStateFilter(stateFilter);
+      const configuredValues = allowedQuickFilters ?? selectableFlowQuickFilterOptions.map((option) => option.value);
+      return configuredValues.filter((value) => stateAllowedValues.includes(value));
+    },
+    [allowedQuickFilters, stateFilter]
   );
 
   useEffect(() => {
@@ -260,7 +264,7 @@ export function FlowTableSection({
       past: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "past", today)).length,
       future: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "future", today)).length,
       without_project: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "without_project", today)).length,
-      without_reminder: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "without_reminder", today)).length,
+      without_date: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "without_date", today)).length,
     }),
     [stateFilteredFlowRows, today]
   );
@@ -326,9 +330,8 @@ export function FlowTableSection({
       return;
     }
 
-    const reminderError = getReminderDateError(nextValue, today);
-    if (reminderError) {
-      showToast(reminderError, "error");
+    if (isPastCalendarDateInput(nextValue, today)) {
+      showToast("La fecha de ejecución no puede ser una fecha pasada.", "error");
       setPendingDates((previous) => {
         const next = new Map(previous);
         next.set(row.id, originalValue);
@@ -340,7 +343,7 @@ export function FlowTableSection({
     const isoValue = toCalendarDateUtcIso(nextValue);
 
     try {
-      await updateStepDate(row.stepId, { fecha_vencimiento: isoValue });
+      await updateStep(row.stepId, { fecha_ejecucion_estimada: isoValue });
       onWorkflowStepDatePatched?.(row.id, row.stepId, isoValue);
       setPendingDates((previous) => {
         if (!previous.has(row.id)) return previous;
@@ -866,7 +869,7 @@ export function FlowTableSection({
                     gap: 0.75,
                     px: 0.4,
                     py: 0.45,
-                    borderRadius: 1.4,
+                    borderRadius: theme.appShape.md,
                     backgroundColor: alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.34 : 0.74),
                     "& .MuiTabs-indicator": { display: "none" },
                     "& .MuiTab-root": { minHeight: 46, px: 1.8, mr: 0 },
@@ -997,7 +1000,7 @@ export function FlowTableSection({
             sx={{
               px: 1,
               py: 0.5,
-              borderRadius: 1,
+              borderRadius: (theme) => theme.appShape.sm,
               color: "text.secondary",
               "&:hover": { backgroundColor: "action.hover" },
             }}

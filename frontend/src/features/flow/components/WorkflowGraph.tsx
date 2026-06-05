@@ -148,12 +148,72 @@ function renderStepRecordsIndicator(hasRecords: boolean): React.ReactElement {
   );
 }
 
-function renderStepReminder(step: Step): React.ReactElement {
-  const reminder = step.fecha_vencimiento;
+function renderStepContextDate(step: Step): React.ReactElement {
   const isWaitingExternal = step.estado === "esperando_respuesta";
-  const valueLabel = reminder
-    ? `${isWaitingExternal ? "Seguimiento" : "Recordatorio"}: ${formatCalendarDate(reminder)}`
-    : (isWaitingExternal ? "Sin seguimiento" : "Sin recordatorio");
+  const isClosed = step.estado === "completado" || step.estado === "cancelada";
+  const waitingElapsed = isWaitingExternal ? formatElapsedTime(step.fecha_estado_actual) : null;
+  const waitingDate = isWaitingExternal ? formatCalendarDate(step.fecha_estado_actual) : null;
+  const executionDate = step.fecha_ejecucion_estimada ? formatCalendarDate(step.fecha_ejecucion_estimada) : null;
+  const closedDate = step.fecha_cierre ? formatCalendarDate(step.fecha_cierre) : null;
+
+  if (isWaitingExternal) {
+    return (
+      <Stack
+        direction="row"
+        spacing={0.6}
+        sx={{
+          alignItems: "center",
+          minWidth: 0,
+          borderRadius: (theme) => theme.appShape.pill,
+          width: "fit-content",
+          px: 0.9,
+          py: 0.45,
+          cursor: "inherit",
+          pointerEvents: "none",
+          backgroundColor: (theme) => theme.palette.status.waiting.soft,
+          border: "1px solid",
+          borderColor: (theme) => theme.palette.status.waiting.border,
+        }}
+      >
+        <AccessTimeRoundedIcon sx={{ fontSize: 14, color: "warning.main" }} />
+        <Stack spacing={0} sx={{ minWidth: 0 }}>
+          <Typography variant="caption" sx={{ fontSize: "0.84rem", fontWeight: 500, color: "text.primary", lineHeight: 1.25 }}>
+            {waitingElapsed ?? "En espera"}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
+            En espera desde: {waitingDate}
+          </Typography>
+        </Stack>
+      </Stack>
+    );
+  }
+
+  if (isClosed) {
+    return (
+      <Stack
+        direction="row"
+        spacing={0.6}
+        sx={{
+          alignItems: "center",
+          minWidth: 0,
+          borderRadius: (theme) => theme.appShape.pill,
+          width: "fit-content",
+          px: 0.9,
+          py: 0.45,
+          cursor: "inherit",
+          pointerEvents: "none",
+          backgroundColor: (theme) => theme.palette.surfaceContainerLow,
+          border: "1px solid",
+          borderColor: "outlineVariant",
+        }}
+      >
+        <CheckRoundedIcon sx={{ fontSize: 14, color: closedDate ? "success.main" : "text.secondary" }} />
+        <Typography variant="caption" color={closedDate ? "text.primary" : "text.secondary"}>
+          {closedDate ? `Cierre: ${closedDate}` : "Sin cierre"}
+        </Typography>
+      </Stack>
+    );
+  }
 
   return (
     <Stack
@@ -162,7 +222,7 @@ function renderStepReminder(step: Step): React.ReactElement {
       sx={{
         alignItems: "center",
         minWidth: 0,
-        borderRadius: 999,
+        borderRadius: (theme) => theme.appShape.pill,
         width: "fit-content",
         px: 0.9,
         py: 0.45,
@@ -173,9 +233,9 @@ function renderStepReminder(step: Step): React.ReactElement {
         borderColor: (theme) => theme.palette.status.active.border,
       }}
     >
-      <EditCalendarRoundedIcon sx={{ fontSize: 14, color: reminder ? "primary.main" : "text.secondary" }} />
-      <Typography variant="caption" color={reminder ? "text.primary" : "text.secondary"}>
-        {valueLabel}
+      <EditCalendarRoundedIcon sx={{ fontSize: 14, color: executionDate ? "primary.main" : "text.disabled" }} />
+      <Typography variant="caption" color={executionDate ? "text.primary" : "text.disabled"}>
+        {executionDate ? `Fecha de ejecucion: ${executionDate}` : "Fecha de ejecucion: Sin fecha definida"}
       </Typography>
     </Stack>
   );
@@ -616,7 +676,7 @@ function VerticalWorkflowGraph({
 
                       {renderStepTiming(step)}
                       <Stack direction="row" spacing={0.85} sx={{ alignItems: "center", flexWrap: "wrap", gap: 0.85 }}>
-                        {renderStepReminder(step)}
+                        {renderStepContextDate(step)}
                         {renderStepRecordsIndicator(hasRecords)}
                       </Stack>
                     </Stack>
@@ -698,7 +758,7 @@ function GitLogWorkflowGraph({
                   </Stack>
                   {renderStepTiming(step)}
                   <Stack direction="row" spacing={0.85} sx={{ alignItems: "center", flexWrap: "wrap", gap: 0.85 }}>
-                    {renderStepReminder(step)}
+                    {renderStepContextDate(step)}
                     {renderStepRecordsIndicator(hasRecords)}
                   </Stack>
                 </Stack>

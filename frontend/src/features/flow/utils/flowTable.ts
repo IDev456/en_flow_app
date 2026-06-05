@@ -12,7 +12,7 @@ import {
 } from "../utils";
 
 export type FlowFilter = "all" | "operational" | "non_operational" | "active" | "waiting" | "cancelled" | "finalized";
-export type FlowQuickFilter = "none" | "today" | "this_week" | "past" | "future" | "without_project" | "without_reminder";
+export type FlowQuickFilter = "none" | "today" | "this_week" | "past" | "future" | "without_project" | "without_date";
 
 export type LinkedRequirementRow = {
   id: string;
@@ -40,6 +40,8 @@ export type FlowGridRow = {
   waitingSinceInput: string;
   completedAtInput: string;
   executionAt: number;
+  contextualDateInput: string;
+  contextualDateAt: number;
   operationalSortValue: number;
   lastRecord: string;
   movementLabel: string;
@@ -70,10 +72,27 @@ export const flowQuickFilterOptions = [
   { value: "past", label: "Pasados" },
   { value: "future", label: "Futuros" },
   { value: "without_project", label: "Sin proyecto" },
-  { value: "without_reminder", label: "Sin seguimiento" },
+  { value: "without_date", label: "Sin fecha de ejecución" },
 ] as const satisfies ReadonlyArray<{ value: FlowQuickFilter; label: string }>;
 
 export const selectableFlowQuickFilterOptions = flowQuickFilterOptions.filter((option) => option.value !== "none");
+
+export function getAllowedFlowQuickFiltersForStateFilter(stateFilter: FlowFilter): FlowQuickFilter[] {
+  switch (stateFilter) {
+    case "active":
+      return ["today", "this_week", "past", "future", "without_project", "without_date"];
+    case "waiting":
+      return ["today", "this_week", "past", "without_project"];
+    case "finalized":
+    case "cancelled":
+    case "non_operational":
+      return ["today", "this_week", "past", "without_project"];
+    case "all":
+    case "operational":
+    default:
+      return ["today", "this_week", "past", "future", "without_project", "without_date"];
+  }
+}
 
 function getDateValue(value: string | null | undefined) {
   if (!value) {
@@ -206,8 +225,8 @@ export function getFlowQuickFilterDescription(filter: FlowQuickFilter) {
       return "futuros";
     case "without_project":
       return "sin proyecto";
-    case "without_reminder":
-      return "sin seguimiento";
+    case "without_date":
+      return "sin fecha de ejecución";
     case "none":
     default:
       return "";
@@ -224,6 +243,14 @@ export function isDateGroupedQuickFilter(filter: FlowQuickFilter) {
   return filter === "today" || filter === "this_week" || filter === "past" || filter === "future";
 }
 
+function getRowContextualDateInput(row: FlowGridRow) {
+  return row.primaryDateInput || row.contextualDateInput || "";
+}
+
+function rowMatchesWithoutDateFilter(row: FlowGridRow) {
+  return getFlowFilterFromStatus(row.status) === "active" && !row.executionDateInput;
+}
+
 export function matchesFlowQuickFilter(row: FlowGridRow, filter: FlowQuickFilter, today: string) {
   if (filter === "none") {
     return true;
@@ -233,11 +260,11 @@ export function matchesFlowQuickFilter(row: FlowGridRow, filter: FlowQuickFilter
     return row.requirementsCount === 0;
   }
 
-  if (filter === "without_reminder") {
-    return !row.executionDateInput;
+  if (filter === "without_date") {
+    return rowMatchesWithoutDateFilter(row);
   }
 
-  const rowDay = toCalendarDayValue(row.executionDateInput || null);
+  const rowDay = toCalendarDayValue(getRowContextualDateInput(row) || null);
   const todayDay = toCalendarDayValue(today);
 
   if (rowDay === null || todayDay === null) {
@@ -277,7 +304,7 @@ export function buildFlowRows(items: FlowTableItem[], today: string = getTodayLo
     const displayStatus = item.displayStatus ?? getVisibleWorkflowStatus(workflow);
     const latestMovementAt = item.latestMovementAt ?? getLatestMovementAt(workflow);
     const primaryDateInput = resolvePrimaryDateInput(workflow, step);
-    const executionDateInput = toCalendarDateInputValue(workflow.fecha_recordatorio_actual ?? step?.fecha_vencimiento);
+    const executionDateInput = toCalendarDateInputValue(workflow.fecha_ejecucion_actual ?? step?.fecha_ejecucion_estimada);
     const waitingSinceInput =
       displayStatus === "esperando_respuesta" ? toCalendarDateInputValue(workflow.fecha_espera_desde ?? step?.fecha_estado_actual) : "";
     const completedAtInput = toCalendarDateInputValue(workflow.fecha_fin);
@@ -293,15 +320,16 @@ export function buildFlowRows(items: FlowTableItem[], today: string = getTodayLo
     const requirementLabels = linkedRequirements.map(
       (requirement) => requirement.descripcion?.trim() || `Proyecto ${requirement.id.slice(0, 8)}`
     );
-    const executionDayValue = executionDateInput ? toDateSortValue(executionDateInput) : null;
+    const contextualDateInput = primaryDateInput || "";
+    const contextualDayValue = contextualDateInput ? toDateSortValue(contextualDateInput) : null;
     const operationalSortValue =
-      executionDayValue === null
+      contextualDayValue === null
         ? 3_000_000_000
-        : executionDateInput === today
-          ? executionDayValue
-          : executionDateInput < today
-            ? 1_000_000_000 + Math.max(0, todaySortValue - executionDayValue)
-            : 2_000_000_000 + executionDayValue;
+        : contextualDateInput === today
+          ? contextualDayValue
+          : contextualDateInput < today
+            ? 1_000_000_000 + Math.max(0, todaySortValue - contextualDayValue)
+            : 2_000_000_000 + contextualDayValue;
 
     return {
       id: workflow.id,
@@ -316,6 +344,8 @@ export function buildFlowRows(items: FlowTableItem[], today: string = getTodayLo
       waitingSinceInput,
       completedAtInput,
       executionAt: executionDateInput ? toDateSortValue(executionDateInput) : Number.MAX_SAFE_INTEGER,
+      contextualDateInput,
+      contextualDateAt: contextualDateInput ? toDateSortValue(contextualDateInput) : Number.MAX_SAFE_INTEGER,
       operationalSortValue,
       lastRecord: getLatestMeaningfulWorkflowRecord(workflow),
       movementLabel: formatElapsedTime(latestMovementAt) ?? "Sin movimiento reciente",
@@ -389,7 +419,7 @@ export function groupFlowRowsByDate(rows: FlowGridRow[], todayInput: string): Fl
   const groups = new Map<string, FlowDateGroupSection>();
 
   for (const row of rows) {
-    const dateInput = row.executionDateInput || null;
+    const dateInput = getRowContextualDateInput(row) || null;
     const key = dateInput ?? "__without-date__";
     const existing = groups.get(key);
 

@@ -254,7 +254,7 @@ export function TriggerDetailPage() {
         ...previous,
         [workflowId]: {
           ...workflow,
-          steps: workflow.steps.map((step) => (step.id === stepId ? { ...step, fecha_vencimiento: nextIsoValue } : step)),
+          steps: workflow.steps.map((step) => (step.id === stepId ? { ...step, fecha_ejecucion_estimada: nextIsoValue } : step)),
         },
       };
     });
@@ -518,7 +518,7 @@ export function TriggerDetailPage() {
               showStateTabs
               stateTabsVariant="summary"
               showProjectColumn={false}
-              allowedQuickFilters={["today", "this_week", "past", "future", "without_reminder"]}
+              allowedQuickFilters={["today", "this_week", "past", "future", "without_date"]}
               quickFilterPlaceholder="Buscar flow o tarea del proyecto..."
               noRowsTitle="No hay flows para este filtro"
               noRowsDescription="Probá con otro estado o capturá una nueva tarea para este proyecto."

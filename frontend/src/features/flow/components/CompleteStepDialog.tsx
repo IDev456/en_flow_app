@@ -15,7 +15,7 @@ import {
 
 import { ReminderDateField } from "./ReminderDateField";
 import type { Step, StepCompleteInput, StepTransitionType } from "../types";
-import { DEFAULT_ACTOR, getReminderDateError, toCalendarDateUtcIso } from "../utils";
+import { DEFAULT_ACTOR, getTodayLocalDateInput, isPastCalendarDateInput, toCalendarDateUtcIso } from "../utils";
 
 type CompleteStepDialogProps = {
   open: boolean;
@@ -27,28 +27,27 @@ type CompleteStepDialogProps = {
 export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteStepDialogProps) {
   const [transition, setTransition] = useState<StepTransitionType>("next_task");
   const [nextTaskName, setNextTaskName] = useState("");
-  const [nextTaskReminderDate, setNextTaskReminderDate] = useState("");
+  const [nextTaskExecutionDate, setNextTaskExecutionDate] = useState("");
   const [waitWhat, setWaitWhat] = useState("");
   const [waitFrom, setWaitFrom] = useState("");
   const [waitReference, setWaitReference] = useState("");
   const [waitDetail, setWaitDetail] = useState("");
-  const [waitFollowUpDate, setWaitFollowUpDate] = useState("");
   const [comment, setComment] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const isWaitingExternal = step?.estado === "esperando_respuesta";
+  const todayLocalDateInput = getTodayLocalDateInput();
 
   useEffect(() => {
     if (open) {
       setTransition("next_task");
       setNextTaskName("");
-      setNextTaskReminderDate("");
+      setNextTaskExecutionDate("");
       setWaitWhat("");
       setWaitFrom("");
       setWaitReference("");
       setWaitDetail("");
-      setWaitFollowUpDate("");
       setComment("");
       setError(null);
       setSubmitting(false);
@@ -73,20 +72,9 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
       return;
     }
 
-    if (transition === "next_task") {
-      const reminderError = getReminderDateError(nextTaskReminderDate);
-      if (reminderError) {
-        setError(reminderError);
-        return;
-      }
-    }
-
-    if (transition === "wait_external") {
-      const reminderError = getReminderDateError(waitFollowUpDate);
-      if (reminderError) {
-        setError(reminderError);
-        return;
-      }
+    if (transition === "next_task" && isPastCalendarDateInput(nextTaskExecutionDate, todayLocalDateInput)) {
+      setError("La fecha de ejecucion no puede ser una fecha pasada.");
+      return;
     }
 
     try {
@@ -103,7 +91,7 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
           transition === "next_task"
             ? {
                 nombre: nextTaskName.trim(),
-                fecha_vencimiento: toCalendarDateUtcIso(nextTaskReminderDate),
+                fecha_ejecucion_estimada: toCalendarDateUtcIso(nextTaskExecutionDate),
               }
             : null,
         external_wait:
@@ -113,7 +101,6 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
                 esperando_de: waitFrom.trim() || null,
                 detalle: waitDetail.trim() || null,
                 referencia_externa: waitReference.trim() || null,
-                fecha_recordatorio: toCalendarDateUtcIso(waitFollowUpDate),
               }
             : null,
         finish_data: transition === "finish_flow" ? { resultado_final: "Flow finalizado" } : null,
@@ -162,13 +149,13 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
                 autoFocus
               />
               <ReminderDateField
-                value={nextTaskReminderDate}
+                value={nextTaskExecutionDate}
                 onChange={(value) => {
-                  setNextTaskReminderDate(value);
+                  setNextTaskExecutionDate(value);
                   if (error) setError(null);
                 }}
                 disabled={submitting}
-                helperText="Recordatorio"
+                helperText="Fecha de ejecucion"
               />
             </Stack>
           )}
@@ -201,15 +188,6 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
                 value={waitDetail}
                 onChange={(event) => setWaitDetail(event.target.value)}
                 disabled={submitting}
-              />
-              <ReminderDateField
-                value={waitFollowUpDate}
-                onChange={(value) => {
-                  setWaitFollowUpDate(value);
-                  if (error) setError(null);
-                }}
-                disabled={submitting}
-                helperText="Seguimiento opcional"
               />
             </Stack>
           )}

@@ -70,7 +70,7 @@ import { DataGridEmptyState } from "../../../components/feedback/DataGridEmptySt
 import { PageContainer } from "../../../components/layout/PageContainer";
 import { useToastContext } from "../../../components/Toast";
 import { getStatusSemanticKey } from "../../../theme";
-import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, getWorkflow, linkWorkflowRequirement, listTriggers, listWorkflows, reactivateWorkflow, updateStepDate, updateTrigger, updateWorkflow } from "../api";
+import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, getWorkflow, linkWorkflowRequirement, listTriggers, listWorkflows, reactivateWorkflow, updateStep, updateTrigger, updateWorkflow } from "../api";
 import {
   getNavigationLocationState,
   mergeNavigationState,
@@ -91,9 +91,9 @@ import {
   getCalendarDayDiff,
   getAmbitoLabel,
   humanizeStatus,
-  getReminderDateError,
   getVisibleTriggerStatus,
   getVisibleWorkflowStatus,
+  isPastCalendarDateInput,
   isNoisyAutomaticJournalText,
   matchesActiveAmbito,
   openNativeDateInputPicker,
@@ -108,7 +108,7 @@ import {
 
 type ViewMode = "requirements" | "flows";
 type FlowFilter = "all" | "operational" | "non_operational" | "active" | "waiting" | "cancelled" | "finalized";
-type FlowQuickFilter = "none" | "today" | "this_week" | "past" | "future" | "without_project" | "without_reminder";
+type FlowQuickFilter = "none" | "today" | "this_week" | "past" | "future" | "without_project" | "without_date";
 
 type TriggerListPageProps = {
   defaultView?: ViewMode;
@@ -153,6 +153,8 @@ type FlowGridRow = {
   waitingSinceInput: string;
   completedAtInput: string;
   executionAt: number;
+  contextualDateInput: string;
+  contextualDateAt: number;
   operationalSortValue: number;
   lastRecord: string;
   movementLabel: string;
@@ -198,12 +200,12 @@ const flowQuickFilterOptions = [
   { value: "past", label: "Pasados" },
   { value: "future", label: "Futuros" },
   { value: "without_project", label: "Sin proyecto" },
-  { value: "without_reminder", label: "Sin seguimiento" },
+  { value: "without_date", label: "Sin fecha de ejecución" },
 ] as const satisfies ReadonlyArray<{ value: FlowQuickFilter; label: string }>;
 const selectableFlowQuickFilterOptions = flowQuickFilterOptions.filter((option) => option.value !== "none");
 const FLOW_PRIMARY_COLUMN_FIELD = "taskName";
 const FLOW_COLUMN_ORDER_STORAGE_KEY = "en-flow.trigger-list.flow-column-order";
-const attentionFlowQuickFilters = new Set<FlowQuickFilter>(["past", "without_project", "without_reminder"]);
+const attentionFlowQuickFilters = new Set<FlowQuickFilter>(["past", "without_project", "without_date"]);
 
 function getStoredFlowColumnOrder() {
   if (typeof window === "undefined") {
@@ -316,6 +318,23 @@ function getGroupedHeaderMinWidth(columns: GridColDef<FlowGridRow>[]) {
 
 function isOperationalFlowQuickFilter(filter: FlowQuickFilter) {
   return filter === "today" || filter === "this_week";
+}
+
+function getAllowedFlowQuickFiltersForStateFilter(stateFilter: FlowFilter): FlowQuickFilter[] {
+  switch (stateFilter) {
+    case "active":
+      return ["today", "this_week", "past", "future", "without_project", "without_date"];
+    case "waiting":
+      return ["today", "this_week", "past", "without_project"];
+    case "finalized":
+    case "cancelled":
+    case "non_operational":
+      return ["today", "this_week", "past", "without_project"];
+    case "all":
+    case "operational":
+    default:
+      return ["today", "this_week", "past", "future", "without_project", "without_date"];
+  }
 }
 
 function renderFlowQuickFilterOptionLabel(
@@ -574,7 +593,7 @@ function groupFlowRowsByDate(rows: FlowGridRow[], todayInput: string): FlowDateG
   const groups = new Map<string, FlowDateGroupSection>();
 
   for (const row of rows) {
-    const dateInput = row.executionDateInput || null;
+    const dateInput = getRowContextualDateInput(row) || null;
     const key = dateInput ?? "__without-date__";
     const existing = groups.get(key);
 
@@ -599,6 +618,14 @@ function isDateGroupedQuickFilter(filter: FlowQuickFilter) {
   return filter === "today" || filter === "this_week" || filter === "past" || filter === "future";
 }
 
+function getRowContextualDateInput(row: FlowGridRow) {
+  return row.primaryDateInput || row.contextualDateInput || "";
+}
+
+function rowMatchesWithoutDateFilter(row: FlowGridRow) {
+  return getFlowFilterFromStatus(row.status) === "active" && !row.executionDateInput;
+}
+
 function matchesFlowQuickFilter(row: FlowGridRow, filter: FlowQuickFilter, today: string) {
   if (filter === "none") {
     return true;
@@ -608,11 +635,11 @@ function matchesFlowQuickFilter(row: FlowGridRow, filter: FlowQuickFilter, today
     return row.requirementsCount === 0;
   }
 
-  if (filter === "without_reminder") {
-    return !row.executionDateInput;
+  if (filter === "without_date") {
+    return rowMatchesWithoutDateFilter(row);
   }
 
-  const rowDay = toCalendarDayValue(row.executionDateInput || null);
+  const rowDay = toCalendarDayValue(getRowContextualDateInput(row) || null);
   const todayDay = toCalendarDayValue(today);
 
   if (rowDay === null || todayDay === null) {
@@ -673,6 +700,7 @@ type FlowGridToolbarProps = {
   flowQuickFilter?: FlowQuickFilter;
   flowQuickFilterCounts?: Partial<Record<FlowQuickFilter, number>>;
   flowQuickFilterLabel?: string;
+  allowedFlowQuickFilters?: FlowQuickFilter[];
   quickFilterAnchorEl?: HTMLElement | null;
   onQuickFilterOpen?: (event: MouseEvent<HTMLElement>) => void;
   onQuickFilterClose?: () => void;
@@ -712,8 +740,8 @@ function getFlowQuickFilterDescription(filter: FlowQuickFilter) {
       return "futuros";
     case "without_project":
       return "sin proyecto";
-    case "without_reminder":
-      return "sin seguimiento";
+    case "without_date":
+      return "sin fecha de ejecución";
     case "none":
     default:
       return "";
@@ -740,6 +768,7 @@ function FlowGridToolbar(props: any) {
     flowQuickFilter = "none",
     flowQuickFilterCounts = {},
     flowQuickFilterLabel = "Filtro rápido",
+    allowedFlowQuickFilters = selectableFlowQuickFilterOptions.map((option) => option.value),
     quickFilterAnchorEl = null,
     onQuickFilterOpen,
     onQuickFilterClose,
@@ -865,7 +894,7 @@ function FlowGridToolbar(props: any) {
             </ToolbarButton>
           ) : null}
           <Menu anchorEl={quickFilterAnchorEl} open={quickFilterMenuOpen} onClose={onQuickFilterClose}>
-            {selectableFlowQuickFilterOptions.map((option) => (
+            {selectableFlowQuickFilterOptions.filter((option) => allowedFlowQuickFilters.includes(option.value)).map((option) => (
               <MenuItem
                 key={option.value}
                 selected={option.value === flowQuickFilter}
@@ -912,6 +941,7 @@ function FlowListToolbar(props: FlowGridToolbarProps) {
     flowQuickFilter = "none",
     flowQuickFilterCounts = {},
     flowQuickFilterLabel = "Filtro rápido",
+    allowedFlowQuickFilters = selectableFlowQuickFilterOptions.map((option) => option.value),
     quickFilterAnchorEl = null,
     onQuickFilterOpen,
     onQuickFilterClose,
@@ -1018,7 +1048,7 @@ function FlowListToolbar(props: FlowGridToolbarProps) {
           sx={{
             px: 1,
             py: 0.5,
-            borderRadius: 1,
+            borderRadius: (theme) => theme.appShape.sm,
             color: "text.secondary",
             "&:hover": { backgroundColor: "action.hover" },
           }}
@@ -1044,7 +1074,7 @@ function FlowListToolbar(props: FlowGridToolbarProps) {
           </IconButton>
         ) : null}
         <Menu anchorEl={quickFilterAnchorEl} open={quickFilterMenuOpen} onClose={onQuickFilterClose}>
-          {selectableFlowQuickFilterOptions.map((option) => (
+          {selectableFlowQuickFilterOptions.filter((option) => allowedFlowQuickFilters.includes(option.value)).map((option) => (
             <MenuItem
               key={option.value}
               selected={option.value === flowQuickFilter}
@@ -1361,6 +1391,13 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const activeFlowQuickFilterLabel =
     flowQuickFilterOptions.find((option) => option.value === flowQuickFilter)?.label ?? "Filtro rápido";
   const activeFlowFilterDescription = buildActiveFlowFilterDescription(stateFilter, flowQuickFilter);
+  const allowedFlowQuickFilterValues = useMemo(() => getAllowedFlowQuickFiltersForStateFilter(stateFilter), [stateFilter]);
+  useEffect(() => {
+    if (flowQuickFilter !== "none" && !allowedFlowQuickFilterValues.includes(flowQuickFilter)) {
+      setFlowQuickFilter("none");
+      setFlowQuickFilterAnchorEl(null);
+    }
+  }, [allowedFlowQuickFilterValues, flowQuickFilter]);
   const resetFilterAction =
     stateFilter !== "all" ? (
       <Button size="small" variant="outlined" color="inherit" onClick={() => setStateFilter("all")}>
@@ -1371,7 +1408,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     return allFlowCards.map((item) => {
       const step = item.relevantStep;
       const primaryDateInput = resolvePrimaryDateInput(item.workflow, step);
-      const executionDateInput = toDateInputValue(item.workflow.fecha_recordatorio_actual ?? step?.fecha_vencimiento);
+      const executionDateInput = toDateInputValue(item.workflow.fecha_ejecucion_actual ?? step?.fecha_ejecucion_estimada);
       const waitingSinceInput =
         item.displayStatus === "esperando_respuesta" ? toDateInputValue(item.workflow.fecha_espera_desde ?? step?.fecha_estado_actual) : "";
       const completedAtInput = toDateInputValue(item.workflow.fecha_fin);
@@ -1387,15 +1424,16 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       const requirementLabels = item.linkedRequirements.map(
         (requirement) => requirement.descripcion?.trim() || `Proyecto ${requirement.id.slice(0, 8)}`
       );
-      const executionDayValue = executionDateInput ? toDateSortValue(executionDateInput) : null;
+      const contextualDateInput = primaryDateInput || "";
+      const contextualDayValue = contextualDateInput ? toDateSortValue(contextualDateInput) : null;
       const operationalSortValue =
-        executionDayValue === null
+        contextualDayValue === null
           ? 3_000_000_000
-          : executionDateInput === today
-            ? executionDayValue
-            : executionDateInput < today
-              ? 1_000_000_000 + Math.max(0, todaySortValue - executionDayValue)
-              : 2_000_000_000 + executionDayValue;
+          : contextualDateInput === today
+            ? contextualDayValue
+            : contextualDateInput < today
+              ? 1_000_000_000 + Math.max(0, todaySortValue - contextualDayValue)
+              : 2_000_000_000 + contextualDayValue;
         return {
           id: item.workflow.id,
           stepId: step?.id ?? null,
@@ -1409,6 +1447,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         waitingSinceInput,
         completedAtInput,
         executionAt: executionDateInput ? toDateSortValue(executionDateInput) : Number.MAX_SAFE_INTEGER,
+        contextualDateInput,
+        contextualDateAt: contextualDateInput ? toDateSortValue(contextualDateInput) : Number.MAX_SAFE_INTEGER,
         operationalSortValue,
         lastRecord: getLatestMeaningfulWorkflowRecord(item.workflow),
         movementLabel: formatElapsedTime(item.latestMovementAt) ?? "Sin movimiento reciente",
@@ -1470,7 +1510,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       past: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "past", today)).length,
       future: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "future", today)).length,
       without_project: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "without_project", today)).length,
-      without_reminder: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "without_reminder", today)).length,
+      without_date: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "without_date", today)).length,
     }),
     [stateFilteredFlowRows, today]
   );
@@ -1527,9 +1567,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       return;
     }
 
-    const reminderError = getReminderDateError(nextValue, today);
-    if (reminderError) {
-      showToast(reminderError, "error");
+    if (isPastCalendarDateInput(nextValue, today)) {
+      showToast("La fecha de ejecución no puede ser una fecha pasada.", "error");
       setPendingDates((previous) => {
         const next = new Map(previous);
         next.set(row.id, originalValue);
@@ -1541,7 +1580,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     const isoValue = toCalendarDateUtcIso(nextValue);
 
     try {
-      await updateStepDate(row.stepId, { fecha_vencimiento: isoValue });
+      await updateStep(row.stepId, { fecha_ejecucion_estimada: isoValue });
       setWorkflowsById((previous) => {
         const workflow = previous[row.id];
         if (!workflow) return previous;
@@ -1549,7 +1588,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
           ...previous,
           [row.id]: {
             ...workflow,
-            steps: workflow.steps.map((step) => (step.id === row.stepId ? { ...step, fecha_vencimiento: isoValue } : step)),
+            steps: workflow.steps.map((step) => (step.id === row.stepId ? { ...step, fecha_ejecucion_estimada: isoValue } : step)),
           },
         };
       });
@@ -2692,7 +2731,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   key={project.id}
                   disabled={linkProjectLoading}
                   onClick={() => void handleLinkProject(project.id)}
-                  sx={{ alignItems: "flex-start", py: 1, borderRadius: 1 }}
+                  sx={{ alignItems: "flex-start", py: 1, borderRadius: (theme) => theme.appShape.sm }}
                 >
                   <Stack spacing={0.35} sx={{ minWidth: 0 }}>
                     <Typography
@@ -3307,6 +3346,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                       flowQuickFilter={flowQuickFilter}
                       flowQuickFilterCounts={quickFilterCountsByValue}
                       flowQuickFilterLabel={flowQuickFilter === "none" ? "Filtro rápido" : activeFlowQuickFilterLabel}
+                      allowedFlowQuickFilters={allowedFlowQuickFilterValues}
                       quickFilterAnchorEl={flowQuickFilterAnchorEl}
                       onQuickFilterOpen={(event: MouseEvent<HTMLElement>) => {
                         setFlowQuickFilterAnchorEl(event.currentTarget);
