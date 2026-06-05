@@ -268,18 +268,6 @@ function sanitizeFlowColumnOrder(availableFields: string[], candidateOrder: stri
   return sanitizedOrder;
 }
 
-function orderFlowColumns(columns: GridColDef<FlowGridRow>[], order: string[]) {
-  const orderedFields = sanitizeFlowColumnOrder(
-    columns.map((column) => String(column.field)),
-    order
-  );
-  const columnByField = new Map(columns.map((column) => [String(column.field), column]));
-
-  return orderedFields
-    .map((field) => columnByField.get(field))
-    .filter((column): column is GridColDef<FlowGridRow> => Boolean(column));
-}
-
 function swapFlowColumnsInOrder(order: string[], draggedField: string, targetField: string) {
   if (
     draggedField === FLOW_PRIMARY_COLUMN_FIELD ||
@@ -539,6 +527,20 @@ function getFlowDateColumnVisibility(stateFilter: FlowFilter) {
     return { execution: false, waiting: false, completed: true };
   }
   return { execution: true, waiting: true, completed: false };
+}
+
+function shouldShowStatusColumn(stateFilter: FlowFilter) {
+  return stateFilter === "all" || stateFilter === "operational";
+}
+
+function renderNotApplicableDateCell(message: string) {
+  return (
+    <Tooltip title={message}>
+      <Typography variant="caption" color="text.disabled" sx={{ lineHeight: 1.2 }}>
+        No aplica
+      </Typography>
+    </Tooltip>
+  );
 }
 
 function buildFlowDateGroupLabel(dateInput: string | null, todayInput: string) {
@@ -1800,6 +1802,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   );
 
   const dateColumnVisibility = getFlowDateColumnVisibility(stateFilter);
+  const showStatusColumn = shouldShowStatusColumn(stateFilter);
 
   const flowColumns = useMemo<GridColDef<FlowGridRow>[]>(
     () => [
@@ -1886,6 +1889,208 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
           </Typography>
         ),
       },
+      {
+        field: "requirementsLabel",
+        headerName: "Proyecto",
+        flex: 1.2,
+        minWidth: 260,
+        align: "left",
+        headerAlign: "left",
+        sortable: false,
+        renderCell: (params) => {
+          const row = params.row;
+          const hasNoProjects = row.linkedRequirements.length === 0;
+          const hasOneProject = row.linkedRequirements.length === 1;
+          const primaryProjectId = row.linkedRequirements[0]?.id;
+
+          if (hasNoProjects) {
+            return (
+              <ButtonBase
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setLinkProjectDialog({ workflowId: row.id, workflowName: row.taskName });
+                }}
+                onMouseDown={(event) => event.stopPropagation()}
+                sx={{
+                  color: "text.disabled",
+                  fontSize: "0.8rem",
+                  px: 0.5,
+                  py: 0.25,
+                  borderRadius: (theme) => `${theme.appShape.sm}px`,
+                  "&:hover": { color: "text.secondary" },
+                }}
+              >
+                + Asociar proyecto
+              </ButtonBase>
+            );
+          }
+
+          if (hasOneProject) {
+            return (
+              <ButtonBase
+                onClick={(event: React.MouseEvent<HTMLElement>) => {
+                  if (primaryProjectId) {
+                    handleProjectNavigate(primaryProjectId, event);
+                  }
+                }}
+                sx={{
+                  color: "inherit",
+                  textAlign: "left",
+                  width: "100%",
+                  justifyContent: "flex-start",
+                  borderRadius: (theme) => `${theme.appShape.sm}px`,
+                  px: 0.5,
+                  py: 0.25,
+                }}
+              >
+                <Typography
+                  variant="body2"
+                  sx={{
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    lineHeight: 1.3,
+                  }}
+                >
+                  {row.primaryRequirementLabel}
+                </Typography>
+              </ButtonBase>
+            );
+          }
+
+          return (
+            <ButtonBase
+              onClick={(event: React.MouseEvent<HTMLElement>) => {
+                event.stopPropagation();
+                setRequirementsMenu({ rowId: row.id, anchorEl: event.currentTarget as HTMLElement });
+              }}
+              sx={{
+                color: "inherit",
+                textAlign: "left",
+                width: "100%",
+                justifyContent: "flex-start",
+                borderRadius: (theme) => `${theme.appShape.sm}px`,
+                px: 0.5,
+                py: 0.25,
+              }}
+            >
+              <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", minWidth: 0, width: "100%" }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    minWidth: 0,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    lineHeight: 1.3,
+                  }}
+                >
+                  {row.primaryRequirementLabel}
+                </Typography>
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  label={`+${row.extraRequirementCount}`}
+                  sx={(theme) => ({
+                    height: 22,
+                    flexShrink: 0,
+                    borderRadius: theme.appShape.sm,
+                    borderColor: theme.palette.outlineVariant,
+                    color: theme.palette.text.secondary,
+                    backgroundColor: theme.palette.surfaceContainerLowest,
+                    pointerEvents: "none",
+                  })}
+                  aria-label={`${row.linkedRequirements.length} proyectos vinculados`}
+                />
+              </Stack>
+            </ButtonBase>
+          );
+        },
+      },
+      {
+        field: "movementAt",
+        headerName: "Inactividad",
+        width: 126,
+        minWidth: 120,
+        align: "center",
+        headerAlign: "center",
+        renderCell: (params) => {
+          const heatVisual = getMovementHeatVisual(params.row.movementDays);
+          return (
+            <Stack direction="row" spacing={0.45} sx={{ alignItems: "center", justifyContent: "center" }}>
+              <Typography variant="caption" color="text.secondary">
+                {params.row.movementLabel}
+              </Typography>
+              {heatVisual ? (
+                <LocalFireDepartmentRoundedIcon sx={{ fontSize: 14, color: heatVisual.color, opacity: heatVisual.opacity }} />
+              ) : null}
+            </Stack>
+          );
+        },
+      },
+      ...(showStatusColumn
+        ? [
+            {
+              field: "status",
+              headerName: "Estado",
+              width: 150,
+              minWidth: 140,
+              align: "center" as const,
+              headerAlign: "center" as const,
+              sortable: false,
+              renderCell: (params: GridRenderCellParams<FlowGridRow>) => (
+                <Box sx={{ display: "flex", justifyContent: "center", width: "100%", minWidth: 0 }}>
+                  <StatusBadge value={params.row.status} />
+                </Box>
+              ),
+            },
+          ]
+        : []),
+      ...(dateColumnVisibility.waiting
+        ? [
+            {
+              field: "waitingSinceInput",
+              headerName: "En espera desde",
+              width: 172,
+              minWidth: 160,
+              align: "center" as const,
+              headerAlign: "center" as const,
+              valueGetter: (_: unknown, row: FlowGridRow) =>
+                row.waitingSinceInput ? getFlowDateGroupSortKey(row.waitingSinceInput, today) : Number.MAX_SAFE_INTEGER,
+              renderCell: (params: GridRenderCellParams<FlowGridRow>) => {
+                const rowState = getFlowFilterFromStatus(params.row.status);
+                if (rowState === "active") {
+                  return renderNotApplicableDateCell("Solo aplica a flows en espera");
+                }
+
+                const value = params.row.waitingSinceInput;
+                if (!value) {
+                  return (
+                    <Typography variant="caption" color="text.secondary">
+                      Sin fecha registrada
+                    </Typography>
+                  );
+                }
+                const absoluteDateLabel = formatCalendarDate(value);
+                const elapsedLabel = formatElapsedTime(value);
+                return (
+                  <Tooltip title={absoluteDateLabel ?? "En espera"}>
+                    <Stack spacing={0} sx={{ alignItems: "center", minWidth: 134 }}>
+                      <Typography variant="body2" sx={{ fontSize: "0.84rem", fontWeight: 500, lineHeight: 1.2 }}>
+                        {elapsedLabel ?? "En espera"}
+                      </Typography>
+                      {absoluteDateLabel ? (
+                        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.1 }}>
+                          {absoluteDateLabel}
+                        </Typography>
+                      ) : null}
+                    </Stack>
+                  </Tooltip>
+                );
+              },
+            },
+          ]
+        : []),
       ...(dateColumnVisibility.execution
         ? [
             {
@@ -1898,6 +2103,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
               valueGetter: (_: unknown, row: FlowGridRow) => row.operationalSortValue,
               renderCell: (params: GridRenderCellParams<FlowGridRow>) => {
                 const row = params.row;
+                const rowState = getFlowFilterFromStatus(row.status);
+                if (rowState === "waiting") {
+                  return renderNotApplicableDateCell("Solo aplica a flows activos");
+                }
+
                 const originalValue = row.executionDateInput;
                 const isEditing = pendingDates.has(row.id);
 
@@ -2020,46 +2230,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             },
           ]
         : []),
-      ...(dateColumnVisibility.waiting
-        ? [
-            {
-              field: "waitingSinceInput",
-              headerName: "En espera desde",
-              width: 172,
-              minWidth: 160,
-              align: "center" as const,
-              headerAlign: "center" as const,
-              valueGetter: (_: unknown, row: FlowGridRow) =>
-                row.waitingSinceInput ? getFlowDateGroupSortKey(row.waitingSinceInput, today) : Number.MAX_SAFE_INTEGER,
-              renderCell: (params: GridRenderCellParams<FlowGridRow>) => {
-                const value = params.row.waitingSinceInput;
-                if (!value) {
-                  return (
-                    <Typography variant="caption" color="text.secondary">
-                      Sin fecha registrada
-                    </Typography>
-                  );
-                }
-                const absoluteDateLabel = formatCalendarDate(value);
-                const elapsedLabel = formatElapsedTime(value);
-                return (
-                  <Tooltip title={absoluteDateLabel ?? "En espera"}>
-                    <Stack spacing={0} sx={{ alignItems: "center", minWidth: 134 }}>
-                      <Typography variant="body2" sx={{ fontSize: "0.82rem", lineHeight: 1.2 }}>
-                        {absoluteDateLabel}
-                      </Typography>
-                      {elapsedLabel ? (
-                        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.1 }}>
-                          {elapsedLabel}
-                        </Typography>
-                      ) : null}
-                    </Stack>
-                  </Tooltip>
-                );
-              },
-            },
-          ]
-        : []),
       ...(dateColumnVisibility.completed
         ? [
             {
@@ -2082,146 +2252,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
             },
           ]
         : []),
-      {
-        field: "movementAt",
-        headerName: "Inactividad",
-        width: 126,
-        minWidth: 120,
-        align: "center",
-        headerAlign: "center",
-        renderCell: (params) => {
-          const heatVisual = getMovementHeatVisual(params.row.movementDays);
-          return (
-            <Stack direction="row" spacing={0.45} sx={{ alignItems: "center", justifyContent: "center" }}>
-              <Typography variant="caption" color="text.secondary">
-                {params.row.movementLabel}
-              </Typography>
-              {heatVisual ? (
-                <LocalFireDepartmentRoundedIcon sx={{ fontSize: 14, color: heatVisual.color, opacity: heatVisual.opacity }} />
-              ) : null}
-            </Stack>
-          );
-        },
-      },
-      {
-        field: "requirementsLabel",
-        headerName: "Proyecto",
-        flex: 1.2,
-        minWidth: 260,
-        align: "left",
-        headerAlign: "left",
-        sortable: false,
-        renderCell: (params) => {
-          const row = params.row;
-          const hasNoProjects = row.linkedRequirements.length === 0;
-          const hasOneProject = row.linkedRequirements.length === 1;
-          const hasMultipleProjects = row.linkedRequirements.length > 1;
-          const primaryProjectId = row.linkedRequirements[0]?.id;
-
-          if (hasNoProjects) {
-            return (
-              <ButtonBase
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setLinkProjectDialog({ workflowId: row.id, workflowName: row.taskName });
-                }}
-                onMouseDown={(event) => event.stopPropagation()}
-                sx={{
-                  color: "text.disabled",
-                  fontSize: "0.8rem",
-                  px: 0.5,
-                  py: 0.25,
-                  borderRadius: (theme) => `${theme.appShape.sm}px`,
-                  "&:hover": { color: "text.secondary" },
-                }}
-              >
-                + Asociar proyecto
-              </ButtonBase>
-            );
-          }
-
-          if (hasOneProject) {
-            return (
-              <ButtonBase
-                onClick={(event: React.MouseEvent<HTMLElement>) => {
-                  if (primaryProjectId) {
-                    handleProjectNavigate(primaryProjectId, event);
-                  }
-                }}
-                sx={{
-                  color: "inherit",
-                  textAlign: "left",
-                  width: "100%",
-                  justifyContent: "flex-start",
-                  borderRadius: (theme) => `${theme.appShape.sm}px`,
-                  px: 0.5,
-                  py: 0.25,
-                }}
-              >
-                <Typography
-                  variant="body2"
-                  sx={{
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    lineHeight: 1.3,
-                  }}
-                >
-                  {row.primaryRequirementLabel}
-                </Typography>
-              </ButtonBase>
-            );
-          }
-
-          return (
-            <ButtonBase
-              onClick={(event: React.MouseEvent<HTMLElement>) => {
-                event.stopPropagation();
-                setRequirementsMenu({ rowId: row.id, anchorEl: event.currentTarget as HTMLElement });
-              }}
-              sx={{
-                color: "inherit",
-                textAlign: "left",
-                width: "100%",
-                justifyContent: "flex-start",
-                borderRadius: (theme) => `${theme.appShape.sm}px`,
-                px: 0.5,
-                py: 0.25,
-              }}
-            >
-              <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", minWidth: 0, width: "100%" }}>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    minWidth: 0,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    lineHeight: 1.3,
-                  }}
-                >
-                  {row.primaryRequirementLabel}
-                </Typography>
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  label={`+${row.extraRequirementCount}`}
-                  sx={(theme) => ({
-                    height: 22,
-                    flexShrink: 0,
-                    borderRadius: theme.appShape.sm,
-                    borderColor: theme.palette.outlineVariant,
-                    color: theme.palette.text.secondary,
-                    backgroundColor: theme.palette.surfaceContainerLowest,
-                    pointerEvents: "none",
-                  })}
-                  aria-label={`${row.linkedRequirements.length} proyectos vinculados`}
-                />
-              </Stack>
-            </ButtonBase>
-          );
-        },
-      },
     ],
     [
       dateColumnVisibility.completed,
@@ -2230,6 +2260,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       openPendingDateEditorAndPicker,
       pendingDates,
       setPendingDateInputRef,
+      showStatusColumn,
       theme,
       today,
       handleProjectNavigate,
@@ -2247,12 +2278,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     [visibleFlowColumns]
   );
   const sanitizedFlowColumnOrder = useMemo(
-    () => sanitizeFlowColumnOrder(flowVisibleColumnBaseOrder, flowColumnOrder),
-    [flowColumnOrder, flowVisibleColumnBaseOrder]
+    () => flowVisibleColumnBaseOrder,
+    [flowVisibleColumnBaseOrder]
   );
   const orderedVisibleFlowColumns = useMemo(
-    () => orderFlowColumns(visibleFlowColumns, sanitizedFlowColumnOrder),
-    [sanitizedFlowColumnOrder, visibleFlowColumns]
+    () => visibleFlowColumns,
+    [visibleFlowColumns]
   );
   const flowGroupedHeaderTemplateColumns = useMemo(
     () => buildGroupedHeaderTemplateColumns(orderedVisibleFlowColumns),
@@ -2273,7 +2304,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     storeFlowColumnOrder(sanitizedFlowColumnOrder);
   }, [sanitizedFlowColumnOrder]);
 
-  const isFlowColumnReorderable = useCallback((field: string) => field !== FLOW_PRIMARY_COLUMN_FIELD, []);
+  const isFlowColumnReorderable = useCallback((_field: string) => false, []);
 
   const commitFlowColumnSwap = useCallback(
     (draggedField: string, targetField: string) => {

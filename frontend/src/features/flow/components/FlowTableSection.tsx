@@ -28,11 +28,13 @@ import { DataGridEmptyState } from "../../../components/feedback/DataGridEmptySt
 import { useToastContext } from "../../../components/Toast";
 import { getStatusSemanticKey } from "../../../theme";
 import { updateStepDate } from "../api";
+import { StatusBadge } from "./StatusBadge";
 import {
   buildActiveFlowFilterDescription,
   buildFlowRows,
   flowQuickFilterOptions,
   getFlowDateGroupSortKey,
+  getFlowFilterFromStatus,
   getFlowCounts,
   getFlowSearchableContent,
   groupFlowRowsByDate,
@@ -142,6 +144,31 @@ function getFlowDateColumnVisibility(stateFilter: FlowFilter) {
     return { execution: false, waiting: false, completed: true };
   }
   return { execution: true, waiting: true, completed: false };
+}
+
+function shouldShowStatusColumn(stateFilter: FlowFilter) {
+  return stateFilter === "all" || stateFilter === "operational";
+}
+
+function renderNotApplicableDateCell(message: string) {
+  return (
+    <Tooltip title={message}>
+      <Typography variant="caption" color="text.disabled" sx={{ lineHeight: 1.2 }}>
+        No aplica
+      </Typography>
+    </Tooltip>
+  );
+}
+
+const FLOW_FIXED_COLUMN_ORDER = ["taskName", "lastRecord", "requirementsLabel", "movementAt", "status", "waitingSinceInput", "executionAt", "completedAtInput"];
+
+function orderFlowColumnsFixed(columns: GridColDef<FlowGridRow>[]) {
+  const fallbackIndex = FLOW_FIXED_COLUMN_ORDER.length;
+  return [...columns].sort((left, right) => {
+    const leftIndex = FLOW_FIXED_COLUMN_ORDER.indexOf(String(left.field));
+    const rightIndex = FLOW_FIXED_COLUMN_ORDER.indexOf(String(right.field));
+    return (leftIndex === -1 ? fallbackIndex : leftIndex) - (rightIndex === -1 ? fallbackIndex : rightIndex);
+  });
 }
 
 export function FlowTableSection({
@@ -334,6 +361,7 @@ export function FlowTableSection({
   }
 
   const dateColumnVisibility = getFlowDateColumnVisibility(stateFilter);
+  const showStatusColumn = shouldShowStatusColumn(stateFilter);
 
   const flowColumns = useMemo<GridColDef<FlowGridRow>[]>(() => {
     const columns: GridColDef<FlowGridRow>[] = [
@@ -434,6 +462,49 @@ export function FlowTableSection({
 
     const movementColumn = columns.pop();
 
+    if (dateColumnVisibility.waiting) {
+      columns.push({
+        field: "waitingSinceInput",
+        headerName: "En espera desde",
+        width: 172,
+        minWidth: 160,
+        align: "center",
+        headerAlign: "center",
+        valueGetter: (_, row) => (row.waitingSinceInput ? getFlowDateGroupSortKey(row.waitingSinceInput, today) : Number.MAX_SAFE_INTEGER),
+        renderCell: (params) => {
+          const rowState = getFlowFilterFromStatus(params.row.status);
+          if (rowState === "active") {
+            return renderNotApplicableDateCell("Solo aplica a flows en espera");
+          }
+
+          const value = params.row.waitingSinceInput;
+          if (!value) {
+            return (
+              <Typography variant="caption" color="text.secondary">
+                Sin fecha registrada
+              </Typography>
+            );
+          }
+          const absoluteDateLabel = formatCalendarDate(value);
+          const elapsedLabel = formatElapsedTime(value);
+          return (
+            <Tooltip title={absoluteDateLabel ?? "En espera"}>
+              <Stack spacing={0} sx={{ alignItems: "center", minWidth: 134 }}>
+                <Typography variant="body2" sx={{ fontSize: "0.84rem", fontWeight: 500, lineHeight: 1.2 }}>
+                  {elapsedLabel ?? "En espera"}
+                </Typography>
+                {absoluteDateLabel ? (
+                  <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.1 }}>
+                    {absoluteDateLabel}
+                  </Typography>
+                ) : null}
+              </Stack>
+            </Tooltip>
+          );
+        },
+      });
+    }
+
     if (dateColumnVisibility.execution) {
       columns.push({
         field: "executionAt",
@@ -445,6 +516,11 @@ export function FlowTableSection({
         valueGetter: (_, row) => row.operationalSortValue,
         renderCell: (params) => {
           const row = params.row;
+          const rowState = getFlowFilterFromStatus(row.status);
+          if (rowState === "waiting") {
+            return renderNotApplicableDateCell("Solo aplica a flows activos");
+          }
+
           const originalValue = row.executionDateInput;
           const isEditing = pendingDates.has(row.id);
 
@@ -567,44 +643,6 @@ export function FlowTableSection({
       });
     }
 
-    if (dateColumnVisibility.waiting) {
-      columns.push({
-        field: "waitingSinceInput",
-        headerName: "En espera desde",
-        width: 172,
-        minWidth: 160,
-        align: "center",
-        headerAlign: "center",
-        valueGetter: (_, row) => (row.waitingSinceInput ? getFlowDateGroupSortKey(row.waitingSinceInput, today) : Number.MAX_SAFE_INTEGER),
-        renderCell: (params) => {
-          const value = params.row.waitingSinceInput;
-          if (!value) {
-            return (
-              <Typography variant="caption" color="text.secondary">
-                Sin fecha registrada
-              </Typography>
-            );
-          }
-          const absoluteDateLabel = formatCalendarDate(value);
-          const elapsedLabel = formatElapsedTime(value);
-          return (
-            <Tooltip title={absoluteDateLabel ?? "En espera"}>
-              <Stack spacing={0} sx={{ alignItems: "center", minWidth: 134 }}>
-                <Typography variant="body2" sx={{ fontSize: "0.82rem", lineHeight: 1.2 }}>
-                  {absoluteDateLabel}
-                </Typography>
-                {elapsedLabel ? (
-                  <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.1 }}>
-                    {elapsedLabel}
-                  </Typography>
-                ) : null}
-              </Stack>
-            </Tooltip>
-          );
-        },
-      });
-    }
-
     if (dateColumnVisibility.completed) {
       columns.push({
         field: "completedAtInput",
@@ -627,6 +665,23 @@ export function FlowTableSection({
 
     if (movementColumn) {
       columns.push(movementColumn);
+    }
+
+    if (showStatusColumn) {
+      columns.push({
+        field: "status",
+        headerName: "Estado",
+        width: 150,
+        minWidth: 140,
+        align: "center",
+        headerAlign: "center",
+        sortable: false,
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", justifyContent: "center", width: "100%", minWidth: 0 }}>
+            <StatusBadge value={params.row.status} />
+          </Box>
+        ),
+      });
     }
 
     if (showProjectColumn) {
@@ -758,7 +813,7 @@ export function FlowTableSection({
       });
     }
 
-    return columns;
+    return orderFlowColumnsFixed(columns);
   }, [
     dateColumnVisibility.completed,
     dateColumnVisibility.execution,
@@ -769,6 +824,7 @@ export function FlowTableSection({
     pendingDates,
     setPendingDateInputRef,
     showProjectColumn,
+    showStatusColumn,
     theme,
     today,
   ]);
@@ -779,6 +835,7 @@ export function FlowTableSection({
       if (column.field === "taskName") return "minmax(300px, 1.45fr)";
       if (column.field === "lastRecord") return "minmax(300px, 1.35fr)";
       if (column.field === "requirementsLabel") return "minmax(260px, 1.2fr)";
+      if (column.field === "status") return "150px";
       return `${column.width ?? column.minWidth ?? 140}px`;
     })
     .join(" ");
