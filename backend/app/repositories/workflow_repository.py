@@ -568,7 +568,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
         first_step_override = getattr(payload, "primer_paso", None)
         waiting_start = getattr(payload, "espera_inicial", None)
         start_mode = getattr(payload, "modo_inicio", WorkflowStartMode.TAREA_ACTIVA)
-        wait_since = waiting_start.fecha_espera_desde if waiting_start and waiting_start.fecha_espera_desde else now
+        wait_since = now
         initial_status = WorkflowStatus.ESPERANDO_RESPUESTA if start_mode == WorkflowStartMode.ESPERANDO else WorkflowStatus.EN_PROCESO
         initial_template_steps = _initial_template_steps(template) if start_mode == WorkflowStartMode.TAREA_ACTIVA else []
         initial_orders = sorted({step.orden for step in initial_template_steps}) or [1]
@@ -1183,7 +1183,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
         first_step_override = getattr(payload, "primer_paso", None)
         waiting_start = getattr(payload, "espera_inicial", None)
         start_mode = getattr(payload, "modo_inicio", WorkflowStartMode.TAREA_ACTIVA)
-        wait_since = waiting_start.fecha_espera_desde if waiting_start and waiting_start.fecha_espera_desde else now
+        wait_since = now
         initial_template_steps = _initial_template_steps(template) if start_mode == WorkflowStartMode.TAREA_ACTIVA else []
         initial_orders = sorted({step.orden for step in initial_template_steps}) or [1]
         workflow = WorkflowModel(

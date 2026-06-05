@@ -2,7 +2,7 @@ from datetime import date, datetime, timezone
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 REMINDER_PAST_ERROR = "El recordatorio no puede ser una fecha pasada."
@@ -166,7 +166,6 @@ class WaitingStartInput(BaseModel):
     esperando_de: str | None = Field(default=None, max_length=160)
     detalle: str | None = Field(default=None, max_length=1000)
     referencia_externa: str | None = Field(default=None, max_length=200)
-    fecha_espera_desde: datetime | None = None
     fecha_recordatorio: datetime | None = None
 
 
@@ -274,6 +273,8 @@ class StepCreate(BaseModel):
 
 
 class StepUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     nombre: str | None = Field(default=None, min_length=1, max_length=120)
     descripcion: str | None = Field(default=None, max_length=1000)
     fecha_ejecucion_estimada: datetime | None = None
@@ -281,7 +282,6 @@ class StepUpdate(BaseModel):
     esperando_de: str | None = Field(default=None, max_length=160)
     external_wait_reason: str | None = Field(default=None, max_length=300)
     external_reference: str | None = Field(default=None, max_length=200)
-    fecha_espera_desde: datetime | None = None
 
 
 class StepDateUpdate(BaseModel):

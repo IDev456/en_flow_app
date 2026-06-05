@@ -37,6 +37,8 @@ export type FlowGridRow = {
   dateContext: WorkflowDetail["contexto_fecha_actual"];
   primaryDateInput: string;
   executionDateInput: string;
+  waitingSinceInput: string;
+  completedAtInput: string;
   executionAt: number;
   operationalSortValue: number;
   lastRecord: string;
@@ -276,6 +278,9 @@ export function buildFlowRows(items: FlowTableItem[], today: string = getTodayLo
     const latestMovementAt = item.latestMovementAt ?? getLatestMovementAt(workflow);
     const primaryDateInput = resolvePrimaryDateInput(workflow, step);
     const executionDateInput = toCalendarDateInputValue(workflow.fecha_recordatorio_actual ?? step?.fecha_vencimiento);
+    const waitingSinceInput =
+      displayStatus === "esperando_respuesta" ? toCalendarDateInputValue(workflow.fecha_espera_desde ?? step?.fecha_estado_actual) : "";
+    const completedAtInput = toCalendarDateInputValue(workflow.fecha_fin);
     const stepLabel =
       step && ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado)
         ? "Disparador"
@@ -308,6 +313,8 @@ export function buildFlowRows(items: FlowTableItem[], today: string = getTodayLo
       dateContext: workflow.contexto_fecha_actual,
       primaryDateInput,
       executionDateInput,
+      waitingSinceInput,
+      completedAtInput,
       executionAt: executionDateInput ? toDateSortValue(executionDateInput) : Number.MAX_SAFE_INTEGER,
       operationalSortValue,
       lastRecord: getLatestMeaningfulWorkflowRecord(workflow),

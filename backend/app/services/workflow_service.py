@@ -63,10 +63,6 @@ class WorkflowService:
             if is_past_calendar_day(value):
                 raise BusinessRuleError(REMINDER_PAST_ERROR)
 
-    def _ensure_wait_date_not_future(self, value: datetime | None) -> None:
-        if value is not None and value > utc_now():
-            raise BusinessRuleError("La fecha de espera no puede estar en el futuro.")
-
     def _ensure_matching_ambito(self, workflow_ambito: Ambito | None, trigger_ambito: Ambito | None) -> None:
         if workflow_ambito is None or trigger_ambito is None or workflow_ambito != trigger_ambito:
             raise BusinessRuleError("No se puede asociar un flow con un proyecto de distinto ámbito.")
@@ -224,7 +220,6 @@ class WorkflowService:
         else:
             if payload.espera_inicial is None:
                 raise BusinessRuleError("Debes indicar la informacion de espera inicial")
-            self._ensure_wait_date_not_future(payload.espera_inicial.fecha_espera_desde)
             self._ensure_reminder_not_past(payload.espera_inicial.fecha_recordatorio)
 
         template = (
@@ -245,7 +240,6 @@ class WorkflowService:
         else:
             if payload.espera_inicial is None:
                 raise BusinessRuleError("Debes indicar la informacion de espera inicial")
-            self._ensure_wait_date_not_future(payload.espera_inicial.fecha_espera_desde)
             self._ensure_reminder_not_past(payload.espera_inicial.fecha_recordatorio)
         template = self.repository.get_default_workflow_template()
         workflow = self.repository.create_workflow(
@@ -322,7 +316,6 @@ class WorkflowService:
             update={
                 "estado": WorkflowStatus.CANCELADO,
                 "fecha_fin": now,
-                "fecha_espera_desde": None,
             }
         )
         self.repository.save_workflow(updated_workflow)
@@ -386,7 +379,7 @@ class WorkflowService:
             update={
                 "estado": next_status,
                 "fecha_fin": None,
-                "fecha_espera_desde": waiting_since if next_status == WorkflowStatus.ESPERANDO_RESPUESTA else None,
+                "fecha_espera_desde": waiting_since if next_status == WorkflowStatus.ESPERANDO_RESPUESTA else workflow.fecha_espera_desde,
                 "pasos_activos": active_orders,
                 "paso_actual": next_step_order,
                 "total_pasos": len(workflow.steps),
@@ -491,7 +484,6 @@ class WorkflowService:
             "esperando_de",
             "external_wait_reason",
             "external_reference",
-            "fecha_espera_desde",
         }
 
         if step.estado != StepStatus.ESPERANDO_RESPUESTA and any(field in patch_data for field in waiting_field_names):
@@ -519,12 +511,6 @@ class WorkflowService:
         if "external_reference" in patch_data:
             next_reference = patch_data["external_reference"]
             update_data["external_reference"] = next_reference.strip() if isinstance(next_reference, str) else None
-        if "fecha_espera_desde" in patch_data:
-            self._ensure_wait_date_not_future(patch_data["fecha_espera_desde"])
-            if step.estado != StepStatus.ESPERANDO_RESPUESTA:
-                raise BusinessRuleError("Solo puedes editar la fecha de espera en tareas esperando respuesta")
-            update_data["fecha_estado_actual"] = patch_data["fecha_espera_desde"]
-
         if not update_data:
             raise BusinessRuleError("No hay cambios para guardar")
 
@@ -1028,7 +1014,6 @@ class WorkflowService:
                     "pasos_activos": [],
                     "paso_actual": None,
                     "fecha_fin": now,
-                    "fecha_espera_desde": None,
                     "total_pasos": len(workflow.steps),
                 }
             )
@@ -1039,7 +1024,6 @@ class WorkflowService:
                     "pasos_activos": active_orders,
                     "paso_actual": active_orders[0] if active_orders else None,
                     "fecha_fin": None,
-                    "fecha_espera_desde": None,
                     "total_pasos": len(workflow.steps),
                 }
             )
@@ -1061,7 +1045,6 @@ class WorkflowService:
                     "pasos_activos": active_orders,
                     "paso_actual": active_orders[0] if active_orders else None,
                     "fecha_fin": None,
-                    "fecha_espera_desde": None,
                     "total_pasos": len(workflow.steps),
                 }
             )
@@ -1072,7 +1055,6 @@ class WorkflowService:
                     "pasos_activos": active_orders,
                     "paso_actual": active_orders[0] if active_orders else None,
                     "fecha_fin": None,
-                    "fecha_espera_desde": None,
                     "total_pasos": len(workflow.steps),
                 }
             )
@@ -1083,7 +1065,6 @@ class WorkflowService:
                     "pasos_activos": [],
                     "paso_actual": None,
                     "fecha_fin": now,
-                    "fecha_espera_desde": None,
                     "total_pasos": len(workflow.steps),
                 }
             )
@@ -1094,7 +1075,6 @@ class WorkflowService:
                     "pasos_activos": [],
                     "paso_actual": None,
                     "fecha_fin": None,
-                    "fecha_espera_desde": None,
                     "total_pasos": len(workflow.steps),
                 }
             )

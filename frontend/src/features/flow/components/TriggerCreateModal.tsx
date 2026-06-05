@@ -88,7 +88,6 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
   const [waitingWhat, setWaitingWhat] = useState("");
   const [waitingFrom, setWaitingFrom] = useState("");
   const [waitingReference, setWaitingReference] = useState("");
-  const [waitingSince, setWaitingSince] = useState(getTodayLocalDateInput());
   const [waitingFollowUpDate, setWaitingFollowUpDate] = useState("");
   const [selectedRequirementId, setSelectedRequirementId] = useState("");
   const [availableRequirements, setAvailableRequirements] = useState<TriggerDetail[]>([]);
@@ -210,7 +209,6 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
         waitingFrom.trim() ||
         waitingReference.trim() ||
         waitingFollowUpDate ||
-        (waitingSince && waitingSince !== getTodayLocalDateInput()) ||
         selectedRequirementId
     );
   }
@@ -246,7 +244,6 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
   function buildCreation(): PendingCreation {
     const executionDateIso = toCalendarDateUtcIso(executionDate);
     const reminderDateIso = toCalendarDateUtcIso(reminderDate);
-    const waitingSinceIso = toCalendarDateUtcIso(waitingSince);
     const waitingFollowUpIso = toCalendarDateUtcIso(waitingFollowUpDate);
     const normalizedDetail = detail.trim() || null;
 
@@ -260,7 +257,6 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
           esperando_de: waitingFrom.trim() || null,
           detalle: normalizedDetail,
           referencia_externa: waitingReference.trim() || null,
-          fecha_espera_desde: waitingSinceIso,
           fecha_recordatorio: waitingFollowUpIso,
         },
       };
@@ -519,10 +515,6 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
         setError(waitingFollowUpError);
         return;
       }
-      if (waitingSince && waitingSince > getTodayLocalDateInput()) {
-        setError("La fecha de espera no puede estar en el futuro.");
-        return;
-      }
     }
 
     if (isLinkedCapture && effectiveRequirementAmbito === null) {
@@ -665,22 +657,12 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
                   placeholder="Ej. Confirmacion del proveedor sobre el layout"
                   disabled={isLinkedCapture && effectiveRequirementAmbito === null}
                 />
-                <Stack direction={{ xs: "column", md: "row" }} spacing={1.25}>
-                  <TextField
-                    label="De quien?"
-                    value={waitingFrom}
-                    onChange={(event) => setWaitingFrom(event.target.value)}
-                    fullWidth
-                  />
-                  <TextField
-                    label="Esperando desde"
-                    type="date"
-                    value={waitingSince}
-                    onChange={(event) => setWaitingSince(event.target.value)}
-                    fullWidth
-                    slotProps={{ inputLabel: { shrink: true } }}
-                  />
-                </Stack>
+                <TextField
+                  label="De quien?"
+                  value={waitingFrom}
+                  onChange={(event) => setWaitingFrom(event.target.value)}
+                  fullWidth
+                />
               </Stack>
             )}
 

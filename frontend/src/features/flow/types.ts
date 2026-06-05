@@ -231,7 +231,6 @@ export type WaitingStartInput = {
   esperando_de?: string | null;
   detalle?: string | null;
   referencia_externa?: string | null;
-  fecha_espera_desde?: string | null;
   fecha_recordatorio?: string | null;
 };
 
@@ -324,5 +323,4 @@ export type StepUpdateInput = {
   esperando_de?: string | null;
   external_wait_reason?: string | null;
   external_reference?: string | null;
-  fecha_espera_desde?: string | null;
 };

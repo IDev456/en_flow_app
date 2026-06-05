@@ -360,6 +360,7 @@ class WorkflowDagTestCase(unittest.TestCase):
         self.assertEqual(workflow.steps[0].ambito, Ambito.PERSONAL)
 
     def test_quick_capture_can_start_waiting(self) -> None:
+        before_create = datetime.now(timezone.utc)
         workflow = self.service.quick_capture_flow(
             QuickCaptureRequest(
                 titulo="Confirmacion de proveedor",
@@ -370,17 +371,20 @@ class WorkflowDagTestCase(unittest.TestCase):
                     esperando_de="Proveedor",
                     detalle="Esperando la aprobacion final",
                     referencia_externa="MAIL-123",
-                    fecha_espera_desde=start_of_utc_day(0),
                     fecha_recordatorio=start_of_utc_day(1),
                 ),
                 creado_por="tester",
                 ambito=Ambito.LABORAL,
             )
         )
+        after_create = datetime.now(timezone.utc)
 
         first_step = workflow.steps[0]
         self.assertEqual(workflow.estado, WorkflowStatus.ESPERANDO_RESPUESTA)
-        self.assertEqual(workflow.fecha_espera_desde.date(), start_of_utc_day(0).date())
+        self.assertIsNotNone(workflow.fecha_espera_desde)
+        self.assertGreaterEqual(workflow.fecha_espera_desde, before_create)
+        self.assertLessEqual(workflow.fecha_espera_desde, after_create)
+        self.assertEqual(first_step.fecha_estado_actual, workflow.fecha_espera_desde)
         self.assertEqual(first_step.estado, StepStatus.ESPERANDO_RESPUESTA)
         self.assertEqual(first_step.esperando_de, "Proveedor")
         self.assertEqual(first_step.expected_external_event, "Confirmacion de proveedor")
@@ -451,7 +455,7 @@ class WorkflowDagTestCase(unittest.TestCase):
                 ),
             )
 
-    def test_start_workflow_rejects_future_waiting_since(self) -> None:
+    def test_start_workflow_rejects_past_waiting_reminder(self) -> None:
         template = build_linear_template()
         self.repository._workflow_templates = {template.id: template}  # type: ignore[attr-defined]
         trigger = self.service.create_trigger(
@@ -473,7 +477,7 @@ class WorkflowDagTestCase(unittest.TestCase):
                     modo_inicio=WorkflowStartMode.ESPERANDO,
                     espera_inicial=WaitingStartInput(
                         que_se_espera="Respuesta legal",
-                        fecha_espera_desde=start_of_utc_day(1),
+                        fecha_recordatorio=start_of_utc_day(-1),
                     ),
                 ),
             )

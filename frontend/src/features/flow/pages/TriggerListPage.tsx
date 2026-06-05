@@ -57,6 +57,7 @@ import {
   GridActionsCellItem,
   type GridColDef,
   type GridFilterModel,
+  type GridRenderCellParams,
   type GridRowParams,
   type GridSortModel,
   Toolbar,
@@ -149,6 +150,8 @@ type FlowGridRow = {
   dateContext: WorkflowDetail["contexto_fecha_actual"];
   primaryDateInput: string;
   executionDateInput: string;
+  waitingSinceInput: string;
+  completedAtInput: string;
   executionAt: number;
   operationalSortValue: number;
   lastRecord: string;
@@ -523,6 +526,19 @@ function getMovementHeatVisual(days: number | null) {
     return { color: "warning.dark", opacity: 0.78 };
   }
   return { color: "error.main", opacity: 0.94 };
+}
+
+function getFlowDateColumnVisibility(stateFilter: FlowFilter) {
+  if (stateFilter === "active") {
+    return { execution: true, waiting: false, completed: false };
+  }
+  if (stateFilter === "waiting") {
+    return { execution: false, waiting: true, completed: false };
+  }
+  if (stateFilter === "finalized" || stateFilter === "cancelled" || stateFilter === "non_operational") {
+    return { execution: false, waiting: false, completed: true };
+  }
+  return { execution: true, waiting: true, completed: false };
 }
 
 function buildFlowDateGroupLabel(dateInput: string | null, todayInput: string) {
@@ -1354,6 +1370,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       const step = item.relevantStep;
       const primaryDateInput = resolvePrimaryDateInput(item.workflow, step);
       const executionDateInput = toDateInputValue(item.workflow.fecha_recordatorio_actual ?? step?.fecha_vencimiento);
+      const waitingSinceInput =
+        item.displayStatus === "esperando_respuesta" ? toDateInputValue(item.workflow.fecha_espera_desde ?? step?.fecha_estado_actual) : "";
+      const completedAtInput = toDateInputValue(item.workflow.fecha_fin);
       const stepLabel =
         step && ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado)
           ? "Disparador"
@@ -1385,6 +1404,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         dateContext: item.workflow.contexto_fecha_actual,
         primaryDateInput,
         executionDateInput,
+        waitingSinceInput,
+        completedAtInput,
         executionAt: executionDateInput ? toDateSortValue(executionDateInput) : Number.MAX_SAFE_INTEGER,
         operationalSortValue,
         lastRecord: getLatestMeaningfulWorkflowRecord(item.workflow),
@@ -1778,6 +1799,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     [location, navigate]
   );
 
+  const dateColumnVisibility = getFlowDateColumnVisibility(stateFilter);
+
   const flowColumns = useMemo<GridColDef<FlowGridRow>[]>(
     () => [
       {
@@ -1863,152 +1886,202 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
           </Typography>
         ),
       },
-      {
-        field: "executionAt",
-        headerName: "Fecha clave",
-        width: 172,
-        minWidth: 160,
-        align: "center",
-        headerAlign: "center",
-        valueGetter: (_, row) => row.operationalSortValue,
-        renderCell: (params) => {
-          const row = params.row;
-          const primaryValue = row.primaryDateInput;
-          const originalValue = row.executionDateInput;
-          const isEditing = pendingDates.has(row.id);
-          const showInput = isEditing;
-          const isFutureRow = Boolean(primaryValue && primaryValue > today);
+      ...(dateColumnVisibility.execution
+        ? [
+            {
+              field: "executionAt",
+              headerName: "Fecha de ejecucion",
+              width: 172,
+              minWidth: 160,
+              align: "center" as const,
+              headerAlign: "center" as const,
+              valueGetter: (_: unknown, row: FlowGridRow) => row.operationalSortValue,
+              renderCell: (params: GridRenderCellParams<FlowGridRow>) => {
+                const row = params.row;
+                const originalValue = row.executionDateInput;
+                const isEditing = pendingDates.has(row.id);
 
-          if (!showInput) {
-            if (primaryValue || originalValue) {
-              const primaryAbsoluteDateLabel = primaryValue ? formatCalendarDate(primaryValue) : null;
-              const primaryRelativeLabel = primaryValue && !isFutureRow ? formatRelativeCalendarDay(primaryValue) : null;
-              const dateLabel =
-                row.dateContext === "espera"
-                  ? (primaryAbsoluteDateLabel ? `Espera: ${primaryAbsoluteDateLabel}` : "Sin fecha de espera")
-                  : row.dateContext === "cerrado"
-                    ? (primaryAbsoluteDateLabel ? `Cierre: ${primaryAbsoluteDateLabel}` : "Sin fecha de cierre")
-                    : primaryValue
-                      ? (primaryRelativeLabel ?? primaryAbsoluteDateLabel ?? "Sin fecha operativa")
-                      : "Sin fecha operativa";
-              const secondaryLabel =
-                row.dateContext === "espera"
-                  ? (originalValue ? `Seguimiento: ${formatCalendarDate(originalValue)}` : "Sin seguimiento")
-                  : originalValue
-                    ? `Recordatorio: ${formatCalendarDate(originalValue)}`
-                    : null;
-              const shouldPulseToday = row.isDueToday && !isEditing;
-              const statusHighlight = getStatusHighlight(row.status, theme);
-              return (
-                <Tooltip title={secondaryLabel ?? primaryAbsoluteDateLabel ?? dateLabel}>
-                    <ButtonBase
-                    disabled={!row.stepId || row.dateContext === "cerrado"}
-                    onClick={(event) => {
+                if (!isEditing) {
+                  if (originalValue) {
+                    const absoluteDateLabel = formatCalendarDate(originalValue);
+                    const relativeLabel = originalValue <= today ? formatRelativeCalendarDay(originalValue) : null;
+                    const dateLabel = relativeLabel ?? absoluteDateLabel ?? "Sin fecha";
+                    const shouldPulseToday = row.isDueToday;
+                    const statusHighlight = getStatusHighlight(row.status, theme);
+                    return (
+                      <Tooltip title={absoluteDateLabel ?? dateLabel}>
+                        <ButtonBase
+                          disabled={!row.stepId || row.dateContext === "cerrado"}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openPendingDateEditorAndPicker(row.id, originalValue);
+                          }}
+                          sx={(theme) => ({
+                            borderRadius: theme.appShape.sm,
+                            px: 0.5,
+                            py: 0.25,
+                            width: "100%",
+                            justifyContent: "center",
+                          })}
+                        >
+                          <Stack
+                            spacing={0}
+                            sx={(theme) => ({
+                              alignItems: "center",
+                              minWidth: 134,
+                              borderRadius: theme.appShape.sm,
+                              px: shouldPulseToday ? 0.45 : 0,
+                              backgroundColor: shouldPulseToday ? statusHighlight.soft : "transparent",
+                              border: shouldPulseToday ? `1px solid ${statusHighlight.border}` : "1px solid transparent",
+                              transition: theme.transitions.create(["background-color", "border-color"], {
+                                duration: theme.appMotion.short,
+                              }),
+                            })}
+                          >
+                            <Typography variant="body2" sx={{ fontSize: "0.82rem", lineHeight: 1.2 }}>
+                              {dateLabel}
+                            </Typography>
+                            {absoluteDateLabel && absoluteDateLabel !== dateLabel ? (
+                              <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.1 }}>
+                                {absoluteDateLabel}
+                              </Typography>
+                            ) : null}
+                          </Stack>
+                        </ButtonBase>
+                      </Tooltip>
+                    );
+                  }
+                  return (
+                    <IconButton
+                      size="small"
+                      disabled={!row.stepId || row.dateContext === "cerrado"}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openPendingDateEditorAndPicker(row.id, "");
+                      }}
+                      sx={{ opacity: 0.38, "&:hover": { opacity: 0.9 } }}
+                    >
+                      <EditCalendarRoundedIcon fontSize="small" />
+                    </IconButton>
+                  );
+                }
+
+                const value = pendingDates.get(row.id) ?? originalValue;
+                return (
+                  <TextField
+                    type="date"
+                    size="small"
+                    variant="outlined"
+                    value={value}
+                    autoFocus={isEditing}
+                    inputRef={(input) => {
+                      setPendingDateInputRef(row.id, input);
+                    }}
+                    disabled={!row.stepId}
+                    slotProps={{ htmlInput: { min: today } }}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={(event) => {
                       event.stopPropagation();
-                      openPendingDateEditorAndPicker(row.id, originalValue);
+                      setPendingDates((previous) => {
+                        const next = new Map(previous);
+                        next.set(row.id, event.target.value);
+                        return next;
+                      });
+                    }}
+                    onBlur={(event) => {
+                      void handleDateBlur(event, row);
+                    }}
+                    onKeyDown={(event) => {
+                      event.stopPropagation();
+                      if (event.key === "Escape") {
+                        setPendingDates((previous) => {
+                          if (!previous.has(row.id)) return previous;
+                          const next = new Map(previous);
+                          next.delete(row.id);
+                          return next;
+                        });
+                        (event.target as HTMLInputElement).blur();
+                      }
                     }}
                     sx={(theme) => ({
-                      borderRadius: theme.appShape.sm,
-                      px: 0.5,
-                      py: 0.25,
-                      width: "100%",
-                      justifyContent: "center",
-                    })}
-                  >
-                        <Stack
-                      spacing={0}
-                      sx={(theme) => ({
-                        alignItems: "center",
-                        minWidth: 134,
+                      minWidth: 150,
+                      "& .MuiOutlinedInput-root": {
                         borderRadius: theme.appShape.sm,
-                        px: shouldPulseToday ? 0.45 : 0,
-                        backgroundColor: shouldPulseToday ? statusHighlight.soft : "transparent",
-                        border: shouldPulseToday ? `1px solid ${statusHighlight.border}` : "1px solid transparent",
-                        transition: theme.transitions.create(["background-color", "border-color"], {
-                          duration: theme.appMotion.short,
-                        }),
-                      })}
-                    >
+                        backgroundColor: theme.palette.surfaceContainerLowest,
+                      },
+                      "& input": {
+                        fontSize: "0.82rem",
+                        padding: "4px 8px",
+                      },
+                    })}
+                  />
+                );
+              },
+            },
+          ]
+        : []),
+      ...(dateColumnVisibility.waiting
+        ? [
+            {
+              field: "waitingSinceInput",
+              headerName: "En espera desde",
+              width: 172,
+              minWidth: 160,
+              align: "center" as const,
+              headerAlign: "center" as const,
+              valueGetter: (_: unknown, row: FlowGridRow) =>
+                row.waitingSinceInput ? getFlowDateGroupSortKey(row.waitingSinceInput, today) : Number.MAX_SAFE_INTEGER,
+              renderCell: (params: GridRenderCellParams<FlowGridRow>) => {
+                const value = params.row.waitingSinceInput;
+                if (!value) {
+                  return (
+                    <Typography variant="caption" color="text.secondary">
+                      Sin fecha registrada
+                    </Typography>
+                  );
+                }
+                const absoluteDateLabel = formatCalendarDate(value);
+                const elapsedLabel = formatElapsedTime(value);
+                return (
+                  <Tooltip title={absoluteDateLabel ?? "En espera"}>
+                    <Stack spacing={0} sx={{ alignItems: "center", minWidth: 134 }}>
                       <Typography variant="body2" sx={{ fontSize: "0.82rem", lineHeight: 1.2 }}>
-                        {dateLabel}
+                        {absoluteDateLabel}
                       </Typography>
-                      {secondaryLabel ? (
+                      {elapsedLabel ? (
                         <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.1 }}>
-                          {secondaryLabel}
+                          {elapsedLabel}
                         </Typography>
                       ) : null}
                     </Stack>
-                  </ButtonBase>
-                </Tooltip>
-              );
-            }
-            return (
-              <IconButton
-                size="small"
-                disabled={!row.stepId || row.dateContext === "cerrado"}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  openPendingDateEditorAndPicker(row.id, "");
-                }}
-                sx={{ opacity: 0.38, "&:hover": { opacity: 0.9 } }}
-              >
-                <EditCalendarRoundedIcon fontSize="small" />
-              </IconButton>
-            );
-          }
-
-          const value = pendingDates.get(row.id) ?? originalValue;
-          return (
-            <TextField
-              type="date"
-              size="small"
-              variant="outlined"
-              value={value}
-              autoFocus={isEditing}
-              inputRef={(input) => {
-                setPendingDateInputRef(row.id, input);
-              }}
-              disabled={!row.stepId}
-              slotProps={{ htmlInput: { min: today } }}
-              onClick={(event) => event.stopPropagation()}
-              onChange={(event) => {
-                event.stopPropagation();
-                setPendingDates((previous) => {
-                  const next = new Map(previous);
-                  next.set(row.id, event.target.value);
-                  return next;
-                });
-              }}
-              onBlur={(event) => {
-                void handleDateBlur(event, row);
-              }}
-              onKeyDown={(event) => {
-                event.stopPropagation();
-                if (event.key === "Escape") {
-                  setPendingDates((previous) => {
-                    if (!previous.has(row.id)) return previous;
-                    const next = new Map(previous);
-                    next.delete(row.id);
-                    return next;
-                  });
-                  (event.target as HTMLInputElement).blur();
-                }
-              }}
-              sx={(theme) => ({
-                minWidth: 150,
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: theme.appShape.sm,
-                  backgroundColor: theme.palette.surfaceContainerLowest,
-                },
-                "& input": {
-                  fontSize: "0.82rem",
-                  padding: "4px 8px",
-                },
-              })}
-            />
-          );
-        },
-      },
+                  </Tooltip>
+                );
+              },
+            },
+          ]
+        : []),
+      ...(dateColumnVisibility.completed
+        ? [
+            {
+              field: "completedAtInput",
+              headerName: "Finalizacion",
+              width: 156,
+              minWidth: 146,
+              align: "center" as const,
+              headerAlign: "center" as const,
+              valueGetter: (_: unknown, row: FlowGridRow) =>
+                row.completedAtInput ? getFlowDateGroupSortKey(row.completedAtInput, today) : Number.MAX_SAFE_INTEGER,
+              renderCell: (params: GridRenderCellParams<FlowGridRow>) => {
+                const value = params.row.completedAtInput;
+                return (
+                  <Typography variant="body2" color={value ? "text.primary" : "text.secondary"} sx={{ fontSize: "0.82rem", lineHeight: 1.2 }}>
+                    {value ? formatCalendarDate(value) : "Sin cierre"}
+                  </Typography>
+                );
+              },
+            },
+          ]
+        : []),
       {
         field: "movementAt",
         headerName: "Inactividad",
@@ -2150,7 +2223,19 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         },
       },
     ],
-    [openPendingDateEditorAndPicker, pendingDates, setPendingDateInputRef, theme.palette.mode, today, handleProjectNavigate, setRequirementsMenu, setLinkProjectDialog]
+    [
+      dateColumnVisibility.completed,
+      dateColumnVisibility.execution,
+      dateColumnVisibility.waiting,
+      openPendingDateEditorAndPicker,
+      pendingDates,
+      setPendingDateInputRef,
+      theme,
+      today,
+      handleProjectNavigate,
+      setRequirementsMenu,
+      setLinkProjectDialog,
+    ]
   );
 
   const visibleFlowColumns = useMemo(

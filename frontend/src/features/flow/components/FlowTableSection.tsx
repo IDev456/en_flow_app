@@ -32,6 +32,7 @@ import {
   buildActiveFlowFilterDescription,
   buildFlowRows,
   flowQuickFilterOptions,
+  getFlowDateGroupSortKey,
   getFlowCounts,
   getFlowSearchableContent,
   groupFlowRowsByDate,
@@ -47,6 +48,7 @@ import {
 } from "../utils/flowTable";
 import {
   formatCalendarDate,
+  formatElapsedTime,
   formatRelativeCalendarDay,
   getReminderDateError,
   getStatusTone,
@@ -127,6 +129,19 @@ function getSemanticTabSx(accent: string, soft: string) {
       boxShadow: `inset 0 -2px 0 ${accent}, 0 0 0 1px ${alpha(accent, 0.08)}`,
     },
   } as const;
+}
+
+function getFlowDateColumnVisibility(stateFilter: FlowFilter) {
+  if (stateFilter === "active") {
+    return { execution: true, waiting: false, completed: false };
+  }
+  if (stateFilter === "waiting") {
+    return { execution: false, waiting: true, completed: false };
+  }
+  if (stateFilter === "finalized" || stateFilter === "cancelled" || stateFilter === "non_operational") {
+    return { execution: false, waiting: false, completed: true };
+  }
+  return { execution: true, waiting: true, completed: false };
 }
 
 export function FlowTableSection({
@@ -318,6 +333,8 @@ export function FlowTableSection({
     }
   }
 
+  const dateColumnVisibility = getFlowDateColumnVisibility(stateFilter);
+
   const flowColumns = useMemo<GridColDef<FlowGridRow>[]>(() => {
     const columns: GridColDef<FlowGridRow>[] = [
       {
@@ -393,8 +410,34 @@ export function FlowTableSection({
         ),
       },
       {
+        field: "movementAt",
+        headerName: "Inactividad",
+        width: 126,
+        minWidth: 120,
+        align: "center",
+        headerAlign: "center",
+        renderCell: (params) => {
+          const heatVisual = getMovementHeatVisual(params.row.movementDays);
+          return (
+            <Stack direction="row" spacing={0.45} sx={{ alignItems: "center", justifyContent: "center" }}>
+              <Typography variant="caption" color="text.secondary">
+                {params.row.movementLabel}
+              </Typography>
+              {heatVisual ? (
+                <LocalFireDepartmentRoundedIcon sx={{ fontSize: 14, color: heatVisual.color, opacity: heatVisual.opacity }} />
+              ) : null}
+            </Stack>
+          );
+        },
+      },
+    ];
+
+    const movementColumn = columns.pop();
+
+    if (dateColumnVisibility.execution) {
+      columns.push({
         field: "executionAt",
-        headerName: "Fecha clave",
+        headerName: "Fecha de ejecucion",
         width: 172,
         minWidth: 160,
         align: "center",
@@ -402,34 +445,18 @@ export function FlowTableSection({
         valueGetter: (_, row) => row.operationalSortValue,
         renderCell: (params) => {
           const row = params.row;
-          const primaryValue = row.primaryDateInput;
           const originalValue = row.executionDateInput;
           const isEditing = pendingDates.has(row.id);
-          const showInput = isEditing;
-          const isFutureRow = Boolean(primaryValue && primaryValue > today);
 
-          if (!showInput) {
-            if (primaryValue || originalValue) {
-              const primaryAbsoluteDateLabel = primaryValue ? formatCalendarDate(primaryValue) : null;
-              const primaryRelativeLabel = primaryValue && !isFutureRow ? formatRelativeCalendarDay(primaryValue) : null;
-              const dateLabel =
-                row.dateContext === "espera"
-                  ? (primaryAbsoluteDateLabel ? `Espera: ${primaryAbsoluteDateLabel}` : "Sin fecha de espera")
-                  : row.dateContext === "cerrado"
-                    ? (primaryAbsoluteDateLabel ? `Cierre: ${primaryAbsoluteDateLabel}` : "Sin fecha de cierre")
-                    : primaryValue
-                      ? (primaryRelativeLabel ?? primaryAbsoluteDateLabel ?? "Sin fecha operativa")
-                      : "Sin fecha operativa";
-              const secondaryLabel =
-                row.dateContext === "espera"
-                  ? (originalValue ? `Seguimiento: ${formatCalendarDate(originalValue)}` : "Sin seguimiento")
-                  : originalValue
-                    ? `Recordatorio: ${formatCalendarDate(originalValue)}`
-                    : null;
-              const shouldPulseToday = row.isDueToday && !isEditing;
+          if (!isEditing) {
+            if (originalValue) {
+              const absoluteDateLabel = formatCalendarDate(originalValue);
+              const relativeLabel = originalValue <= today ? formatRelativeCalendarDay(originalValue) : null;
+              const dateLabel = relativeLabel ?? absoluteDateLabel ?? "Sin fecha";
+              const shouldPulseToday = row.isDueToday;
               const statusHighlight = getStatusHighlight(row.status, theme);
               return (
-                <Tooltip title={secondaryLabel ?? primaryAbsoluteDateLabel ?? dateLabel}>
+                <Tooltip title={absoluteDateLabel ?? dateLabel}>
                   <ButtonBase
                     disabled={!row.stepId || row.dateContext === "cerrado"}
                     onClick={(event) => {
@@ -461,9 +488,9 @@ export function FlowTableSection({
                       <Typography variant="body2" sx={{ fontSize: "0.82rem", lineHeight: 1.2 }}>
                         {dateLabel}
                       </Typography>
-                      {secondaryLabel ? (
+                      {absoluteDateLabel && absoluteDateLabel !== dateLabel ? (
                         <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.1 }}>
-                          {secondaryLabel}
+                          {absoluteDateLabel}
                         </Typography>
                       ) : null}
                     </Stack>
@@ -537,29 +564,70 @@ export function FlowTableSection({
             />
           );
         },
-      },
-      {
-        field: "movementAt",
-        headerName: "Inactividad",
-        width: 126,
-        minWidth: 120,
+      });
+    }
+
+    if (dateColumnVisibility.waiting) {
+      columns.push({
+        field: "waitingSinceInput",
+        headerName: "En espera desde",
+        width: 172,
+        minWidth: 160,
         align: "center",
         headerAlign: "center",
+        valueGetter: (_, row) => (row.waitingSinceInput ? getFlowDateGroupSortKey(row.waitingSinceInput, today) : Number.MAX_SAFE_INTEGER),
         renderCell: (params) => {
-          const heatVisual = getMovementHeatVisual(params.row.movementDays);
-          return (
-            <Stack direction="row" spacing={0.45} sx={{ alignItems: "center", justifyContent: "center" }}>
+          const value = params.row.waitingSinceInput;
+          if (!value) {
+            return (
               <Typography variant="caption" color="text.secondary">
-                {params.row.movementLabel}
+                Sin fecha registrada
               </Typography>
-              {heatVisual ? (
-                <LocalFireDepartmentRoundedIcon sx={{ fontSize: 14, color: heatVisual.color, opacity: heatVisual.opacity }} />
-              ) : null}
-            </Stack>
+            );
+          }
+          const absoluteDateLabel = formatCalendarDate(value);
+          const elapsedLabel = formatElapsedTime(value);
+          return (
+            <Tooltip title={absoluteDateLabel ?? "En espera"}>
+              <Stack spacing={0} sx={{ alignItems: "center", minWidth: 134 }}>
+                <Typography variant="body2" sx={{ fontSize: "0.82rem", lineHeight: 1.2 }}>
+                  {absoluteDateLabel}
+                </Typography>
+                {elapsedLabel ? (
+                  <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.1 }}>
+                    {elapsedLabel}
+                  </Typography>
+                ) : null}
+              </Stack>
+            </Tooltip>
           );
         },
-      },
-    ];
+      });
+    }
+
+    if (dateColumnVisibility.completed) {
+      columns.push({
+        field: "completedAtInput",
+        headerName: "Finalizacion",
+        width: 156,
+        minWidth: 146,
+        align: "center",
+        headerAlign: "center",
+        valueGetter: (_, row) => (row.completedAtInput ? getFlowDateGroupSortKey(row.completedAtInput, today) : Number.MAX_SAFE_INTEGER),
+        renderCell: (params) => {
+          const value = params.row.completedAtInput;
+          return (
+            <Typography variant="body2" color={value ? "text.primary" : "text.secondary"} sx={{ fontSize: "0.82rem", lineHeight: 1.2 }}>
+              {value ? formatCalendarDate(value) : "Sin cierre"}
+            </Typography>
+          );
+        },
+      });
+    }
+
+    if (movementColumn) {
+      columns.push(movementColumn);
+    }
 
     if (showProjectColumn) {
       columns.push({
@@ -692,6 +760,9 @@ export function FlowTableSection({
 
     return columns;
   }, [
+    dateColumnVisibility.completed,
+    dateColumnVisibility.execution,
+    dateColumnVisibility.waiting,
     onOpenLinkProject,
     onProjectNavigate,
     openPendingDateEditorAndPicker,
@@ -703,9 +774,14 @@ export function FlowTableSection({
   ]);
 
   const visibleFlowColumns = flowColumns;
-  const flowGroupedHeaderTemplateColumns = showProjectColumn
-    ? "minmax(300px, 1.45fr) minmax(300px, 1.35fr) 172px 126px minmax(260px, 1.2fr)"
-    : "minmax(300px, 1.45fr) minmax(300px, 1.35fr) 172px 126px";
+  const flowGroupedHeaderTemplateColumns = visibleFlowColumns
+    .map((column) => {
+      if (column.field === "taskName") return "minmax(300px, 1.45fr)";
+      if (column.field === "lastRecord") return "minmax(300px, 1.35fr)";
+      if (column.field === "requirementsLabel") return "minmax(260px, 1.2fr)";
+      return `${column.width ?? column.minWidth ?? 140}px`;
+    })
+    .join(" ");
 
   const requirementsMenuRow = requirementsMenu
     ? visibleFlowRows.find((row) => row.id === requirementsMenu.rowId) ??

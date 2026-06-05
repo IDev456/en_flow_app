@@ -131,7 +131,6 @@ export function StepDetailPanel({
   const [stepDraftWaitingWhat, setStepDraftWaitingWhat] = useState("");
   const [stepDraftWaitingFrom, setStepDraftWaitingFrom] = useState("");
   const [stepDraftWaitingReference, setStepDraftWaitingReference] = useState("");
-  const [stepDraftWaitingSince, setStepDraftWaitingSince] = useState("");
   const [stepEditError, setStepEditError] = useState<string | null>(null);
   const [savingStep, setSavingStep] = useState(false);
   const [stepToastOpen, setStepToastOpen] = useState(false);
@@ -174,7 +173,6 @@ export function StepDetailPanel({
     setStepDraftWaitingWhat(step.expected_external_event ?? "");
     setStepDraftWaitingFrom(step.esperando_de ?? "");
     setStepDraftWaitingReference(step.external_reference ?? "");
-    setStepDraftWaitingSince(toCalendarDateInputValue(step.fecha_estado_actual));
     setIsReminderEditing(false);
     setReminderDraft(toCalendarDateInputValue(step.fecha_vencimiento));
     setSavingReminder(false);
@@ -369,7 +367,6 @@ export function StepDetailPanel({
     setStepDraftWaitingWhat(step.expected_external_event ?? "");
     setStepDraftWaitingFrom(step.esperando_de ?? "");
     setStepDraftWaitingReference(step.external_reference ?? "");
-    setStepDraftWaitingSince(toCalendarDateInputValue(step.fecha_estado_actual));
     setStepEditError(null);
     setEditingStep(true);
   }
@@ -383,7 +380,6 @@ export function StepDetailPanel({
     setStepDraftWaitingWhat(step.expected_external_event ?? "");
     setStepDraftWaitingFrom(step.esperando_de ?? "");
     setStepDraftWaitingReference(step.external_reference ?? "");
-    setStepDraftWaitingSince(toCalendarDateInputValue(step.fecha_estado_actual));
     setStepEditError(null);
     setEditingStep(false);
   }
@@ -399,7 +395,6 @@ export function StepDetailPanel({
     const nextDescription = stepDraftDescription.trim();
     const nextExecutionDate = toCalendarDateUtcIso(stepDraftExecutionDate);
     const nextReminderDate = toCalendarDateUtcIso(stepDraftReminderDate);
-    const nextWaitingSince = toCalendarDateUtcIso(stepDraftWaitingSince);
     const nextWaitingWhat = stepDraftWaitingWhat.trim();
     const nextWaitingFrom = stepDraftWaitingFrom.trim();
     const nextWaitingReference = stepDraftWaitingReference.trim();
@@ -410,8 +405,7 @@ export function StepDetailPanel({
       nextExecutionDate !== step.fecha_ejecucion_estimada ||
       nextWaitingWhat !== (step.expected_external_event ?? "") ||
       nextWaitingFrom !== (step.esperando_de ?? "") ||
-      nextWaitingReference !== (step.external_reference ?? "") ||
-      (isWaitingExternal && nextWaitingSince !== step.fecha_estado_actual);
+      nextWaitingReference !== (step.external_reference ?? "");
     const hasReminderChanges = stepDraftReminderDate !== currentReminderInput;
 
     if (!nextName) {
@@ -423,11 +417,6 @@ export function StepDetailPanel({
       setStepEditError(reminderError);
       return;
     }
-    if (isWaitingExternal && stepDraftWaitingSince && stepDraftWaitingSince > todayLocalDateInput) {
-      setStepEditError("La fecha de espera no puede estar en el futuro.");
-      return;
-    }
-
     if (!hasMetadataChanges && !hasReminderChanges) {
       setEditingStep(false);
       setStepEditError(null);
@@ -447,7 +436,6 @@ export function StepDetailPanel({
           esperando_de: isWaitingExternal ? nextWaitingFrom || null : undefined,
           external_reference: isWaitingExternal ? nextWaitingReference || null : undefined,
           external_wait_reason: isWaitingExternal ? (nextDescription || null) : undefined,
-          fecha_espera_desde: isWaitingExternal ? nextWaitingSince : undefined,
         });
       }
       if (hasReminderChanges) {
@@ -462,7 +450,6 @@ export function StepDetailPanel({
       setStepDraftWaitingWhat(updatedStep.expected_external_event ?? "");
       setStepDraftWaitingFrom(updatedStep.esperando_de ?? "");
       setStepDraftWaitingReference(updatedStep.external_reference ?? "");
-      setStepDraftWaitingSince(toCalendarDateInputValue(updatedStep.fecha_estado_actual));
       await onStepUpdated?.(updatedStep);
       setEditingStep(false);
       setStepToastOpen(true);
@@ -714,14 +701,6 @@ export function StepDetailPanel({
                             label="Referencia"
                             value={stepDraftWaitingReference}
                             onChange={(event) => setStepDraftWaitingReference(event.target.value)}
-                            disabled={savingStep}
-                          />
-                          <TextField
-                            label="Esperando desde"
-                            type="date"
-                            value={stepDraftWaitingSince}
-                            onChange={(event) => setStepDraftWaitingSince(event.target.value)}
-                            slotProps={{ inputLabel: { shrink: true } }}
                             disabled={savingStep}
                           />
                         </>
