@@ -343,17 +343,7 @@ class WorkflowService:
             (step.fecha_estado_actual for step in waiting_external_steps if step.fecha_estado_actual is not None),
             default=None,
         )
-        waiting_since = (
-            min((step.fecha_estado_actual for step in waiting_external_steps), default=None)
-            if waiting_external_steps
-            else None
-        )
         fallback_order = min((step.orden for step in workflow.steps), default=None)
-        waiting_since = (
-            min((step.fecha_estado_actual for step in waiting_external_steps), default=None)
-            if waiting_external_steps
-            else None
-        )
 
         if active_steps:
             next_status = WorkflowStatus.EN_PROCESO
@@ -379,7 +369,7 @@ class WorkflowService:
             update={
                 "estado": next_status,
                 "fecha_fin": None,
-                "fecha_espera_desde": waiting_since if next_status == WorkflowStatus.ESPERANDO_RESPUESTA else workflow.fecha_espera_desde,
+                "fecha_espera_desde": waiting_since if next_status == WorkflowStatus.ESPERANDO_RESPUESTA else None,
                 "pasos_activos": active_orders,
                 "paso_actual": next_step_order,
                 "total_pasos": len(workflow.steps),
@@ -1014,6 +1004,7 @@ class WorkflowService:
                     "pasos_activos": [],
                     "paso_actual": None,
                     "fecha_fin": now,
+                    "fecha_espera_desde": None,
                     "total_pasos": len(workflow.steps),
                 }
             )
@@ -1024,6 +1015,7 @@ class WorkflowService:
                     "pasos_activos": active_orders,
                     "paso_actual": active_orders[0] if active_orders else None,
                     "fecha_fin": None,
+                    "fecha_espera_desde": None,
                     "total_pasos": len(workflow.steps),
                 }
             )
@@ -1045,6 +1037,7 @@ class WorkflowService:
                     "pasos_activos": active_orders,
                     "paso_actual": active_orders[0] if active_orders else None,
                     "fecha_fin": None,
+                    "fecha_espera_desde": None,
                     "total_pasos": len(workflow.steps),
                 }
             )
@@ -1055,6 +1048,7 @@ class WorkflowService:
                     "pasos_activos": active_orders,
                     "paso_actual": active_orders[0] if active_orders else None,
                     "fecha_fin": None,
+                    "fecha_espera_desde": None,
                     "total_pasos": len(workflow.steps),
                 }
             )
@@ -1065,6 +1059,7 @@ class WorkflowService:
                     "pasos_activos": [],
                     "paso_actual": None,
                     "fecha_fin": now,
+                    "fecha_espera_desde": None,
                     "total_pasos": len(workflow.steps),
                 }
             )
@@ -1075,6 +1070,7 @@ class WorkflowService:
                     "pasos_activos": [],
                     "paso_actual": None,
                     "fecha_fin": None,
+                    "fecha_espera_desde": None,
                     "total_pasos": len(workflow.steps),
                 }
             )

@@ -536,7 +536,73 @@ class WorkflowDagTestCase(unittest.TestCase):
         self.assertEqual(updated_step.esperando_de, "Proveedor")
         self.assertEqual(updated_step.fecha_vencimiento.date(), start_of_utc_day(2).date())
         self.assertEqual(workflow.estado, WorkflowStatus.ESPERANDO_RESPUESTA)
-        self.assertEqual(workflow.fecha_espera_desde.date(), updated_step.fecha_estado_actual.date())
+        self.assertEqual(workflow.fecha_espera_desde, updated_step.fecha_estado_actual)
+
+    def test_wait_since_clears_when_flow_leaves_wait_and_recalculates_on_reentry(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        step_a = self.service.get_workflow(workflow_id).steps[0]
+
+        step_a_waiting = self.service.complete_step(
+            step_a.id,
+            StepCompletePayload(
+                usuario="tester",
+                comentario="Esperando respuesta externa A",
+                resultado_cierre="En espera A",
+                observaciones=None,
+                transition_type=StepTransitionType.WAIT_EXTERNAL,
+                external_wait=ExternalWaitInput(que_se_espera="respuesta_a", origen="sistema"),
+            ),
+        )
+        workflow_waiting_a = self.service.get_workflow(workflow_id)
+        self.assertEqual(workflow_waiting_a.estado, WorkflowStatus.ESPERANDO_RESPUESTA)
+        self.assertEqual(workflow_waiting_a.fecha_espera_desde, step_a_waiting.fecha_estado_actual)
+
+        self.service.register_external_event(
+            step_a_waiting.id,
+            ExternalEventCreate(
+                event_type="respuesta_a",
+                comentario="Llego la respuesta A",
+                source="manual",
+                registrado_por="tester",
+            ),
+        )
+        workflow_active = self.service.get_workflow(workflow_id)
+        self.assertEqual(workflow_active.estado, WorkflowStatus.EN_PROCESO)
+        self.assertIsNone(workflow_active.fecha_espera_desde)
+
+        step_b = self._step_by_code(workflow_id, "B")
+        step_b_waiting = self.service.complete_step(
+            step_b.id,
+            StepCompletePayload(
+                usuario="tester",
+                comentario="Esperando respuesta externa B",
+                resultado_cierre="En espera B",
+                observaciones=None,
+                transition_type=StepTransitionType.WAIT_EXTERNAL,
+                external_wait=ExternalWaitInput(que_se_espera="respuesta_b", origen="sistema"),
+            ),
+        )
+        workflow_waiting_b = self.service.get_workflow(workflow_id)
+        self.assertEqual(workflow_waiting_b.estado, WorkflowStatus.ESPERANDO_RESPUESTA)
+        self.assertEqual(workflow_waiting_b.fecha_espera_desde, step_b_waiting.fecha_estado_actual)
+
+        self.service.register_external_event(
+            step_b_waiting.id,
+            ExternalEventCreate(
+                event_type="respuesta_b",
+                comentario="Llego la respuesta B",
+                source="manual",
+                registrado_por="tester",
+            ),
+        )
+        workflow_active_again = self.service.get_workflow(workflow_id)
+        self.assertEqual(workflow_active_again.estado, WorkflowStatus.EN_PROCESO)
+        self.assertIsNone(workflow_active_again.fecha_espera_desde)
+
+        self._complete(workflow_id, "C")
+        workflow_finished = self.service.get_workflow(workflow_id)
+        self.assertEqual(workflow_finished.estado, WorkflowStatus.FINALIZADO)
+        self.assertIsNone(workflow_finished.fecha_espera_desde)
 
     def test_today_reminder_is_allowed(self) -> None:
         workflow = self.service.quick_capture_flow(
