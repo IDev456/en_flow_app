@@ -916,8 +916,6 @@ export function FlowTableSection({
                 <Tab key="tab_active" value="active" label={`Activos (${resolvedCounts.active})`} />,
                 <Tab key="tab_waiting" value="waiting" label={`Esperando (${resolvedCounts.waiting})`} />,
                 <Tab key="tab_non_operational" value="non_operational" label={`No operativos (${resolvedCounts.cancelled + resolvedCounts.finalized})`} />,
-                <Tab key="tab_cancelled" value="cancelled" label={`Cancelados (${resolvedCounts.cancelled})`} />,
-                <Tab key="tab_finalized" value="finalized" label={`Finalizados (${resolvedCounts.finalized})`} />,
               ]
             )}
           </Tabs>

@@ -115,6 +115,9 @@ export function normalizeVisibleFlowFilter(filter: FlowFilter | null | undefined
   if (!filter || filter === "all" || filter === "operational") {
     return "active";
   }
+  if (filter === "cancelled" || filter === "finalized") {
+    return "non_operational";
+  }
   return filter;
 }
 

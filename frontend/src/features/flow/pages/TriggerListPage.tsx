@@ -4,7 +4,6 @@ import type { DragEvent as ReactDragEvent } from "react";
 import DragIndicatorRoundedIcon from "@mui/icons-material/DragIndicatorRounded";
 import BoltRoundedIcon from "@mui/icons-material/BoltRounded";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
-import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
 import EditCalendarRoundedIcon from "@mui/icons-material/EditCalendarRounded";
@@ -363,6 +362,9 @@ function getAllowedFlowQuickFiltersForStateFilter(stateFilter: FlowFilter): Flow
 function normalizeVisibleFlowFilter(filter: FlowFilter | null | undefined): FlowFilter {
   if (!filter || filter === "all" || filter === "operational") {
     return "active";
+  }
+  if (filter === "cancelled" || filter === "finalized") {
+    return "non_operational";
   }
   return filter;
 }
@@ -3184,8 +3186,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 <Box
                   sx={{
                     display: "grid",
-                    gridTemplateColumns: { xs: "1fr 1fr", sm: "repeat(5, minmax(0, 1fr))" },
-                    gridTemplateRows: "auto auto",
+                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
                   }}
                 >
                   {(
@@ -3208,23 +3209,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                         token: theme.palette.status.cancelled,
                         count: currentCounts.cancelled + currentCounts.finalized,
                       },
-                      {
-                        value: "cancelled" as const,
-                        label: "Cancelados",
-                        token: theme.palette.status.cancelled,
-                        count: currentCounts.cancelled,
-                      },
-                      {
-                        value: "finalized" as const,
-                        label: "Finalizados",
-                        token: theme.palette.status.finalized,
-                        count: currentCounts.finalized,
-                      },
                     ] as const
-                  ).map((option, idx) => {
-                    const isSelected =
-                      stateFilter === option.value ||
-                      (option.value === "non_operational" && (stateFilter === "cancelled" || stateFilter === "finalized"));
+                  ).map((option, idx, options) => {
+                    const isSelected = stateFilter === option.value;
                     const iconColor = isSelected ? option.token.accent : "text.disabled";
                     const iconSx = { fontSize: 13, mb: 0.25, color: iconColor };
                     return (
@@ -3240,14 +3227,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                           flexDirection: "column",
                           alignItems: "center",
                           justifyContent: "center",
-                          borderRight: {
-                            xs: idx % 2 === 0 && idx !== 4 ? "1px solid" : "none",
-                            sm: idx < 4 ? "1px solid" : "none",
-                          },
-                          borderBottom: {
-                            xs: idx < 4 ? "1px solid" : "none",
-                            sm: "none",
-                          },
+                          borderRight: idx < options.length - 1 ? "1px solid" : "none",
                           borderColor: "divider",
                           backgroundColor: isSelected
                             ? option.token.container
@@ -3262,8 +3242,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                         {option.value === "active" && <BoltRoundedIcon sx={iconSx} />}
                         {option.value === "waiting" && <HourglassTopRoundedIcon sx={iconSx} />}
                         {option.value === "non_operational" && <CancelOutlinedIcon sx={iconSx} />}
-                        {option.value === "cancelled" && <CancelOutlinedIcon sx={iconSx} />}
-                        {option.value === "finalized" && <CheckCircleRoundedIcon sx={iconSx} />}
                         <Typography
                           variant="caption"
                           sx={{
