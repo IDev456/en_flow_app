@@ -231,8 +231,9 @@ class WorkflowService:
             raise EntityNotFoundError("Workflow template not found")
 
         workflow = self.repository.create_workflow(trigger_id, template, payload.model_copy(update={"ambito": trigger.ambito}))
+        self._record_initial_wait_history(workflow, payload.espera_inicial, "sistema")
         self._reconcile_trigger_status(trigger_id, utc_now(), preferred_workflow_id=workflow.id)
-        return workflow
+        return self.get_workflow(workflow.id)
 
     def quick_capture_flow(self, payload: QuickCaptureRequest) -> WorkflowDetail:
         if payload.modo_inicio == WorkflowStartMode.TAREA_ACTIVA:
@@ -265,7 +266,8 @@ class WorkflowService:
                 espera_inicial=payload.espera_inicial.model_dump() if payload.espera_inicial else None,
             ),
         )
-        return workflow
+        self._record_initial_wait_history(workflow, payload.espera_inicial, payload.creado_por)
+        return self.get_workflow(workflow.id)
 
     def list_workflows(self) -> list[WorkflowSummary]:
         return self.repository.list_workflows()
@@ -640,8 +642,13 @@ class WorkflowService:
                 raise BusinessRuleError("Debes indicar la informacion de espera externa")
             wait = effective_external_wait
             self._ensure_reminder_not_past(wait.fecha_recordatorio)
-            wait_source = (wait.origen or "").strip() or "externo"
-            wait_note = wait.detalle or f"Esperando respuesta de {wait_source}"
+            wait_detail = wait.detalle.strip() if isinstance(wait.detalle, str) and wait.detalle.strip() else None
+            wait_note = self._format_external_wait_note(
+                wait.que_se_espera,
+                esperando_de=wait.esperando_de,
+                detalle=wait_detail,
+                referencia_externa=wait.referencia_externa,
+            )
             updated_step = step.model_copy(
                 update={
                     "estado": StepStatus.ESPERANDO_RESPUESTA,
@@ -654,7 +661,7 @@ class WorkflowService:
                     "waits_for_external_response": True,
                     "expected_external_event": wait.que_se_espera,
                     "esperando_de": wait.esperando_de.strip() if isinstance(wait.esperando_de, str) else None,
-                    "external_wait_reason": wait_note,
+                    "external_wait_reason": wait_detail,
                     "external_reference": wait.referencia_externa,
                     "fecha_vencimiento": wait.fecha_recordatorio,
                 }
@@ -675,7 +682,7 @@ class WorkflowService:
                 None,
                 wait.que_se_espera,
                 payload.usuario,
-                note=f"Esperando respuesta externa de {wait_source}. {wait_note}".strip(),
+                note=wait_note,
                 attachments=wait.attachments,
             )
             self._sync_workflow_and_trigger_status(workflow.id, now)
@@ -1138,6 +1145,61 @@ class WorkflowService:
         if len(note) < 3:
             raise BusinessRuleError("Debes registrar el resultado de cierre de la tarea")
         return note
+
+    def _format_external_wait_note(
+        self,
+        que_se_espera: str | None,
+        *,
+        esperando_de: str | None = None,
+        detalle: str | None = None,
+        referencia_externa: str | None = None,
+    ) -> str:
+        parts: list[str] = []
+        expected = (que_se_espera or "").strip()
+        if expected:
+            parts.append(f"Esperando: {expected}")
+
+        source = (esperando_de or "").strip()
+        if source:
+            parts.append(f"De: {source}")
+
+        detail = (detalle or "").strip()
+        if detail:
+            parts.append(f"Detalle: {detail}")
+
+        reference = (referencia_externa or "").strip()
+        if reference:
+            parts.append(f"Ref: {reference}")
+
+        return ". ".join(parts) if parts else "Esperando respuesta externa"
+
+    def _record_initial_wait_history(
+        self,
+        workflow: WorkflowDetail,
+        waiting_start: object | None,
+        usuario: str,
+    ) -> None:
+        if workflow.estado != WorkflowStatus.ESPERANDO_RESPUESTA or waiting_start is None:
+            return
+
+        waiting_step = next((step for step in workflow.steps if step.estado == StepStatus.ESPERANDO_RESPUESTA), None)
+        if waiting_step is None:
+            return
+
+        note = self._format_external_wait_note(
+            getattr(waiting_start, "que_se_espera", None),
+            esperando_de=getattr(waiting_start, "esperando_de", None),
+            detalle=getattr(waiting_start, "detalle", None),
+            referencia_externa=getattr(waiting_start, "referencia_externa", None),
+        )
+        self._record_history(
+            waiting_step.id,
+            "espera_externa",
+            None,
+            getattr(waiting_start, "que_se_espera", None),
+            usuario,
+            note=note,
+        )
 
     def _record_history(
         self,

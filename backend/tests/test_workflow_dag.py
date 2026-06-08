@@ -388,6 +388,12 @@ class WorkflowDagTestCase(unittest.TestCase):
         self.assertEqual(first_step.estado, StepStatus.ESPERANDO_RESPUESTA)
         self.assertEqual(first_step.esperando_de, "Proveedor")
         self.assertEqual(first_step.expected_external_event, "Confirmacion de proveedor")
+        self.assertIn("Esperando: Confirmacion de proveedor", first_step.ultimo_comentario or "")
+        self.assertIn("De: Proveedor", first_step.ultimo_comentario or "")
+        self.assertIn("Detalle: Esperando la aprobacion final", first_step.ultimo_comentario or "")
+        self.assertIn("Ref: MAIL-123", first_step.ultimo_comentario or "")
+        history = self.service.list_history(first_step.id)
+        self.assertTrue(any(entry.campo == "espera_externa" and "Confirmacion de proveedor" in (entry.nota or "") for entry in history))
         self.assertIsNone(first_step.fecha_ejecucion_estimada)
         self.assertEqual(first_step.fecha_vencimiento.date(), start_of_utc_day(1).date())
 
@@ -534,9 +540,17 @@ class WorkflowDagTestCase(unittest.TestCase):
         workflow = self.service.get_workflow(workflow_id)
         self.assertEqual(updated_step.estado, StepStatus.ESPERANDO_RESPUESTA)
         self.assertEqual(updated_step.esperando_de, "Proveedor")
+        self.assertEqual(updated_step.external_wait_reason, "Esperando confirmacion final")
         self.assertEqual(updated_step.fecha_vencimiento.date(), start_of_utc_day(2).date())
         self.assertEqual(workflow.estado, WorkflowStatus.ESPERANDO_RESPUESTA)
         self.assertEqual(workflow.fecha_espera_desde, updated_step.fecha_estado_actual)
+        waiting_step = workflow.steps[0]
+        self.assertIn("Esperando: Layout aprobado", waiting_step.ultimo_comentario or "")
+        self.assertIn("De: Proveedor", waiting_step.ultimo_comentario or "")
+        self.assertIn("Detalle: Esperando confirmacion final", waiting_step.ultimo_comentario or "")
+        self.assertIn("Ref: LAYOUT-44", waiting_step.ultimo_comentario or "")
+        history = self.service.list_history(waiting_step.id)
+        self.assertTrue(any(entry.campo == "espera_externa" and "Layout aprobado" in (entry.nota or "") for entry in history))
 
     def test_wait_since_clears_when_flow_leaves_wait_and_recalculates_on_reentry(self) -> None:
         workflow_id = self._start_workflow(build_linear_template())
@@ -556,6 +570,10 @@ class WorkflowDagTestCase(unittest.TestCase):
         workflow_waiting_a = self.service.get_workflow(workflow_id)
         self.assertEqual(workflow_waiting_a.estado, WorkflowStatus.ESPERANDO_RESPUESTA)
         self.assertEqual(workflow_waiting_a.fecha_espera_desde, step_a_waiting.fecha_estado_actual)
+        waiting_a = self._step_by_code(workflow_id, "A")
+        self.assertEqual(waiting_a.ultimo_comentario, "Esperando: respuesta_a")
+        history_a = self.service.list_history(waiting_a.id)
+        self.assertTrue(any(entry.campo == "espera_externa" and entry.nota == "Esperando: respuesta_a" for entry in history_a))
 
         self.service.register_external_event(
             step_a_waiting.id,
