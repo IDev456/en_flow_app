@@ -276,10 +276,6 @@ export function buildActiveFlowFilterDescription(stateFilter: FlowFilter, flowQu
   return quickFilterLabel ? `${stateLabel} ${quickFilterLabel}` : stateLabel;
 }
 
-export function isDateGroupedQuickFilter(filter: FlowQuickFilter) {
-  return filter === "today" || filter === "this_week" || filter === "past" || filter === "future";
-}
-
 function getRowContextualDateInput(row: FlowGridRow) {
   return row.primaryDateInput || row.contextualDateInput || "";
 }

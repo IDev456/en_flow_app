@@ -196,14 +196,6 @@ type RequirementGridRow = {
   canDelete: boolean;
 };
 
-type FlowDateGroupSection = {
-  key: string;
-  dateInput: string | null;
-  label: string;
-  sortKey: number;
-  rows: FlowGridRow[];
-};
-
 const flowQuickFilterOptions = [
   { value: "none", label: "Sin filtro" },
   { value: "today", label: "Hoy" },
@@ -310,32 +302,6 @@ function swapFlowColumnsInOrder(order: string[], draggedField: string, targetFie
   const nextOrder = [...order];
   [nextOrder[draggedIndex], nextOrder[targetIndex]] = [nextOrder[targetIndex], nextOrder[draggedIndex]];
   return nextOrder;
-}
-
-function getGroupedColumnTrack(column: GridColDef<FlowGridRow>) {
-  if (typeof column.width === "number") {
-    return `${column.width}px`;
-  }
-
-  const minWidth = column.minWidth ?? 180;
-  const flex = typeof column.flex === "number" ? column.flex : 1;
-  return `minmax(${minWidth}px, ${flex}fr)`;
-}
-
-function getGroupedColumnMinWidth(column: GridColDef<FlowGridRow>) {
-  if (typeof column.width === "number") {
-    return column.width;
-  }
-
-  return column.minWidth ?? 180;
-}
-
-function buildGroupedHeaderTemplateColumns(columns: GridColDef<FlowGridRow>[]) {
-  return columns.map((column) => getGroupedColumnTrack(column)).join(" ");
-}
-
-function getGroupedHeaderMinWidth(columns: GridColDef<FlowGridRow>[]) {
-  return columns.reduce((total, column) => total + getGroupedColumnMinWidth(column), 0);
 }
 
 function isOperationalFlowQuickFilter(filter: FlowQuickFilter) {
@@ -594,22 +560,6 @@ function renderNotApplicableDateCell(message: string) {
   );
 }
 
-function buildFlowDateGroupLabel(dateInput: string | null, todayInput: string) {
-  if (!dateInput) {
-    return "Sin fecha";
-  }
-
-  const diffDays = getCalendarDayDiff(dateInput, todayInput) ?? 0;
-  const formattedDate = formatCalendarDate(dateInput);
-
-  if (diffDays === 0) return `Hoy · ${formattedDate}`;
-  if (diffDays === 1) return `Mañana · ${formattedDate}`;
-  if (diffDays === 2) return `Pasado mañana · ${formattedDate}`;
-  if (diffDays > 2) return `En ${diffDays} días · ${formattedDate}`;
-  if (diffDays === -1) return `Ayer · ${formattedDate}`;
-  return `Hace ${Math.abs(diffDays)} días · ${formattedDate}`;
-}
-
 function getFlowDateGroupSortKey(dateInput: string | null, todayInput: string) {
   if (!dateInput) {
     return 3_000_000_000;
@@ -619,35 +569,6 @@ function getFlowDateGroupSortKey(dateInput: string | null, todayInput: string) {
   if (diffDays === 0) return 0;
   if (diffDays < 0) return 1_000_000 + Math.abs(diffDays);
   return 2_000_000 + diffDays;
-}
-
-function groupFlowRowsByDate(rows: FlowGridRow[], todayInput: string): FlowDateGroupSection[] {
-  const groups = new Map<string, FlowDateGroupSection>();
-
-  for (const row of rows) {
-    const dateInput = getRowContextualDateInput(row) || null;
-    const key = dateInput ?? "__without-date__";
-    const existing = groups.get(key);
-
-    if (existing) {
-      existing.rows.push(row);
-      continue;
-    }
-
-    groups.set(key, {
-      key,
-      dateInput,
-      label: buildFlowDateGroupLabel(dateInput, todayInput),
-      sortKey: getFlowDateGroupSortKey(dateInput, todayInput),
-      rows: [row],
-    });
-  }
-
-  return Array.from(groups.values()).sort((left, right) => left.sortKey - right.sortKey);
-}
-
-function isDateGroupedQuickFilter(filter: FlowQuickFilter) {
-  return filter === "today" || filter === "this_week" || filter === "past" || filter === "future";
 }
 
 function getRowContextualDateInput(row: FlowGridRow) {
@@ -1603,8 +1524,10 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   );
 
   useEffect(() => {
-    setFlowSortModel(isDateGroupedQuickFilter(flowQuickFilter) ? [{ field: "executionAt", sort: "asc" }] : [{ field: "movementAt", sort: "asc" }]);
-  }, [flowQuickFilter]);
+    if (stateFilter === "waiting") {
+      setFlowSortModel([{ field: "movementAt", sort: "asc" }]);
+    }
+  }, [stateFilter]);
 
   const searchedFlowRows = useMemo(() => {
     const normalizedQuery = normalizeSearchText(flowSearchValue.trim());
@@ -1631,11 +1554,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   }, [flowSearchValue, quickFilteredFlowRows]);
 
   const visibleFlowRows = searchedFlowRows;
-  const shouldGroupFlowRowsByDate = isDateGroupedQuickFilter(flowQuickFilter);
-  const groupedFlowSections = useMemo(
-    () => (shouldGroupFlowRowsByDate ? groupFlowRowsByDate(visibleFlowRows, today) : []),
-    [shouldGroupFlowRowsByDate, today, visibleFlowRows]
-  );
 
   async function handleDateBlur(event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>, row: FlowGridRow) {
     event.stopPropagation();
@@ -2411,15 +2329,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     () => visibleFlowColumns,
     [visibleFlowColumns]
   );
-  const flowGroupedHeaderTemplateColumns = useMemo(
-    () => buildGroupedHeaderTemplateColumns(orderedVisibleFlowColumns),
-    [orderedVisibleFlowColumns]
-  );
-  const flowGroupedHeaderMinWidth = useMemo(
-    () => getGroupedHeaderMinWidth(orderedVisibleFlowColumns),
-    [orderedVisibleFlowColumns]
-  );
-
   useEffect(() => {
     if (!areStringArraysEqual(flowColumnOrder, sanitizedFlowColumnOrder)) {
       setFlowColumnOrder(sanitizedFlowColumnOrder);
@@ -3341,162 +3250,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                           action={resetFilterAction}
                         />
                       )
-                    ) : shouldGroupFlowRowsByDate ? (
-                      <Box sx={{ overflowX: "auto", overflowY: "visible" }}>
-                        <Stack spacing={0} sx={{ minWidth: flowGroupedHeaderMinWidth }}>
-                          <Box
-                            sx={{
-                              display: "grid",
-                              gridTemplateColumns: flowGroupedHeaderTemplateColumns,
-                              columnGap: 0,
-                              alignItems: "stretch",
-                              minWidth: flowGroupedHeaderMinWidth,
-                              borderBottom: "1px solid",
-                              borderColor: "divider",
-                              color: "text.secondary",
-                              backgroundColor: "background.paper",
-                            }}
-                          >
-                            {orderedVisibleFlowColumns.map((column) => {
-                              const field = String(column.field);
-                              const align = column.headerAlign ?? column.align ?? "left";
-                              const isStickyPrimaryColumn = field === FLOW_PRIMARY_COLUMN_FIELD;
-                              const isReorderable = isFlowColumnReorderable(field);
-                              const isDropTarget = field === flowColumnDropTargetField && draggedFlowColumnField !== field;
-
-                              return (
-                                <Box
-                                  key={field}
-                                  draggable={isReorderable}
-                                  onDragStart={(event) => handleFlowColumnDragStart(event, field)}
-                                  onDragOver={(event) => handleFlowColumnDragOver(event, field)}
-                                  onDrop={(event) => handleFlowColumnDrop(event, field)}
-                                  onDragEnd={clearFlowColumnDragState}
-                                  sx={{
-                                    position: isStickyPrimaryColumn ? "sticky" : "relative",
-                                    left: isStickyPrimaryColumn ? 0 : "auto",
-                                    zIndex: isStickyPrimaryColumn ? 3 : 1,
-                                    px: 1.5,
-                                    py: 1,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 0.5,
-                                    justifyContent:
-                                      align === "center" ? "center" : align === "right" ? "flex-end" : "flex-start",
-                                    backgroundColor: "background.paper",
-                                    borderRight: "1px solid",
-                                    borderColor: "divider",
-                                    cursor: isReorderable ? "grab" : "default",
-                                    opacity: draggedFlowColumnField === field ? 0.58 : 1,
-                                  }}
-                                >
-                                  {isReorderable ? <DragIndicatorRoundedIcon sx={{ fontSize: 14, color: "text.disabled" }} /> : null}
-                                  <Typography
-                                    variant="overline"
-                                    sx={(theme) => ({
-                                      fontWeight: isDropTarget ? 800 : 700,
-                                      letterSpacing: "0.08em",
-                                      textAlign: align,
-                                      color: isDropTarget ? theme.palette.status.active.accent : "inherit",
-                                      borderBottom: isDropTarget ? `2px solid ${theme.palette.status.active.accent}` : "2px solid transparent",
-                                    })}
-                                  >
-                                    {column.headerName ?? field}
-                                  </Typography>
-                                </Box>
-                              );
-                            })}
-                          </Box>
-
-                          {groupedFlowSections.map((group) => (
-                            <Box
-                              key={group.key}
-                              sx={{
-                                borderTop: "1px solid",
-                                borderColor: "divider",
-                                pt: 0.5,
-                              }}
-                            >
-                              <Stack
-                                direction="row"
-                                spacing={0.75}
-                                sx={{
-                                  alignItems: "center",
-                                  px: 1.5,
-                                  py: 0.75,
-                                  color: "text.secondary",
-                                }}
-                              >
-                                <Box
-                                  sx={{
-                                    width: 6,
-                                    height: 6,
-                                    borderRadius: "50%",
-                                    backgroundColor: alpha(theme.palette.text.secondary, 0.5),
-                                    flexShrink: 0,
-                                  }}
-                                />
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    fontWeight: 600,
-                                    color: "text.secondary",
-                                    letterSpacing: "0.02em",
-                                  }}
-                                >
-                                  {group.label}
-                                </Typography>
-                                <Typography variant="caption" sx={{ color: "text.disabled" }}>
-                                  {group.rows.length}
-                                </Typography>
-                              </Stack>
-
-                              <DataGrid
-                                rows={group.rows}
-                                columns={interactiveOrderedVisibleFlowColumns}
-                                rowHeight={62}
-                                sortModel={flowSortModel}
-                                onSortModelChange={setFlowSortModel}
-                                disableRowSelectionOnClick
-                                autoHeight
-                                hideFooter
-                                columnHeaderHeight={0}
-                                onCellClick={(params, event) => {
-                                  if (params.field === "requirementsLabel") {
-                                    event.defaultMuiPrevented = true;
-                                  }
-                                }}
-                                onRowClick={(params: GridRowParams<FlowGridRow>) => {
-                                  handleWorkflowNavigate(params.row.id);
-                                }}
-                                sx={{
-                                  border: 0,
-                                  minWidth: flowGroupedHeaderMinWidth,
-                                  "& .MuiDataGrid-columnHeaders": { display: "none" },
-                                  "& .MuiDataGrid-virtualScroller": { marginTop: "0 !important" },
-                                  "& .flow-grid-sticky-column": {
-                                    position: "sticky",
-                                    left: 0,
-                                    zIndex: 4,
-                                    backgroundColor: theme.palette.background.paper,
-                                    borderRight: `1px solid ${theme.palette.divider}`,
-                                  },
-                                  "& .flow-grid-sticky-column-cell": {
-                                    position: "sticky",
-                                    left: 0,
-                                    zIndex: 3,
-                                    backgroundColor: theme.palette.background.paper,
-                                    borderRight: `1px solid ${theme.palette.divider}`,
-                                  },
-                                  "& .MuiDataGrid-row:hover .flow-grid-sticky-column-cell": {
-                                    backgroundColor: theme.palette.action.hover,
-                                  },
-                                }}
-                              />
-                            </Box>
-                          ))}
-                        </Stack>
-                      </Box>
                     ) : (
                       <DataGrid
                         rows={visibleFlowRows}

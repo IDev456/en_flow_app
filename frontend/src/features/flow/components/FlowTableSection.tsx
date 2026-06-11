@@ -38,8 +38,6 @@ import {
   getFlowFilterFromStatus,
   getFlowCounts,
   getFlowSearchableContent,
-  groupFlowRowsByDate,
-  isDateGroupedQuickFilter,
   matchesFlowQuickFilter,
   matchesFlowStateFilter,
   normalizeVisibleFlowFilter,
@@ -235,8 +233,10 @@ export function FlowTableSection({
   }, [flowSearchOpen]);
 
   useEffect(() => {
-    setFlowSortModel(isDateGroupedQuickFilter(flowQuickFilter) ? [{ field: "executionAt", sort: "asc" }] : [{ field: "movementAt", sort: "asc" }]);
-  }, [flowQuickFilter]);
+    if (visibleStateFilter === "waiting") {
+      setFlowSortModel([{ field: "movementAt", sort: "asc" }]);
+    }
+  }, [visibleStateFilter]);
 
   const activeFlowQuickFilterLabel =
     flowQuickFilterOptions.find((option) => option.value === flowQuickFilter)?.label ?? "Filtro rápido";
@@ -299,12 +299,6 @@ export function FlowTableSection({
       return searchTerms.every((term) => searchableContent.includes(term));
     });
   }, [flowSearchValue, quickFilteredFlowRows]);
-
-  const shouldGroupFlowRowsByDate = isDateGroupedQuickFilter(flowQuickFilter);
-  const groupedFlowSections = useMemo(
-    () => (shouldGroupFlowRowsByDate ? groupFlowRowsByDate(visibleFlowRows, today) : []),
-    [shouldGroupFlowRowsByDate, today, visibleFlowRows]
-  );
 
   const setPendingDateInputRef = useCallback((rowId: string, input: HTMLInputElement | null) => {
     const inputRefs = pendingDateInputRefs.current;
@@ -846,19 +840,8 @@ export function FlowTableSection({
   ]);
 
   const visibleFlowColumns = flowColumns;
-  const flowGroupedHeaderTemplateColumns = visibleFlowColumns
-    .map((column) => {
-      if (column.field === "taskName") return "minmax(300px, 1.45fr)";
-      if (column.field === "lastRecord") return "minmax(300px, 1.35fr)";
-      if (column.field === "requirementsLabel") return "minmax(260px, 1.2fr)";
-      if (column.field === "status") return "150px";
-      return `${column.width ?? column.minWidth ?? 140}px`;
-    })
-    .join(" ");
-
   const requirementsMenuRow = requirementsMenu
     ? visibleFlowRows.find((row) => row.id === requirementsMenu.rowId) ??
-      groupedFlowSections.flatMap((group) => group.rows).find((row) => row.id === requirementsMenu.rowId) ??
       null
     : null;
   const activeHighlight = getStatusHighlight("activo", theme);
@@ -1086,111 +1069,6 @@ export function FlowTableSection({
               action={emptyStateAction}
             />
           )
-        ) : shouldGroupFlowRowsByDate ? (
-          <Stack spacing={0}>
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: flowGroupedHeaderTemplateColumns,
-                columnGap: 0,
-                alignItems: "center",
-                px: 1.5,
-                py: 1,
-                borderBottom: "1px solid",
-                borderColor: "divider",
-                color: "text.secondary",
-                backgroundColor: "background.paper",
-              }}
-            >
-              <Typography variant="overline" sx={{ fontWeight: 700, letterSpacing: "0.08em" }}>
-                Tarea inicial / disparador
-              </Typography>
-              <Typography variant="overline" sx={{ fontWeight: 700, letterSpacing: "0.08em", pl: 1 }}>
-                Registro
-              </Typography>
-              <Typography variant="overline" sx={{ fontWeight: 700, letterSpacing: "0.08em", textAlign: "center" }}>
-                Fecha
-              </Typography>
-              <Typography variant="overline" sx={{ fontWeight: 700, letterSpacing: "0.08em", textAlign: "center" }}>
-                Inactividad
-              </Typography>
-              {showProjectColumn ? (
-                <Typography variant="overline" sx={{ fontWeight: 700, letterSpacing: "0.08em", pl: 1 }}>
-                  Proyecto
-                </Typography>
-              ) : null}
-            </Box>
-
-            {groupedFlowSections.map((group) => (
-              <Box
-                key={group.key}
-                sx={{
-                  borderTop: "1px solid",
-                  borderColor: "divider",
-                  pt: 0.5,
-                }}
-              >
-                <Stack
-                  direction="row"
-                  spacing={0.75}
-                  sx={{
-                    alignItems: "center",
-                    px: 1.5,
-                    py: 0.75,
-                    color: "text.secondary",
-                  }}
-                >
-                  <Box
-                    sx={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: "50%",
-                      backgroundColor: alpha(theme.palette.text.secondary, 0.5),
-                      flexShrink: 0,
-                    }}
-                  />
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      fontWeight: 600,
-                      color: "text.secondary",
-                      letterSpacing: "0.02em",
-                    }}
-                  >
-                    {group.label}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: "text.disabled" }}>
-                    {group.rows.length}
-                  </Typography>
-                </Stack>
-
-                <DataGrid
-                  rows={group.rows}
-                  columns={visibleFlowColumns}
-                  rowHeight={62}
-                  sortModel={flowSortModel}
-                  onSortModelChange={setFlowSortModel}
-                  disableRowSelectionOnClick
-                  autoHeight
-                  hideFooter
-                  columnHeaderHeight={0}
-                  onCellClick={(params, event) => {
-                    if (params.field === "requirementsLabel") {
-                      event.defaultMuiPrevented = true;
-                    }
-                  }}
-                  onRowClick={(params: GridRowParams<FlowGridRow>) => {
-                    onRowNavigate(params.row.id);
-                  }}
-                  sx={{
-                    border: 0,
-                    "& .MuiDataGrid-columnHeaders": { display: "none" },
-                    "& .MuiDataGrid-virtualScroller": { marginTop: "0 !important" },
-                  }}
-                />
-              </Box>
-            ))}
-          </Stack>
         ) : (
           <DataGrid
             rows={visibleFlowRows}

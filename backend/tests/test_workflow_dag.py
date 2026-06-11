@@ -552,6 +552,73 @@ class WorkflowDagTestCase(unittest.TestCase):
         history = self.service.list_history(waiting_step.id)
         self.assertTrue(any(entry.campo == "espera_externa" and "Layout aprobado" in (entry.nota or "") for entry in history))
 
+    def test_wait_external_preserves_free_form_comment_as_visible_record(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        step = self.service.get_workflow(workflow_id).steps[0]
+
+        self.service.complete_step(
+            step.id,
+            StepCompletePayload(
+                usuario="tester",
+                comentario="Proveedor pidio validar medidas antes de avanzar",
+                resultado_cierre="Tarea completada",
+                observaciones=None,
+                transition_type=StepTransitionType.WAIT_EXTERNAL,
+                external_wait=ExternalWaitInput(
+                    que_se_espera="Layout aprobado",
+                    esperando_de="Proveedor",
+                    detalle="Esperando confirmacion final",
+                    referencia_externa="LAYOUT-44",
+                ),
+            ),
+        )
+
+        waiting_step = self.service.get_workflow(workflow_id).steps[0]
+        self.assertEqual(waiting_step.estado, StepStatus.ESPERANDO_RESPUESTA)
+        self.assertEqual(waiting_step.ultimo_comentario, "Proveedor pidio validar medidas antes de avanzar")
+        history = self.service.list_history(waiting_step.id)
+        self.assertTrue(
+            any(
+                entry.campo == "espera_externa"
+                and "Esperando: Layout aprobado" in (entry.nota or "")
+                and "De: Proveedor" in (entry.nota or "")
+                for entry in history
+            )
+        )
+        self.assertTrue(
+            any(
+                entry.campo == "comentario"
+                and entry.nota == "Proveedor pidio validar medidas antes de avanzar"
+                for entry in history
+            )
+        )
+
+    def test_manual_wait_status_note_is_visible_record(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        step = self.service.get_workflow(workflow_id).steps[0]
+
+        self.service.update_step_status(
+            step.id,
+            StepStatusUpdate(
+                estado=StepStatus.ESPERA,
+                usuario="tester",
+                nota="Espero respuesta de Juan",
+            ),
+        )
+
+        waiting_step = self.service.get_workflow(workflow_id).steps[0]
+        self.assertEqual(waiting_step.estado, StepStatus.ESPERA)
+        self.assertEqual(waiting_step.ultimo_comentario, "Espero respuesta de Juan")
+        history = self.service.list_history(waiting_step.id)
+        self.assertTrue(
+            any(
+                entry.campo == "estado"
+                and entry.valor_nuevo == StepStatus.ESPERA.value
+                and entry.nota == "Espero respuesta de Juan"
+                for entry in history
+            )
+        )
+
     def test_wait_since_clears_when_flow_leaves_wait_and_recalculates_on_reentry(self) -> None:
         workflow_id = self._start_workflow(build_linear_template())
         step_a = self.service.get_workflow(workflow_id).steps[0]
@@ -571,9 +638,10 @@ class WorkflowDagTestCase(unittest.TestCase):
         self.assertEqual(workflow_waiting_a.estado, WorkflowStatus.ESPERANDO_RESPUESTA)
         self.assertEqual(workflow_waiting_a.fecha_espera_desde, step_a_waiting.fecha_estado_actual)
         waiting_a = self._step_by_code(workflow_id, "A")
-        self.assertEqual(waiting_a.ultimo_comentario, "Esperando: respuesta_a")
+        self.assertEqual(waiting_a.ultimo_comentario, "Esperando respuesta externa A")
         history_a = self.service.list_history(waiting_a.id)
         self.assertTrue(any(entry.campo == "espera_externa" and entry.nota == "Esperando: respuesta_a" for entry in history_a))
+        self.assertTrue(any(entry.campo == "comentario" and entry.nota == "Esperando respuesta externa A" for entry in history_a))
 
         self.service.register_external_event(
             step_a_waiting.id,

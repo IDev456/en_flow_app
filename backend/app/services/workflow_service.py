@@ -685,6 +685,7 @@ class WorkflowService:
                 note=wait_note,
                 attachments=wait.attachments,
             )
+            self._record_wait_external_comment_history(updated_step.id, payload, closing_note, wait_note)
             self._sync_workflow_and_trigger_status(workflow.id, now)
             return updated_step
 
@@ -1172,6 +1173,33 @@ class WorkflowService:
             parts.append(f"Ref: {reference}")
 
         return ". ".join(parts) if parts else "Esperando respuesta externa"
+
+    def _record_wait_external_comment_history(
+        self,
+        step_id: str,
+        payload: StepCompletePayload,
+        closing_note: str,
+        wait_note: str,
+    ) -> None:
+        comment = (payload.comentario or "").strip()
+        if not comment:
+            return
+
+        duplicated_notes = {
+            closing_note.strip(),
+            wait_note.strip(),
+        }
+        if comment in duplicated_notes:
+            return
+
+        self._record_history(
+            step_id,
+            "comentario",
+            None,
+            comment,
+            payload.usuario,
+            note=comment,
+        )
 
     def _record_initial_wait_history(
         self,
