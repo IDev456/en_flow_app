@@ -6,42 +6,64 @@ import { Box, ButtonBase, Paper, Typography } from "@mui/material";
 
 import type { FlowCountSummary, FlowFilter } from "../utils/flowTable";
 
+type FlowStateFilterControlVariant = "flows" | "projects";
+
 type FlowStateFilterControlProps = {
   value: FlowFilter;
   counts: FlowCountSummary;
   onChange: (value: FlowFilter) => void;
+  variant?: FlowStateFilterControlVariant;
 };
 
 export function FlowStateFilterControl({
   value,
   counts,
   onChange,
+  variant = "flows",
 }: FlowStateFilterControlProps) {
   const theme = useTheme();
 
-  const options = [
-    {
-      value: "active" as const,
-      label: "Activos",
-      token: theme.palette.status.active,
-      count: counts.active,
-      icon: <BoltRoundedIcon sx={{ fontSize: 16 }} />,
-    },
-    {
-      value: "waiting" as const,
-      label: "Esperando",
-      token: theme.palette.status.waiting,
-      count: counts.waiting,
-      icon: <HourglassTopRoundedIcon sx={{ fontSize: 16 }} />,
-    },
-    {
-      value: "non_operational" as const,
-      label: "No operativos",
-      token: theme.palette.status.cancelled,
-      count: counts.cancelled + counts.finalized,
-      icon: <CancelOutlinedIcon sx={{ fontSize: 16 }} />,
-    },
-  ];
+  const options =
+    variant === "projects"
+      ? [
+          {
+            value: "operational" as const,
+            label: "Operativos",
+            token: theme.palette.status.active,
+            count: counts.active + counts.waiting,
+            icon: <BoltRoundedIcon sx={{ fontSize: 16 }} />,
+          },
+          {
+            value: "non_operational" as const,
+            label: "No operativos",
+            token: theme.palette.status.cancelled,
+            count: counts.cancelled + counts.finalized,
+            icon: <CancelOutlinedIcon sx={{ fontSize: 16 }} />,
+          },
+        ]
+      : [
+          {
+            value: "active" as const,
+            label: "Activos",
+            token: theme.palette.status.active,
+            count: counts.active,
+            icon: <BoltRoundedIcon sx={{ fontSize: 16 }} />,
+          },
+          {
+            value: "waiting" as const,
+            label: "Esperando",
+            token: theme.palette.status.waiting,
+            count: counts.waiting,
+            icon: <HourglassTopRoundedIcon sx={{ fontSize: 16 }} />,
+          },
+          {
+            value: "non_operational" as const,
+            label: "No operativos",
+            token: theme.palette.status.cancelled,
+            count: counts.cancelled + counts.finalized,
+            icon: <CancelOutlinedIcon sx={{ fontSize: 16 }} />,
+          },
+        ];
 
   return (
     <Paper variant="outlined" sx={{ overflow: "hidden", width: "100%" }}>
@@ -49,7 +71,7 @@ export function FlowStateFilterControl({
         aria-label="Filtro de estado"
         sx={{
           display: "grid",
-          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+          gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))`,
         }}
       >
         {options.map((option, index) => {

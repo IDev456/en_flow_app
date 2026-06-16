@@ -324,7 +324,17 @@ function getAllowedFlowQuickFiltersForStateFilter(stateFilter: FlowFilter): Flow
   }
 }
 
-function normalizeVisibleFlowFilter(filter: FlowFilter | null | undefined): FlowFilter {
+function normalizeVisibleFlowFilter(filter: FlowFilter | null | undefined, view: ViewMode): FlowFilter {
+  if (view === "requirements") {
+    if (!filter || filter === "all" || filter === "operational" || filter === "active" || filter === "waiting") {
+      return "operational";
+    }
+    if (filter === "cancelled" || filter === "finalized" || filter === "non_operational") {
+      return "non_operational";
+    }
+    return "operational";
+  }
+
   if (!filter || filter === "all" || filter === "operational") {
     return "active";
   }
@@ -409,8 +419,8 @@ function matchesFlowStateFilter(statusValue: string, filter: FlowFilter): boolea
   return resolved === filter;
 }
 
-function getDefaultFilterForView(_view: ViewMode): FlowFilter {
-  return "active";
+function getDefaultFilterForView(view: ViewMode): FlowFilter {
+  return view === "requirements" ? "operational" : "active";
 }
 
 function pickRelevantStep(workflow: WorkflowDetail): Step | null {
@@ -1104,7 +1114,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
   const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode);
   const [stateFilter, setStateFilter] = useState<FlowFilter>(
-    () => normalizeVisibleFlowFilter(restoreState?.stateFilter ?? getDefaultFilterForView(initialViewMode))
+    () => normalizeVisibleFlowFilter(restoreState?.stateFilter ?? getDefaultFilterForView(initialViewMode), initialViewMode)
   );
   const [activeAmbito, setActiveAmbito] = useState<ActiveAmbitoMode>(() => getStoredActiveAmbito());
   const [loading, setLoading] = useState(true);
@@ -1152,11 +1162,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const isAmbitoAdminView = defaultView === "requirements" && searchParams.get("admin") === "ambito";
 
   useEffect(() => {
-    const normalizedFilter = normalizeVisibleFlowFilter(stateFilter);
+    const normalizedFilter = normalizeVisibleFlowFilter(stateFilter, viewMode);
     if (normalizedFilter !== stateFilter) {
       setStateFilter(normalizedFilter);
     }
-  }, [stateFilter]);
+  }, [stateFilter, viewMode]);
 
   useEffect(() => {
     void loadData();
@@ -1639,6 +1649,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       value={stateFilter}
       counts={currentCounts}
       onChange={setStateFilter}
+      variant={isFlowsView ? "flows" : "projects"}
     />
   );
   const headerActions = isFlowsView ? (
@@ -3361,5 +3372,3 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     </Stack>
   );
 }
-
-
