@@ -35,6 +35,8 @@ export function matchesActiveAmbito(ambito: Ambito, activeAmbito: ActiveAmbitoMo
 }
 
 const statusPresentationMap: Record<string, { label: string; tone: string }> = {
+  operativo: { label: "Operativo", tone: "en_proceso" },
+  no_operativo: { label: "No operativo", tone: "cancelado" },
   sin_flows: { label: "sin flows", tone: "espera" },
   pendiente: { label: "en proceso", tone: "en_proceso" },
   en_proceso: { label: "en proceso", tone: "en_proceso" },

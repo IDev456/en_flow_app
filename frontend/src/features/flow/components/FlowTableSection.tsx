@@ -39,6 +39,7 @@ import {
   getFlowFilterFromStatus,
   getFlowCounts,
   getFlowSearchableContent,
+  getFlowStatusDisplayValue,
   matchesFlowQuickFilter,
   matchesFlowStateFilter,
   normalizeVisibleFlowFilter,
@@ -77,9 +78,11 @@ type FlowTableSectionProps = {
   noSearchDescription?: string;
   emptyStateAction?: React.ReactNode;
   onRowNavigate: (workflowId: string) => void;
+  normalizeStateFilter?: boolean;
   onProjectNavigate?: (requirementId: string, event: ReactMouseEvent<HTMLElement>) => void;
   onOpenLinkProject?: (workflowId: string, workflowName: string) => void;
   onWorkflowStepDatePatched?: (workflowId: string, stepId: string, nextIsoValue: string | null) => void;
+  statusPresentation?: "detailed" | "operational_category";
 };
 
 function normalizeSearchText(value: string) {
@@ -164,9 +167,11 @@ export function FlowTableSection({
   noSearchDescription = "Probá con otros términos para encontrar el flow o la tarea.",
   emptyStateAction,
   onRowNavigate,
+  normalizeStateFilter = true,
   onProjectNavigate,
   onOpenLinkProject,
   onWorkflowStepDatePatched,
+  statusPresentation = "detailed",
 }: FlowTableSectionProps) {
   const theme = useTheme();
   const { showToast } = useToastContext();
@@ -183,7 +188,7 @@ export function FlowTableSection({
   const today = getTodayLocalDateInput();
   const flowRows = useMemo(() => buildFlowRows(items, today), [items, today]);
   const resolvedCounts = useMemo(() => currentCounts ?? getFlowCounts(items), [currentCounts, items]);
-  const visibleStateFilter = normalizeVisibleFlowFilter(stateFilter);
+  const visibleStateFilter = normalizeStateFilter ? normalizeVisibleFlowFilter(stateFilter) : stateFilter;
 
   useEffect(() => {
     if (visibleStateFilter !== stateFilter) {
@@ -272,10 +277,10 @@ export function FlowTableSection({
 
     const searchTerms = normalizedQuery.split(/\s+/).filter(Boolean);
     return quickFilteredFlowRows.filter((row) => {
-      const searchableContent = normalizeSearchText(getFlowSearchableContent(row));
+      const searchableContent = normalizeSearchText(getFlowSearchableContent(row, statusPresentation));
       return searchTerms.every((term) => searchableContent.includes(term));
     });
-  }, [flowSearchValue, quickFilteredFlowRows]);
+  }, [flowSearchValue, quickFilteredFlowRows, statusPresentation]);
 
   const setPendingDateInputRef = useCallback((rowId: string, input: HTMLInputElement | null) => {
     const inputRefs = pendingDateInputRefs.current;
@@ -665,7 +670,7 @@ export function FlowTableSection({
         sortable: false,
         renderCell: (params) => (
           <Box sx={{ display: "flex", justifyContent: "center", width: "100%", minWidth: 0 }}>
-            <StatusBadge value={params.row.status} />
+            <StatusBadge value={getFlowStatusDisplayValue(params.row.status, statusPresentation)} />
           </Box>
         ),
       });
@@ -812,6 +817,7 @@ export function FlowTableSection({
     setPendingDateInputRef,
     showProjectColumn,
     showStatusColumn,
+    statusPresentation,
     theme,
     today,
   ]);

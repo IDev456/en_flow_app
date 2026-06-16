@@ -26,6 +26,9 @@ export type FlowQuickFilter =
   | "waiting_15_plus"
   | "waiting_month_plus";
 
+export type FlowStatusPresentation = "detailed" | "operational_category";
+export type OperationalFlowStatus = "operativo" | "no_operativo";
+
 export type LinkedRequirementRow = {
   id: string;
   label: string;
@@ -209,6 +212,21 @@ export function getFlowFilterFromStatus(statusValue: string): "active" | "waitin
   if (visibleStatus === "finalizado") return "finalized";
   if (visibleStatus === "esperando_respuesta") return "waiting";
   return "active";
+}
+
+export function getOperationalFlowStatus(statusValue: string): OperationalFlowStatus {
+  const filter = getFlowFilterFromStatus(statusValue);
+  return filter === "cancelled" || filter === "finalized" ? "no_operativo" : "operativo";
+}
+
+export function getFlowStatusDisplayValue(
+  statusValue: string,
+  statusPresentation: FlowStatusPresentation = "detailed"
+) {
+  if (statusPresentation === "operational_category") {
+    return getOperationalFlowStatus(statusValue);
+  }
+  return statusValue;
 }
 
 export function matchesFlowStateFilter(statusValue: string, filter: FlowFilter): boolean {
@@ -506,10 +524,15 @@ export function groupFlowRowsByDate(rows: FlowGridRow[], todayInput: string): Fl
   return Array.from(groups.values()).sort((left, right) => left.sortKey - right.sortKey);
 }
 
-export function getFlowSearchableContent(row: FlowGridRow) {
+export function getFlowSearchableContent(
+  row: FlowGridRow,
+  statusPresentation: FlowStatusPresentation = "detailed"
+) {
+  const displayStatus = getFlowStatusDisplayValue(row.status, statusPresentation);
   return [
     row.taskName,
     row.stepLabel,
+    displayStatus,
     row.status,
     row.requirementsLabel,
     row.lastRecord,

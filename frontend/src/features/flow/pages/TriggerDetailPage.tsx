@@ -26,10 +26,7 @@ import {
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { deleteTrigger, getTrigger, getWorkflow, updateTrigger } from "../api";
-import { FlowStateFilterControl } from "../components/FlowStateFilterControl";
 import {
-  getNavigationLocationState,
-  mergeNavigationState,
   navigateBackWithOrigin,
   navigateWithOrigin,
 } from "../navigation";
@@ -37,14 +34,11 @@ import { AmbitoChip } from "../components/AmbitoChip";
 import { FlowTableSection } from "../components/FlowTableSection";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Ambito, TriggerDetail, WorkflowDetail } from "../types";
-import { type FlowFilter, getFlowCounts, normalizeVisibleFlowFilter } from "../utils/flowTable";
-import { getAmbitoLabel, getVisibleTriggerStatus, getVisibleWorkflowStatus } from "../utils";
+import { getFlowCounts, getLatestMovementAt, getOperationalFlowStatus } from "../utils/flowTable";
+import { getAmbitoLabel, getVisibleWorkflowStatus } from "../utils";
 
 const SOLICITANTE_MAX = 150;
 const TRIGGER_DESCRIPTION_MAX = 1000;
-type TriggerDetailRestoreState = {
-  projectFlowFilter: FlowFilter;
-};
 
 function SlideUp(props: SlideProps) {
   return <Slide {...props} direction="up" />;
@@ -54,8 +48,6 @@ export function TriggerDetailPage() {
   const { triggerId = "" } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const navigationState = getNavigationLocationState<TriggerDetailRestoreState>(location.state);
-  const restoreState = navigationState.restore;
   const [trigger, setTrigger] = useState<TriggerDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,9 +62,6 @@ export function TriggerDetailPage() {
   const [requirementError, setRequirementError] = useState<string | null>(null);
   const [requirementToastOpen, setRequirementToastOpen] = useState(false);
   const [ambitoConfirmOpen, setAmbitoConfirmOpen] = useState(false);
-  const [projectFlowFilter, setProjectFlowFilter] = useState<FlowFilter>(() =>
-    normalizeVisibleFlowFilter(restoreState?.projectFlowFilter ?? "active")
-  );
 
   function getPrimaryDetail(currentTrigger: TriggerDetail) {
     return currentTrigger.descripcion?.trim() || "Proyecto sin detalle";
@@ -92,27 +81,6 @@ export function TriggerDetailPage() {
     setEditDescripcion(trigger.descripcion ?? "");
     setEditAmbito(trigger.ambito);
   }, [trigger?.id, trigger?.solicitante, trigger?.descripcion, trigger?.ambito]);
-
-  useEffect(() => {
-    const normalizedFilter = normalizeVisibleFlowFilter(projectFlowFilter);
-    if (normalizedFilter !== projectFlowFilter) {
-      setProjectFlowFilter(normalizedFilter);
-      return;
-    }
-
-    if (restoreState?.projectFlowFilter === projectFlowFilter) {
-      return;
-    }
-
-    navigate(`${location.pathname}${location.search}`, {
-      replace: true,
-      state: mergeNavigationState(location.state, {
-        restore: {
-          projectFlowFilter,
-        } satisfies TriggerDetailRestoreState,
-      }),
-    });
-  }, [location.pathname, location.search, location.state, navigate, projectFlowFilter, restoreState]);
 
   async function loadTrigger() {
     try {
@@ -245,12 +213,24 @@ export function TriggerDetailPage() {
     [linkedWorkflows]
   );
   const canDeleteRequirement = (trigger?.workflow_ids.length ?? 0) === 0;
-  const requirementStats = {
-    abiertos: linkedWorkflows.filter((workflow) => getVisibleWorkflowStatus(workflow) === "en_proceso").length,
-    esperando: linkedWorkflows.filter((workflow) => getVisibleWorkflowStatus(workflow) === "esperando_respuesta").length,
-    finalizados: linkedWorkflows.filter((workflow) => ["finalizado", "cancelado"].includes(workflow.estado)).length,
-  };
   const projectFlowCounts = useMemo(() => getFlowCounts(linkedFlowItems), [linkedFlowItems]);
+  const projectSummaryCounts = useMemo(
+    () => ({
+      operativos: projectFlowCounts.active + projectFlowCounts.waiting,
+      noOperativos: projectFlowCounts.cancelled + projectFlowCounts.finalized,
+    }),
+    [projectFlowCounts]
+  );
+  const latestModifiedWorkflow = useMemo(() => {
+    return linkedWorkflows.reduce<WorkflowDetail | null>((latest, workflow) => {
+      const latestTimestamp = latest ? Date.parse(getLatestMovementAt(latest) ?? latest.fecha_inicio) : Number.NEGATIVE_INFINITY;
+      const workflowTimestamp = Date.parse(getLatestMovementAt(workflow) ?? workflow.fecha_inicio);
+      return workflowTimestamp > latestTimestamp ? workflow : latest;
+    }, null);
+  }, [linkedWorkflows]);
+  const projectStatusValue = latestModifiedWorkflow
+    ? getOperationalFlowStatus(getVisibleWorkflowStatus(latestModifiedWorkflow))
+    : "no_operativo";
 
   function handleProjectWorkflowDatePatched(workflowId: string, stepId: string, nextIsoValue: string | null) {
     setWorkflowsById((previous) => {
@@ -404,19 +384,16 @@ export function TriggerDetailPage() {
 
                   <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", gap: 1 }}>
                     <AmbitoChip ambito={editingRequirement ? editAmbito : trigger.ambito} />
-                    <StatusBadge value={getVisibleTriggerStatus(trigger.estado_general)} />
+                    <StatusBadge value={projectStatusValue} />
                   </Stack>
 
                   <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", gap: 0.5 }}>
                     <Chip size="small" variant="outlined" label={`${linkedWorkflows.length} flows`} />
-                    {requirementStats.abiertos > 0 && (
-                      <Chip size="small" variant="filled" color="info" label={`${requirementStats.abiertos} activos`} />
+                    {projectSummaryCounts.operativos > 0 && (
+                      <Chip size="small" variant="filled" color="info" label={`${projectSummaryCounts.operativos} operativos`} />
                     )}
-                    {requirementStats.esperando > 0 && (
-                      <Chip size="small" variant="filled" color="warning" label={`${requirementStats.esperando} esperando`} />
-                    )}
-                    {requirementStats.finalizados > 0 && (
-                      <Chip size="small" variant="filled" color="success" label={`${requirementStats.finalizados} cerrados`} />
+                    {projectSummaryCounts.noOperativos > 0 && (
+                      <Chip size="small" variant="filled" color="default" label={`${projectSummaryCounts.noOperativos} no operativos`} />
                     )}
                   </Stack>
 
@@ -517,28 +494,16 @@ export function TriggerDetailPage() {
 
         {workflowsError && <Alert severity="warning">{workflowsError}</Alert>}
 
-        <Box
-          sx={{
-            width: { xs: "100%", sm: 320 },
-            maxWidth: { xs: "100%", sm: 320 },
-            flexShrink: 0,
-          }}
-        >
-          <FlowStateFilterControl
-            value={projectFlowFilter}
-            counts={projectFlowCounts}
-            onChange={setProjectFlowFilter}
-          />
-        </Box>
-
         <Card sx={{ overflow: "hidden" }}>
           <CardContent sx={{ p: 0 }}>
             <FlowTableSection
               items={linkedFlowItems}
-              stateFilter={projectFlowFilter}
-              onStateFilterChange={setProjectFlowFilter}
+              stateFilter="all"
+              onStateFilterChange={() => {}}
               currentCounts={projectFlowCounts}
               showProjectColumn={false}
+              normalizeStateFilter={false}
+              statusPresentation="operational_category"
               allowedQuickFilters={[
                 "today",
                 "this_week",
@@ -552,8 +517,8 @@ export function TriggerDetailPage() {
                 "waiting_month_plus",
               ]}
               quickFilterPlaceholder="Buscar flow o tarea del proyecto..."
-              noRowsTitle="No hay flows para este filtro"
-              noRowsDescription="Probá con otro estado o capturá una nueva tarea para este proyecto."
+              noRowsTitle="No hay flows asociados"
+              noRowsDescription="Capturá una nueva tarea para este proyecto cuando lo necesites."
               noSearchTitle="No hay resultados para esta búsqueda"
               noSearchDescription="Probá con otros términos para encontrar un flow o tarea de este proyecto."
               onRowNavigate={(workflowId) => navigateWithOrigin(navigate, location, `/workflows/${workflowId}`, "/requirements")}
