@@ -989,6 +989,7 @@ export function WorkflowDetailPage() {
             step={selectedStep}
             comments={stepComments}
             history={stepHistory}
+            workflowStatus={workflow.estado}
             drawer
             error={panelError}
             onStepUpdated={handleStepUpdated}

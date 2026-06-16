@@ -809,11 +809,15 @@ class WorkflowService:
     def update_comment(self, step_id: str, comment_id: str, payload: CommentUpdate) -> CommentPublic:
         step = self.get_step(step_id)
         workflow = self.get_workflow(step.workflow_id)
-        self._ensure_workflow_operable(workflow)
+        if workflow.estado not in WORKFLOW_OPEN_STATUSES:
+            raise BusinessRuleError("Solo se puede editar el ultimo comentario manual en flows abiertos")
         if not step.puede_tener_comentarios:
             raise BusinessRuleError("Esta tarea no admite registros")
-        if step.estado in {StepStatus.COMPLETADO, StepStatus.CANCELADA}:
-            raise BusinessRuleError("No se pueden editar registros en tareas completadas o canceladas")
+        if not any(comment.id == comment_id for comment in self.repository.list_comments(step_id)):
+            raise EntityNotFoundError("Comment not found")
+        latest_manual_comment = self.repository.get_latest_manual_comment(step_id)
+        if latest_manual_comment is None or latest_manual_comment.id != comment_id:
+            raise BusinessRuleError("Solo se puede editar el ultimo comentario manual de la tarea")
         updated_comment = self.repository.update_comment(step_id, comment_id, payload)
         if updated_comment is None:
             raise EntityNotFoundError("Comment not found")

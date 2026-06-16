@@ -192,6 +192,7 @@ export function Journal({
   }, [items]);
   const commentTrimmed = text.trim();
   const isEditing = editingCommentId !== null;
+  const canShowComposer = showComposer || isEditing;
   const canComment = step.puede_tener_comentarios;
   const hasAttachments = attachments.length > 0;
   const missingComment = selectedStatus !== "" ? commentTrimmed.length === 0 : commentTrimmed.length === 0 && !hasAttachments;
@@ -458,7 +459,7 @@ export function Journal({
         },
       }}
     >
-      {showComposer ? (
+      {canShowComposer ? (
         <Box ref={composerRef}>
           <Stack spacing={2}>
             {composerExpanded ? (

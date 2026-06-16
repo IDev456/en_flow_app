@@ -23,7 +23,9 @@ from app.db.models import (
 from app.repositories.workflow_repository import InMemoryWorkflowRepository
 from app.schemas.workflow import (
     Ambito,
+    AttachmentBase,
     CommentCreate,
+    CommentUpdate,
     ExternalResponseDecisionPayload,
     ExternalEventCreate,
     ExternalWaitInput,
@@ -955,6 +957,157 @@ class WorkflowDagTestCase(unittest.TestCase):
         )
 
         self.assertEqual(comment.comentario, "Operativo tras reactivacion")
+
+    def test_can_edit_latest_manual_comment_on_completed_step_while_flow_remains_open(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        step_a = self._step_by_code(workflow_id, "A")
+        comment = self.service.add_comment(
+            step_a.id,
+            CommentCreate(
+                autor="tester",
+                comentario="Avance inicial",
+                attachments=[
+                    AttachmentBase(
+                        nombre="evidencia.txt",
+                        content_type="text/plain",
+                        size_bytes=4,
+                        content_base64="dGVzdA==",
+                    )
+                ],
+            ),
+        )
+
+        self._complete(workflow_id, "A")
+
+        updated = self.service.update_comment(
+            step_a.id,
+            comment.id,
+            CommentUpdate(
+                autor="qa",
+                comentario="Avance inicial ajustado",
+            ),
+        )
+
+        self.assertEqual(updated.autor, "qa")
+        self.assertEqual(updated.comentario, "Avance inicial ajustado")
+        self.assertEqual(len(updated.attachments), 1)
+        self.assertEqual(updated.attachments[0].nombre, "evidencia.txt")
+
+    def test_cannot_edit_non_latest_manual_comment(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        step = self._step_by_code(workflow_id, "A")
+        first_comment = self.service.add_comment(
+            step.id,
+            CommentCreate(
+                autor="tester",
+                comentario="Primer avance",
+                attachments=[],
+            ),
+        )
+        self.service.add_comment(
+            step.id,
+            CommentCreate(
+                autor="tester",
+                comentario="Segundo avance",
+                attachments=[],
+            ),
+        )
+
+        with self.assertRaises(BusinessRuleError) as ctx:
+            self.service.update_comment(
+                step.id,
+                first_comment.id,
+                CommentUpdate(
+                    autor="tester",
+                    comentario="Primer avance corregido",
+                ),
+            )
+
+        self.assertIn("ultimo comentario manual", str(ctx.exception).lower())
+
+    def test_noisy_automatic_comment_does_not_block_latest_manual_comment_edit(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        step = self._step_by_code(workflow_id, "A")
+        manual_comment = self.service.add_comment(
+            step.id,
+            CommentCreate(
+                autor="tester",
+                comentario="Seguimiento real",
+                attachments=[],
+            ),
+        )
+        self.service.add_comment(
+            step.id,
+            CommentCreate(
+                autor="sistema",
+                comentario="Se creo la proxima tarea: Paso B",
+                attachments=[],
+            ),
+        )
+
+        updated = self.service.update_comment(
+            step.id,
+            manual_comment.id,
+            CommentUpdate(
+                autor="tester",
+                comentario="Seguimiento real ajustado",
+            ),
+        )
+
+        self.assertEqual(updated.comentario, "Seguimiento real ajustado")
+
+    def test_finalized_workflow_blocks_comment_editing(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        step_a = self._step_by_code(workflow_id, "A")
+        comment = self.service.add_comment(
+            step_a.id,
+            CommentCreate(
+                autor="tester",
+                comentario="Registro antes del cierre",
+                attachments=[],
+            ),
+        )
+
+        self._complete(workflow_id, "A")
+        self._complete(workflow_id, "B")
+        self._complete(workflow_id, "C")
+
+        with self.assertRaises(BusinessRuleError) as ctx:
+            self.service.update_comment(
+                step_a.id,
+                comment.id,
+                CommentUpdate(
+                    autor="tester",
+                    comentario="Registro ajustado tras cierre",
+                ),
+            )
+
+        self.assertIn("flows abiertos", str(ctx.exception).lower())
+
+    def test_cancelled_workflow_blocks_comment_editing(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        step = self._step_by_code(workflow_id, "A")
+        comment = self.service.add_comment(
+            step.id,
+            CommentCreate(
+                autor="tester",
+                comentario="Registro antes de cancelar",
+                attachments=[],
+            ),
+        )
+        self.service.cancel_workflow(workflow_id)
+
+        with self.assertRaises(BusinessRuleError) as ctx:
+            self.service.update_comment(
+                step.id,
+                comment.id,
+                CommentUpdate(
+                    autor="tester",
+                    comentario="Registro tras cancelacion",
+                ),
+            )
+
+        self.assertIn("flows abiertos", str(ctx.exception).lower())
 
     def test_latest_snapshot_filters_noisy_automatic_messages(self) -> None:
         workflow_id = self._start_workflow(build_linear_template())

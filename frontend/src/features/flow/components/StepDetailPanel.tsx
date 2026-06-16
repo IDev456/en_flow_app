@@ -39,6 +39,7 @@ import type {
   StepHistoryEntry,
   StepJournalEntryInput,
   StepTransitionType,
+  WorkflowStatus,
 } from "../types";
 import {
   buildJournalItems,
@@ -71,6 +72,7 @@ type StepDetailPanelProps = {
   onStepUpdated?: (step: Step) => Promise<void> | void;
   onRegisterExternalEvent?: (input: ExternalEventCreateInput) => Promise<void>;
   onResolveExternalResponse?: (stepId: string, input: ExternalResponseDecisionInput) => Promise<void>;
+  workflowStatus?: WorkflowStatus | null;
   operationLocked?: boolean;
   operationLockMessage?: string | null;
   showStandaloneBack?: boolean;
@@ -92,6 +94,7 @@ export function StepDetailPanel({
   onStepUpdated,
   onRegisterExternalEvent,
   onResolveExternalResponse,
+  workflowStatus = null,
   operationLocked = false,
   operationLockMessage = null,
   showStandaloneBack = true,
@@ -198,6 +201,11 @@ export function StepDetailPanel({
 
   const canChangeStatus = !operationLocked && ["activo", "espera", "problema"].includes(step.estado);
   const canAddManualRecords = !operationLocked && !["completado", "cancelada"].includes(step.estado);
+  const canEditLastComment =
+    !operationLocked &&
+    workflowStatus !== null &&
+    !["finalizado", "cancelado"].includes(workflowStatus) &&
+    Boolean(onEditJournalComment);
   const isWaitingExternal = step.estado === "esperando_respuesta";
   const latestJournalItem = buildJournalItems(history, comments).find(
     (item) => item.body.trim().length > 0 || item.attachments.length > 0
@@ -822,7 +830,7 @@ export function StepDetailPanel({
             history={history}
             canChangeStatus={!drawer && canChangeStatus}
             showComposer={canAddManualRecords}
-            canEditEntries={canAddManualRecords}
+            canEditEntries={canEditLastComment}
             selectedStatus={selectedStatus}
             onSelectedStatusChange={setSelectedStatus}
             composerExpanded={composerExpanded}

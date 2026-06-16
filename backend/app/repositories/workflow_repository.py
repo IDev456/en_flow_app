@@ -92,6 +92,11 @@ def _is_noisy_automatic_journal_text(value: str | None) -> bool:
     )
 
 
+def _is_manual_comment(comment: CommentPublic) -> bool:
+    text = _clean_text(comment.comentario)
+    return bool(text) and not _is_noisy_automatic_journal_text(text)
+
+
 def _format_workflow_title(objetivo_final: str | None, workflow_id: str) -> str:
     title = _clean_text(objetivo_final)
     if title:
@@ -310,6 +315,10 @@ class WorkflowRepository(ABC):
 
     @abstractmethod
     def list_comments(self, step_id: str) -> list[CommentPublic]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_latest_manual_comment(self, step_id: str) -> CommentPublic | None:
         raise NotImplementedError
 
     @abstractmethod
@@ -808,6 +817,13 @@ class InMemoryWorkflowRepository(WorkflowRepository):
             )
             comments[index] = updated
             return updated
+        return None
+
+    def get_latest_manual_comment(self, step_id: str) -> CommentPublic | None:
+        comments = self._comments_by_step.get(step_id, [])
+        for comment in reversed(comments):
+            if _is_manual_comment(comment):
+                return comment
         return None
 
     def list_comments(self, step_id: str) -> list[CommentPublic]:
@@ -1528,6 +1544,19 @@ class PostgresWorkflowRepository(WorkflowRepository):
                 .order_by(CommentModel.fecha_creacion.asc())
             ).all()
             return [self._comment_to_public(comment) for comment in comments]
+
+    def get_latest_manual_comment(self, step_id: str) -> CommentPublic | None:
+        with session_scope() as session:
+            comments = session.scalars(
+                select(CommentModel)
+                .where(CommentModel.step_instance_id == step_id)
+                .order_by(CommentModel.fecha_creacion.desc(), CommentModel.id.desc())
+            ).all()
+            for comment in comments:
+                public_comment = self._comment_to_public(comment)
+                if _is_manual_comment(public_comment):
+                    return public_comment
+        return None
 
     def add_history(self, entry: StepHistoryPublic) -> StepHistoryPublic:
         history = StepHistoryModel(

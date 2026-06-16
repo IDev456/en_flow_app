@@ -632,10 +632,20 @@ export function buildJournalItems(history: StepHistoryEntry[], comments: StepCom
       secondaryText: null,
       attachments: comment.attachments ?? [],
       commentId: comment.id,
-      editable: true,
+      editable: false,
     }));
 
-  return [...statusEntries, ...historyNameEntries, ...historyNoteEntries, ...commentEntries].sort(
+  const latestEditableCommentId =
+    [...commentEntries]
+      .filter((entry) => entry.body.trim().length > 0 && Boolean(entry.commentId))
+      .sort((left, right) => formatJournalDateAsMs(right.date) - formatJournalDateAsMs(left.date))[0]?.commentId ?? null;
+
+  const editableCommentEntries = commentEntries.map((entry) => ({
+    ...entry,
+    editable: entry.commentId === latestEditableCommentId,
+  }));
+
+  return [...statusEntries, ...historyNameEntries, ...historyNoteEntries, ...editableCommentEntries].sort(
     (left, right) => formatJournalDateAsMs(right.date) - formatJournalDateAsMs(left.date)
   );
 }

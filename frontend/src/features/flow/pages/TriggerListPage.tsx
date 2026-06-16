@@ -949,6 +949,7 @@ function FlowListToolbar(props: FlowGridToolbarProps) {
   const searchIsEmpty = resolvedSearchValue.trim().length === 0;
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const quickFilterMenuOpen = Boolean(quickFilterAnchorEl);
+  const toolbarContextLabel = activeFlowFilterDescription ? `Vista: ${activeFlowFilterDescription}` : "Vista de flows";
 
   useEffect(() => {
     if (!resolvedSearchOpen) {
@@ -1022,18 +1023,18 @@ function FlowListToolbar(props: FlowGridToolbarProps) {
       }}
     >
       <Typography
-        variant="body1"
-        color="text.primary"
+        variant="body2"
+        color="text.secondary"
         sx={{
           flex: 1,
           minWidth: 0,
           whiteSpace: "nowrap",
           overflow: "hidden",
           textOverflow: "ellipsis",
-          fontWeight: 700,
+          fontWeight: 600,
         }}
       >
-        {activeFlowFilterDescription}
+        {toolbarContextLabel}
       </Typography>
 
       <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", minWidth: 0 }}>
@@ -1553,7 +1554,14 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     });
   }, [flowSearchValue, quickFilteredFlowRows]);
 
+  const isFlowsView = viewMode === "flows";
+  const basePageTitle = title || (isFlowsView ? "Flows" : "Proyectos");
+  const currentCounts = isFlowsView ? flowCounts : requirementCounts;
   const visibleFlowRows = searchedFlowRows;
+  const pageTitle = isFlowsView ? activeFlowFilterDescription || basePageTitle : basePageTitle;
+  const pageSubtitle = isFlowsView
+    ? `${basePageTitle} · ${visibleFlowRows.length} ${visibleFlowRows.length === 1 ? "resultado visible" : "resultados visibles"}`
+    : undefined;
 
   async function handleDateBlur(event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>, row: FlowGridRow) {
     event.stopPropagation();
@@ -1825,10 +1833,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     nextParams.set("modal", "capture");
     navigate(`${location.pathname}?${nextParams.toString()}`);
   }
-
-  const isFlowsView = viewMode === "flows";
-  const pageTitle = title || (isFlowsView ? "Flows" : "Proyectos");
-  const currentCounts = isFlowsView ? flowCounts : requirementCounts;
 
   const handleWorkflowNavigate = useCallback(
     (workflowId: string) => {
@@ -2763,6 +2767,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       <PageContainer
         breadcrumbs={[]}
         title={pageTitle}
+        subtitle={pageSubtitle}
         actions={
           <>
             <Tooltip title="Refrescar">

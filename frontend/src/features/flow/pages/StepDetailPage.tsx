@@ -10,8 +10,10 @@ import {
   getStep,
   getStepComments,
   getStepHistory,
+  getWorkflow,
   registerExternalEvent,
   resolveExternalResponse,
+  updateStepComment,
   updateStepStatus,
 } from "../api";
 import { navigateBackWithOrigin, withNavigationOrigin } from "../navigation";
@@ -24,6 +26,7 @@ import type {
   StepCompleteInput,
   StepHistoryEntry,
   StepJournalEntryInput,
+  WorkflowStatus,
 } from "../types";
 import { DEFAULT_ACTOR } from "../utils";
 
@@ -35,6 +38,7 @@ export function StepDetailPage() {
   const [step, setStep] = useState<Step | null>(null);
   const [comments, setComments] = useState<StepComment[]>([]);
   const [history, setHistory] = useState<StepHistoryEntry[]>([]);
+  const [workflowStatus, setWorkflowStatus] = useState<WorkflowStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,14 +50,17 @@ export function StepDetailPage() {
     try {
       setLoading(true);
       setError(null);
-      const [stepData, commentsData, historyData] = await Promise.all([
-        getStep(stepId),
+      setWorkflowStatus(null);
+      const stepData = await getStep(stepId);
+      const [commentsData, historyData, workflowData] = await Promise.all([
         getStepComments(stepId),
         getStepHistory(stepId),
+        getWorkflow(stepData.workflow_id),
       ]);
       setStep(stepData);
       setComments(commentsData);
       setHistory(historyData);
+      setWorkflowStatus(workflowData.estado);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cargar la tarea");
     } finally {
@@ -102,6 +109,17 @@ export function StepDetailPage() {
     await resolveExternalResponse(stepId, input);
     await loadStepData();
     showToast("Tarea resuelta.", "success");
+  }
+
+  async function handleEditJournalComment(commentId: string, comentario: string | null) {
+    if (!step) return;
+
+    await updateStepComment(step.id, commentId, {
+      autor: DEFAULT_ACTOR,
+      comentario,
+    });
+    await loadStepData();
+    showToast("Registro actualizado.", "success");
   }
 
   if (loading) {
@@ -154,10 +172,12 @@ export function StepDetailPage() {
         step={step}
         comments={comments}
         history={history}
+        workflowStatus={workflowStatus}
         standalone
         showStandaloneBack={false}
         error={error}
         onSubmitJournal={handleSubmitJournal}
+        onEditJournalComment={handleEditJournalComment}
         onCompleteTask={handleCompleteTask}
         onRegisterExternalEvent={handleRegisterExternal}
         onResolveExternalResponse={handleResolveExternal}
