@@ -1562,6 +1562,194 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const pageSubtitle = isFlowsView
     ? `${basePageTitle} · ${visibleFlowRows.length} ${visibleFlowRows.length === 1 ? "resultado visible" : "resultados visibles"}`
     : undefined;
+  const headerPrimaryAction = isFlowsView ? (
+    <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={openCaptureModal}>
+      Capturar tarea
+    </Button>
+  ) : (
+    <Button
+      variant="contained"
+      startIcon={<AddRoundedIcon />}
+      onClick={() => {
+        setCreateRequirementOpen((value) => !value);
+        setCreateRequirementError(null);
+      }}
+    >
+      {createRequirementOpen ? "Cerrar formulario" : "Nuevo proyecto"}
+    </Button>
+  );
+  const ambitoSelectorControl = (
+    <Paper variant="outlined" sx={{ overflow: "hidden", width: "100%" }}>
+      <Tabs
+        value={activeAmbito}
+        onChange={(_, value: ActiveAmbitoMode | null) => handleChangeActiveAmbito(value)}
+        variant="fullWidth"
+        aria-label="Modo de ámbito"
+        sx={{
+          minHeight: 64,
+          "& .MuiTabs-indicator": {
+            height: 3,
+          },
+        }}
+      >
+        {activeAmbitoOptions.map((option) => {
+          const isLaboral = option.value === "laboral";
+          const accent = isLaboral ? theme.palette.primary : theme.palette.secondary;
+          return (
+            <Tab
+              key={option.value}
+              value={option.value}
+              icon={getAmbitoModeIcon(option.value)}
+              iconPosition="top"
+              label={option.label}
+              sx={{
+                minWidth: 0,
+                minHeight: 64,
+                px: 0.75,
+                py: 0.5,
+                textTransform: "none",
+                fontWeight: 500,
+                fontSize: "0.73rem",
+                letterSpacing: "0.01em",
+                lineHeight: 1.15,
+                whiteSpace: "nowrap",
+                color: "text.secondary",
+                "& .MuiTab-iconWrapper": {
+                  marginBottom: 0.25,
+                },
+                "& .MuiSvgIcon-root": {
+                  fontSize: 16,
+                  color: "text.secondary",
+                },
+                "&.Mui-selected": {
+                  color: accent.main,
+                  backgroundColor: alpha(accent.main, 0.1),
+                },
+                "&.Mui-selected .MuiSvgIcon-root": {
+                  color: accent.main,
+                },
+              }}
+            />
+          );
+        })}
+      </Tabs>
+    </Paper>
+  );
+  const stateSelectorControl = (
+    <Paper variant="outlined" sx={{ overflow: "hidden", width: "100%" }}>
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+        }}
+      >
+        {(
+          [
+            {
+              value: "active" as const,
+              label: "Activos",
+              token: theme.palette.status.active,
+              count: currentCounts.active,
+            },
+            {
+              value: "waiting" as const,
+              label: "Esperando",
+              token: theme.palette.status.waiting,
+              count: currentCounts.waiting,
+            },
+            {
+              value: "non_operational" as const,
+              label: "No operativos",
+              token: theme.palette.status.cancelled,
+              count: currentCounts.cancelled + currentCounts.finalized,
+            },
+          ] as const
+        ).map((option, idx, options) => {
+          const isSelected = stateFilter === option.value;
+          const iconColor = isSelected ? option.token.accent : "text.disabled";
+          const iconSx = { fontSize: 13, mb: 0.25, color: iconColor };
+          return (
+            <ButtonBase
+              key={option.value}
+              onClick={() => setStateFilter(option.value)}
+              sx={{
+                gridColumn: { xs: idx === 4 ? "1 / 3" : undefined, sm: idx + 1 },
+                gridRow: { xs: Math.floor(idx / 2) + 1, sm: 1 },
+                py: 1,
+                px: 0.5,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRight: idx < options.length - 1 ? "1px solid" : "none",
+                borderColor: "divider",
+                backgroundColor: isSelected ? option.token.container : "transparent",
+                color: isSelected ? option.token.onContainer : "text.secondary",
+                transition: "background-color 0.15s",
+                "&:hover": {
+                  backgroundColor: alpha(option.token.container, 0.6),
+                },
+              }}
+            >
+              {option.value === "active" && <BoltRoundedIcon sx={iconSx} />}
+              {option.value === "waiting" && <HourglassTopRoundedIcon sx={iconSx} />}
+              {option.value === "non_operational" && <CancelOutlinedIcon sx={iconSx} />}
+              <Typography
+                variant="caption"
+                sx={{
+                  fontWeight: isSelected ? 700 : 500,
+                  fontSize: "0.68rem",
+                  lineHeight: 1.2,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {option.label} ({option.count})
+              </Typography>
+            </ButtonBase>
+          );
+        })}
+      </Box>
+    </Paper>
+  );
+  const headerActions = isFlowsView ? (
+    <Box sx={{ width: { xs: "100%", sm: 260 }, maxWidth: { xs: "100%", sm: 260 } }}>{ambitoSelectorControl}</Box>
+  ) : (
+    <>
+      <Tooltip title="Refrescar">
+        <IconButton color="inherit" aria-label="Refrescar listado" onClick={() => void loadData()}>
+          <RefreshRoundedIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+      {headerPrimaryAction}
+    </>
+  );
+  const flowActionsPanel = (
+    <Paper
+      variant="outlined"
+      sx={{
+        width: { xs: "100%", sm: "auto" },
+        overflow: "hidden",
+        px: 1.1,
+        py: 0.85,
+      }}
+    >
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={1}
+        sx={{
+          alignItems: { xs: "stretch", sm: "center" },
+          justifyContent: { xs: "stretch", sm: "flex-end" },
+        }}
+      >
+        <Tooltip title="Refrescar">
+          <IconButton color="inherit" aria-label="Refrescar listado" onClick={() => void loadData()} sx={{ alignSelf: { xs: "flex-end", sm: "center" } }}>
+            <RefreshRoundedIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        {headerPrimaryAction}
+      </Stack>
+    </Paper>
+  );
 
   async function handleDateBlur(event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>, row: FlowGridRow) {
     event.stopPropagation();
@@ -2768,32 +2956,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         breadcrumbs={[]}
         title={pageTitle}
         subtitle={pageSubtitle}
-        actions={
-          <>
-            <Tooltip title="Refrescar">
-              <IconButton color="inherit" aria-label="Refrescar listado" onClick={() => void loadData()}>
-                <RefreshRoundedIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-
-            {isFlowsView ? (
-              <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={openCaptureModal}>
-                Capturar tarea
-              </Button>
-            ) : (
-              <Button
-                variant="contained"
-                startIcon={<AddRoundedIcon />}
-                onClick={() => {
-                  setCreateRequirementOpen((value) => !value);
-                  setCreateRequirementError(null);
-                }}
-              >
-                {createRequirementOpen ? "Cerrar formulario" : "Nuevo proyecto"}
-              </Button>
-            )}
-          </>
-        }
+        actions={headerActions}
       >
         <Stack spacing={1.5}>
           {!lockView && (
@@ -3033,145 +3196,29 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
           >
             <Box
               sx={{
-                width: { xs: "100%", sm: 260 },
-                maxWidth: { xs: "100%", sm: 260 },
+                width: { xs: "100%", sm: isFlowsView ? 320 : 260 },
+                maxWidth: { xs: "100%", sm: isFlowsView ? 320 : 260 },
                 flexShrink: 0,
               }}
             >
-              <Paper variant="outlined" sx={{ overflow: "hidden" }}>
-                <Tabs
-                  value={activeAmbito}
-                  onChange={(_, value: ActiveAmbitoMode | null) => handleChangeActiveAmbito(value)}
-                  variant="fullWidth"
-                  aria-label="Modo de Ã¡mbito"
-                  sx={{
-                    minHeight: 64,
-                    "& .MuiTabs-indicator": {
-                      height: 3,
-                    },
-                  }}
-                >
-                  {activeAmbitoOptions.map((option) => {
-                    const isLaboral = option.value === "laboral";
-                    const accent = isLaboral ? theme.palette.primary : theme.palette.secondary;
-                    return (
-                      <Tab
-                        key={option.value}
-                        value={option.value}
-                        icon={getAmbitoModeIcon(option.value)}
-                        iconPosition="top"
-                        label={option.label}
-                        sx={{
-                          minWidth: 0,
-                          minHeight: 64,
-                          px: 0.75,
-                          py: 0.5,
-                          textTransform: "none",
-                          fontWeight: 500,
-                          fontSize: "0.73rem",
-                          letterSpacing: "0.01em",
-                          lineHeight: 1.15,
-                          whiteSpace: "nowrap",
-                          color: "text.secondary",
-                          "& .MuiTab-iconWrapper": {
-                            marginBottom: 0.25,
-                          },
-                          "& .MuiSvgIcon-root": {
-                            fontSize: 16,
-                            color: "text.secondary",
-                          },
-                          "&.Mui-selected": {
-                            color: accent.main,
-                            backgroundColor: alpha(accent.main, 0.1),
-                          },
-                          "&.Mui-selected .MuiSvgIcon-root": {
-                            color: accent.main,
-                          },
-                        }}
-                      />
-                    );
-                  })}
-                </Tabs>
-              </Paper>
+              {isFlowsView ? stateSelectorControl : ambitoSelectorControl}
             </Box>
 
-            <Box sx={{ width: "100%", maxWidth: 620, ml: { lg: "auto" } }}>
-              <Paper variant="outlined" sx={{ overflow: "hidden" }}>
-                <Box
-                  sx={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                  }}
-                >
-                  {(
-                    [
-                      {
-                        value: "active" as const,
-                        label: "Activos",
-                        token: theme.palette.status.active,
-                        count: currentCounts.active,
-                      },
-                      {
-                        value: "waiting" as const,
-                        label: "Esperando",
-                        token: theme.palette.status.waiting,
-                        count: currentCounts.waiting,
-                      },
-                      {
-                        value: "non_operational" as const,
-                        label: "No operativos",
-                        token: theme.palette.status.cancelled,
-                        count: currentCounts.cancelled + currentCounts.finalized,
-                      },
-                    ] as const
-                  ).map((option, idx, options) => {
-                    const isSelected = stateFilter === option.value;
-                    const iconColor = isSelected ? option.token.accent : "text.disabled";
-                    const iconSx = { fontSize: 13, mb: 0.25, color: iconColor };
-                    return (
-                      <ButtonBase
-                        key={option.value}
-                        onClick={() => setStateFilter(option.value)}
-                        sx={{
-                          gridColumn: { xs: idx === 4 ? "1 / 3" : undefined, sm: idx + 1 },
-                          gridRow: { xs: Math.floor(idx / 2) + 1, sm: 1 },
-                          py: 1,
-                          px: 0.5,
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          borderRight: idx < options.length - 1 ? "1px solid" : "none",
-                          borderColor: "divider",
-                          backgroundColor: isSelected
-                            ? option.token.container
-                            : "transparent",
-                          color: isSelected ? option.token.onContainer : "text.secondary",
-                          transition: "background-color 0.15s",
-                          "&:hover": {
-                            backgroundColor: alpha(option.token.container, 0.6),
-                          },
-                        }}
-                      >
-                        {option.value === "active" && <BoltRoundedIcon sx={iconSx} />}
-                        {option.value === "waiting" && <HourglassTopRoundedIcon sx={iconSx} />}
-                        {option.value === "non_operational" && <CancelOutlinedIcon sx={iconSx} />}
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            fontWeight: isSelected ? 700 : 500,
-                            fontSize: "0.68rem",
-                            lineHeight: 1.2,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {option.label} ({option.count})
-                        </Typography>
-                      </ButtonBase>
-                    );
-                  })}
-                </Box>
-              </Paper>
+            <Box
+              sx={
+                isFlowsView
+                  ? {
+                      width: { xs: "100%", sm: "auto" },
+                      maxWidth: "100%",
+                      ml: { lg: "auto" },
+                      display: "flex",
+                      justifyContent: { xs: "stretch", sm: "flex-end" },
+                      flexShrink: 0,
+                    }
+                  : { width: "100%", maxWidth: 620, ml: { lg: "auto" } }
+              }
+            >
+              {isFlowsView ? flowActionsPanel : stateSelectorControl}
             </Box>
           </Box>
 
