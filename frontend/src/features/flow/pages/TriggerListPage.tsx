@@ -2,14 +2,12 @@
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import type { DragEvent as ReactDragEvent } from "react";
 import DragIndicatorRoundedIcon from "@mui/icons-material/DragIndicatorRounded";
-import BoltRoundedIcon from "@mui/icons-material/BoltRounded";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
 import EditCalendarRoundedIcon from "@mui/icons-material/EditCalendarRounded";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import FilterListRoundedIcon from "@mui/icons-material/FilterListRounded";
-import HourglassTopRoundedIcon from "@mui/icons-material/HourglassTopRounded";
 import InboxRoundedIcon from "@mui/icons-material/InboxRounded";
 import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
 import LocalFireDepartmentRoundedIcon from "@mui/icons-material/LocalFireDepartmentRounded";
@@ -77,6 +75,7 @@ import {
   omitNavigationStateKeys,
 } from "../navigation";
 import { AmbitoChip } from "../components/AmbitoChip";
+import { FlowStateFilterControl } from "../components/FlowStateFilterControl";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Ambito, Step, TriggerDetail, WorkflowDetail } from "../types";
 import {
@@ -1636,80 +1635,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     </Paper>
   );
   const stateSelectorControl = (
-    <Paper variant="outlined" sx={{ overflow: "hidden", width: "100%" }}>
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-        }}
-      >
-        {(
-          [
-            {
-              value: "active" as const,
-              label: "Activos",
-              token: theme.palette.status.active,
-              count: currentCounts.active,
-            },
-            {
-              value: "waiting" as const,
-              label: "Esperando",
-              token: theme.palette.status.waiting,
-              count: currentCounts.waiting,
-            },
-            {
-              value: "non_operational" as const,
-              label: "No operativos",
-              token: theme.palette.status.cancelled,
-              count: currentCounts.cancelled + currentCounts.finalized,
-            },
-          ] as const
-        ).map((option, idx, options) => {
-          const isSelected = stateFilter === option.value;
-          const iconColor = isSelected ? option.token.accent : "text.disabled";
-          const iconSx = { fontSize: 13, mb: 0.25, color: iconColor };
-          return (
-            <ButtonBase
-              key={option.value}
-              onClick={() => setStateFilter(option.value)}
-              sx={{
-                gridColumn: { xs: idx === 4 ? "1 / 3" : undefined, sm: idx + 1 },
-                gridRow: { xs: Math.floor(idx / 2) + 1, sm: 1 },
-                py: 1,
-                px: 0.5,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                borderRight: idx < options.length - 1 ? "1px solid" : "none",
-                borderColor: "divider",
-                backgroundColor: isSelected ? option.token.container : "transparent",
-                color: isSelected ? option.token.onContainer : "text.secondary",
-                transition: "background-color 0.15s",
-                "&:hover": {
-                  backgroundColor: alpha(option.token.container, 0.6),
-                },
-              }}
-            >
-              {option.value === "active" && <BoltRoundedIcon sx={iconSx} />}
-              {option.value === "waiting" && <HourglassTopRoundedIcon sx={iconSx} />}
-              {option.value === "non_operational" && <CancelOutlinedIcon sx={iconSx} />}
-              <Typography
-                variant="caption"
-                sx={{
-                  fontWeight: isSelected ? 700 : 500,
-                  fontSize: "0.68rem",
-                  lineHeight: 1.2,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {option.label} ({option.count})
-              </Typography>
-            </ButtonBase>
-          );
-        })}
-      </Box>
-    </Paper>
+    <FlowStateFilterControl
+      value={stateFilter}
+      counts={currentCounts}
+      onChange={setStateFilter}
+    />
   );
   const headerActions = isFlowsView ? (
     <Box sx={{ width: { xs: "100%", sm: 260 }, maxWidth: { xs: "100%", sm: 260 } }}>{ambitoSelectorControl}</Box>
@@ -3431,6 +3361,5 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     </Stack>
   );
 }
-
 
 

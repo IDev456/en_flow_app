@@ -26,6 +26,7 @@ import {
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { deleteTrigger, getTrigger, getWorkflow, updateTrigger } from "../api";
+import { FlowStateFilterControl } from "../components/FlowStateFilterControl";
 import {
   getNavigationLocationState,
   mergeNavigationState,
@@ -516,6 +517,20 @@ export function TriggerDetailPage() {
 
         {workflowsError && <Alert severity="warning">{workflowsError}</Alert>}
 
+        <Box
+          sx={{
+            width: { xs: "100%", sm: 320 },
+            maxWidth: { xs: "100%", sm: 320 },
+            flexShrink: 0,
+          }}
+        >
+          <FlowStateFilterControl
+            value={projectFlowFilter}
+            counts={projectFlowCounts}
+            onChange={setProjectFlowFilter}
+          />
+        </Box>
+
         <Card sx={{ overflow: "hidden" }}>
           <CardContent sx={{ p: 0 }}>
             <FlowTableSection
@@ -523,8 +538,6 @@ export function TriggerDetailPage() {
               stateFilter={projectFlowFilter}
               onStateFilterChange={setProjectFlowFilter}
               currentCounts={projectFlowCounts}
-              showStateTabs
-              stateTabsVariant="summary"
               showProjectColumn={false}
               allowedQuickFilters={[
                 "today",

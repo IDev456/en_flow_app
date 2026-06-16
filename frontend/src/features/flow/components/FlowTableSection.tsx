@@ -28,6 +28,7 @@ import { DataGridEmptyState } from "../../../components/feedback/DataGridEmptySt
 import { useToastContext } from "../../../components/Toast";
 import { getStatusSemanticKey } from "../../../theme";
 import { updateStep } from "../api";
+import { FlowStateFilterControl } from "./FlowStateFilterControl";
 import { StatusBadge } from "./StatusBadge";
 import {
   buildActiveFlowFilterDescription,
@@ -107,30 +108,6 @@ function getMovementHeatVisual(days: number | null) {
     return { color: "warning.dark", opacity: 0.78 };
   }
   return { color: "error.main", opacity: 0.94 };
-}
-
-function getSemanticTabSx(accent: string, soft: string) {
-  return {
-    minHeight: 46,
-    borderRadius: (theme: Theme) => theme.appShape.sm,
-    border: "1px solid",
-    borderColor: alpha(accent, 0.18),
-    textTransform: "none",
-    fontWeight: 700,
-    color: alpha(accent, 0.88),
-    backgroundColor: alpha(accent, 0.04),
-    transition: "background-color 180ms ease, color 180ms ease, box-shadow 180ms ease",
-    "&:hover": {
-      backgroundColor: alpha(accent, 0.1),
-      borderColor: alpha(accent, 0.3),
-    },
-    "&.Mui-selected": {
-      color: accent,
-      backgroundColor: soft,
-      borderColor: alpha(accent, 0.42),
-      boxShadow: `inset 0 -2px 0 ${accent}, 0 0 0 1px ${alpha(accent, 0.08)}`,
-    },
-  } as const;
 }
 
 function getFlowDateColumnVisibility(stateFilter: FlowFilter) {
@@ -844,64 +821,34 @@ export function FlowTableSection({
     ? visibleFlowRows.find((row) => row.id === requirementsMenu.rowId) ??
       null
     : null;
-  const activeHighlight = getStatusHighlight("activo", theme);
-  const waitingHighlight = getStatusHighlight("esperando_respuesta", theme);
-  const nonOperationalHighlight = getStatusHighlight("cancelado", theme);
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {showStateTabs ? (
         <Box sx={{ px: 1.5, pt: 1.25, borderBottom: "1px solid", borderColor: "divider" }}>
-          <Tabs
-            value={visibleStateFilter}
-            onChange={(_, value: FlowFilter) => onStateFilterChange(value)}
-            variant="scrollable"
-            scrollButtons="auto"
-            allowScrollButtonsMobile
-            sx={
-              stateTabsVariant === "summary"
-                ? {
-                    minHeight: 52,
-                    gap: 0.75,
-                    px: 0.4,
-                    py: 0.45,
-                    borderRadius: theme.appShape.md,
-                    backgroundColor: alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.34 : 0.74),
-                    "& .MuiTabs-indicator": { display: "none" },
-                    "& .MuiTab-root": { minHeight: 46, px: 1.8, mr: 0 },
-                  }
-                : undefined
-            }
-          >
-            {stateTabsVariant === "summary" ? (
-              [
-                <Tab
-                  key="summary_active"
-                  value="active"
-                  label={`Activos (${resolvedCounts.active})`}
-                  sx={getSemanticTabSx(activeHighlight.accent, activeHighlight.soft)}
-                />,
-                <Tab
-                  key="summary_waiting"
-                  value="waiting"
-                  label={`Esperando (${resolvedCounts.waiting})`}
-                  sx={getSemanticTabSx(waitingHighlight.accent, waitingHighlight.soft)}
-                />,
-                <Tab
-                  key="summary_non_operational"
-                  value="non_operational"
-                  label={`No operativos (${resolvedCounts.cancelled + resolvedCounts.finalized})`}
-                  sx={getSemanticTabSx(nonOperationalHighlight.accent, nonOperationalHighlight.soft)}
-                />,
-              ]
-            ) : (
-              [
-                <Tab key="tab_active" value="active" label={`Activos (${resolvedCounts.active})`} />,
-                <Tab key="tab_waiting" value="waiting" label={`Esperando (${resolvedCounts.waiting})`} />,
-                <Tab key="tab_non_operational" value="non_operational" label={`No operativos (${resolvedCounts.cancelled + resolvedCounts.finalized})`} />,
-              ]
-            )}
-          </Tabs>
+          {stateTabsVariant === "summary" ? (
+            <FlowStateFilterControl
+              value={visibleStateFilter}
+              counts={resolvedCounts}
+              onChange={onStateFilterChange}
+            />
+          ) : (
+            <Tabs
+              value={visibleStateFilter}
+              onChange={(_, value: FlowFilter) => onStateFilterChange(value)}
+              variant="scrollable"
+              scrollButtons="auto"
+              allowScrollButtonsMobile
+            >
+              <Tab key="tab_active" value="active" label={`Activos (${resolvedCounts.active})`} />
+              <Tab key="tab_waiting" value="waiting" label={`Esperando (${resolvedCounts.waiting})`} />
+              <Tab
+                key="tab_non_operational"
+                value="non_operational"
+                label={`No operativos (${resolvedCounts.cancelled + resolvedCounts.finalized})`}
+              />
+            </Tabs>
+          )}
         </Box>
       ) : null}
 
