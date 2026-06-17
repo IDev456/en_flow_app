@@ -15,6 +15,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Link,
   MenuItem,
   Slide,
   Snackbar,
@@ -23,10 +24,11 @@ import {
   Typography,
   type SlideProps,
 } from "@mui/material";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link as RouterLink, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { deleteTrigger, getTrigger, getWorkflow, updateTrigger } from "../api";
 import {
+  getNavigationLocationState,
   navigateBackWithOrigin,
   navigateWithOrigin,
 } from "../navigation";
@@ -48,6 +50,8 @@ export function TriggerDetailPage() {
   const { triggerId = "" } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
+  const navigationState = getNavigationLocationState(location.state);
+  const requirementsOrigin = navigationState.origin?.pathname === "/requirements" ? navigationState.origin : null;
   const [trigger, setTrigger] = useState<TriggerDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -278,45 +282,43 @@ export function TriggerDetailPage() {
           Volver
         </Button>
       </Box>
+      <Snackbar
+        open={requirementToastOpen}
+        autoHideDuration={2600}
+        onClose={() => setRequirementToastOpen(false)}
+        message="Proyecto actualizado."
+        slots={{ transition: SlideUp }}
+      />
+      <Dialog open={ambitoConfirmOpen} onClose={savingRequirement ? undefined : () => setAmbitoConfirmOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle>Cambiar ámbito del proyecto</DialogTitle>
+        <DialogContent dividers>¿Querés aplicar este cambio también a los flows y tareas asociados?</DialogContent>
+        <DialogActions>
+          <Button color="inherit" onClick={() => setAmbitoConfirmOpen(false)} disabled={savingRequirement}>
+            Cancelar
+          </Button>
+          <Button onClick={() => void performSaveRequirement(false)} disabled={savingRequirement}>
+            Solo proyecto
+          </Button>
+          <Button variant="contained" onClick={() => void performSaveRequirement(true)} disabled={savingRequirement}>
+            Aplicar a flows y tareas
+          </Button>
+        </DialogActions>
+      </Dialog>
 
-      <Breadcrumbs
-        separator=">"
-        aria-label="breadcrumb"
-        sx={{ "& .MuiBreadcrumbs-separator": { mx: 0.75, color: "text.disabled" } }}
-      >
-        <Typography color="text.secondary" variant="caption">
+      <Breadcrumbs>
+        <Link
+          component={RouterLink}
+          underline="hover"
+          color="inherit"
+          to={requirementsOrigin ? `${requirementsOrigin.pathname}${requirementsOrigin.search}` : "/requirements"}
+          state={requirementsOrigin?.state ?? null}
+        >
           Proyectos
-        </Typography>
-        <Typography color="text.primary" variant="caption">
-          Detalle
-        </Typography>
+        </Link>
+        <Typography color="text.primary">Proyecto</Typography>
       </Breadcrumbs>
 
       <Stack spacing={2}>
-        <Snackbar
-          open={requirementToastOpen}
-          autoHideDuration={2600}
-          onClose={() => setRequirementToastOpen(false)}
-          message="Proyecto actualizado."
-          slots={{ transition: SlideUp }}
-        />
-
-        <Dialog open={ambitoConfirmOpen} onClose={savingRequirement ? undefined : () => setAmbitoConfirmOpen(false)} fullWidth maxWidth="xs">
-          <DialogTitle>Cambiar ámbito del proyecto</DialogTitle>
-          <DialogContent dividers>¿Querés aplicar este cambio también a los flows y tareas asociados?</DialogContent>
-          <DialogActions>
-            <Button color="inherit" onClick={() => setAmbitoConfirmOpen(false)} disabled={savingRequirement}>
-              Cancelar
-            </Button>
-            <Button onClick={() => void performSaveRequirement(false)} disabled={savingRequirement}>
-              Solo proyecto
-            </Button>
-            <Button variant="contained" onClick={() => void performSaveRequirement(true)} disabled={savingRequirement}>
-              Aplicar a flows y tareas
-            </Button>
-          </DialogActions>
-        </Dialog>
-
         <Card
           sx={{
             border: "1px solid",
