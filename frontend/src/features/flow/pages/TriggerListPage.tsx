@@ -195,6 +195,11 @@ type RequirementGridRow = {
   canDelete: boolean;
 };
 
+type StoredFlowListFilters = {
+  stateFilter: FlowFilter;
+  flowQuickFilter: FlowQuickFilter;
+};
+
 const flowQuickFilterOptions = [
   { value: "none", label: "Sin filtro" },
   { value: "today", label: "Hoy" },
@@ -212,6 +217,7 @@ const flowQuickFilterOptions = [
 const selectableFlowQuickFilterOptions = flowQuickFilterOptions.filter((option) => option.value !== "none");
 const FLOW_PRIMARY_COLUMN_FIELD = "taskName";
 const FLOW_COLUMN_ORDER_STORAGE_KEY = "en-flow.trigger-list.flow-column-order";
+const FLOW_LIST_FILTERS_STORAGE_KEY = "en-flow.trigger-list.flow-filters";
 const attentionFlowQuickFilters = new Set<FlowQuickFilter>([
   "past",
   "without_project",
@@ -219,6 +225,49 @@ const attentionFlowQuickFilters = new Set<FlowQuickFilter>([
   "waiting_15_plus",
   "waiting_month_plus",
 ]);
+const FLOW_STATE_FILTER_VALUES = new Set<FlowFilter>(["all", "operational", "non_operational", "active", "waiting", "cancelled", "finalized"]);
+const FLOW_QUICK_FILTER_VALUES = new Set<FlowQuickFilter>(flowQuickFilterOptions.map((option) => option.value));
+
+function isFlowFilter(value: unknown): value is FlowFilter {
+  return typeof value === "string" && FLOW_STATE_FILTER_VALUES.has(value as FlowFilter);
+}
+
+function isFlowQuickFilter(value: unknown): value is FlowQuickFilter {
+  return typeof value === "string" && FLOW_QUICK_FILTER_VALUES.has(value as FlowQuickFilter);
+}
+
+function getStoredFlowListFilters() {
+  if (typeof window === "undefined") {
+    return null as StoredFlowListFilters | null;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(FLOW_LIST_FILTERS_STORAGE_KEY);
+    if (!rawValue) {
+      return null;
+    }
+
+    const parsedValue = JSON.parse(rawValue) as Partial<StoredFlowListFilters>;
+    if (!isFlowFilter(parsedValue.stateFilter) || !isFlowQuickFilter(parsedValue.flowQuickFilter)) {
+      return null;
+    }
+
+    return {
+      stateFilter: normalizeVisibleFlowFilter(parsedValue.stateFilter, "flows"),
+      flowQuickFilter: parsedValue.flowQuickFilter,
+    } satisfies StoredFlowListFilters;
+  } catch {
+    return null;
+  }
+}
+
+function storeFlowListFilters(filters: StoredFlowListFilters) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(FLOW_LIST_FILTERS_STORAGE_KEY, JSON.stringify(filters));
+}
 
 function getStoredFlowColumnOrder() {
   if (typeof window === "undefined") {
@@ -1110,11 +1159,16 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const navigationState = getNavigationLocationState<TriggerListRestoreState>(location.state);
   const restoreState = navigationState.restore;
   const initialViewMode = lockView ? defaultView : (restoreState?.viewMode ?? defaultView);
+  const storedFlowListFilters = initialViewMode === "flows" ? getStoredFlowListFilters() : null;
   const [triggers, setTriggers] = useState<TriggerDetail[]>([]);
   const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
   const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode);
   const [stateFilter, setStateFilter] = useState<FlowFilter>(
-    () => normalizeVisibleFlowFilter(restoreState?.stateFilter ?? getDefaultFilterForView(initialViewMode), initialViewMode)
+    () =>
+      normalizeVisibleFlowFilter(
+        restoreState?.stateFilter ?? storedFlowListFilters?.stateFilter ?? getDefaultFilterForView(initialViewMode),
+        initialViewMode
+      )
   );
   const [activeAmbito, setActiveAmbito] = useState<ActiveAmbitoMode>(() => getStoredActiveAmbito());
   const [loading, setLoading] = useState(true);
@@ -1139,7 +1193,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [linkProjectLoading, setLinkProjectLoading] = useState(false);
   const [pendingDates, setPendingDates] = useState<Map<string, string>>(new Map());
   const [flowQuickFilter, setFlowQuickFilter] = useState<FlowQuickFilter>(
-    () => (initialViewMode === "flows" ? restoreState?.flowQuickFilter ?? "none" : "none")
+    () => (initialViewMode === "flows" ? restoreState?.flowQuickFilter ?? storedFlowListFilters?.flowQuickFilter ?? "none" : "none")
   );
   const [flowQuickFilterAnchorEl, setFlowQuickFilterAnchorEl] = useState<HTMLElement | null>(null);
   const [flowColumnOrder, setFlowColumnOrder] = useState<string[]>(() => getStoredFlowColumnOrder());
@@ -1185,6 +1239,17 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   useEffect(() => {
     setStoredActiveAmbito(activeAmbito);
   }, [activeAmbito]);
+
+  useEffect(() => {
+    if (viewMode !== "flows") {
+      return;
+    }
+
+    storeFlowListFilters({
+      stateFilter: normalizeVisibleFlowFilter(stateFilter, "flows"),
+      flowQuickFilter,
+    });
+  }, [flowQuickFilter, stateFilter, viewMode]);
 
   useEffect(() => {
     const state = location.state as { openCreateRequirement?: boolean; toast?: string } | null;
@@ -1652,19 +1717,10 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       variant={isFlowsView ? "flows" : "projects"}
     />
   );
-  const headerActions = isFlowsView ? (
+  const headerActions = (
     <Box sx={{ width: { xs: "100%", sm: 260 }, maxWidth: { xs: "100%", sm: 260 } }}>{ambitoSelectorControl}</Box>
-  ) : (
-    <>
-      <Tooltip title="Refrescar">
-        <IconButton color="inherit" aria-label="Refrescar listado" onClick={() => void loadData()}>
-          <RefreshRoundedIcon fontSize="small" />
-        </IconButton>
-      </Tooltip>
-      {headerPrimaryAction}
-    </>
   );
-  const flowActionsPanel = (
+  const listActionsPanel = (
     <Paper
       variant="outlined"
       sx={{
@@ -3142,24 +3198,20 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                 flexShrink: 0,
               }}
             >
-              {isFlowsView ? stateSelectorControl : ambitoSelectorControl}
+              {stateSelectorControl}
             </Box>
 
             <Box
-              sx={
-                isFlowsView
-                  ? {
-                      width: { xs: "100%", sm: "auto" },
-                      maxWidth: "100%",
-                      ml: { lg: "auto" },
-                      display: "flex",
-                      justifyContent: { xs: "stretch", sm: "flex-end" },
-                      flexShrink: 0,
-                    }
-                  : { width: "100%", maxWidth: 620, ml: { lg: "auto" } }
-              }
+              sx={{
+                width: { xs: "100%", sm: "auto" },
+                maxWidth: "100%",
+                ml: { lg: "auto" },
+                display: "flex",
+                justifyContent: { xs: "stretch", sm: "flex-end" },
+                flexShrink: 0,
+              }}
             >
-              {isFlowsView ? flowActionsPanel : stateSelectorControl}
+              {listActionsPanel}
             </Box>
           </Box>
 
