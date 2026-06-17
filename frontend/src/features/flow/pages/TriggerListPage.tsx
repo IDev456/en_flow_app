@@ -130,6 +130,7 @@ type TriggerListRestoreState = {
   viewMode: ViewMode;
   stateFilter: FlowFilter;
   flowQuickFilter: FlowQuickFilter;
+  quickFilterByState?: FlowQuickFilterByState;
   flowSearchOpen: boolean;
   flowSearchValue: string;
   flowSortModel: GridSortModel;
@@ -195,7 +196,16 @@ type RequirementGridRow = {
   canDelete: boolean;
 };
 
+type FlowVisibleStateKey = "active" | "waiting" | "non_operational";
+
+type FlowQuickFilterByState = Record<FlowVisibleStateKey, FlowQuickFilter>;
+
 type StoredFlowListFilters = {
+  activeStateFilter: FlowVisibleStateKey;
+  quickFilterByState: FlowQuickFilterByState;
+};
+
+type LegacyStoredFlowListFilters = {
   stateFilter: FlowFilter;
   flowQuickFilter: FlowQuickFilter;
 };
@@ -227,6 +237,12 @@ const attentionFlowQuickFilters = new Set<FlowQuickFilter>([
 ]);
 const FLOW_STATE_FILTER_VALUES = new Set<FlowFilter>(["all", "operational", "non_operational", "active", "waiting", "cancelled", "finalized"]);
 const FLOW_QUICK_FILTER_VALUES = new Set<FlowQuickFilter>(flowQuickFilterOptions.map((option) => option.value));
+const FLOW_VISIBLE_STATE_KEYS = ["active", "waiting", "non_operational"] as const satisfies readonly FlowVisibleStateKey[];
+const DEFAULT_FLOW_QUICK_FILTER_BY_STATE = {
+  active: "none",
+  waiting: "none",
+  non_operational: "none",
+} as const satisfies FlowQuickFilterByState;
 
 function isFlowFilter(value: unknown): value is FlowFilter {
   return typeof value === "string" && FLOW_STATE_FILTER_VALUES.has(value as FlowFilter);
@@ -234,6 +250,80 @@ function isFlowFilter(value: unknown): value is FlowFilter {
 
 function isFlowQuickFilter(value: unknown): value is FlowQuickFilter {
   return typeof value === "string" && FLOW_QUICK_FILTER_VALUES.has(value as FlowQuickFilter);
+}
+
+function isFlowVisibleStateKey(value: unknown): value is FlowVisibleStateKey {
+  return typeof value === "string" && FLOW_VISIBLE_STATE_KEYS.includes(value as FlowVisibleStateKey);
+}
+
+function getFlowVisibleStateKey(stateFilter: FlowFilter): FlowVisibleStateKey {
+  const normalized = normalizeVisibleFlowFilter(stateFilter, "flows");
+  if (normalized === "waiting") {
+    return "waiting";
+  }
+  if (normalized === "non_operational") {
+    return "non_operational";
+  }
+  return "active";
+}
+
+function sanitizeFlowQuickFilterForState(stateKey: FlowVisibleStateKey, value: unknown): FlowQuickFilter {
+  if (!isFlowQuickFilter(value)) {
+    return "none";
+  }
+
+  return getAllowedFlowQuickFiltersForStateFilter(stateKey).includes(value) ? value : "none";
+}
+
+function sanitizeFlowQuickFilterByState(value: unknown): FlowQuickFilterByState {
+  const candidate = typeof value === "object" && value !== null ? (value as Partial<Record<FlowVisibleStateKey, unknown>>) : {};
+
+  return {
+    active: sanitizeFlowQuickFilterForState("active", candidate.active),
+    waiting: sanitizeFlowQuickFilterForState("waiting", candidate.waiting),
+    non_operational: sanitizeFlowQuickFilterForState("non_operational", candidate.non_operational),
+  };
+}
+
+function areFlowQuickFilterByStateEqual(left: FlowQuickFilterByState, right: FlowQuickFilterByState) {
+  return FLOW_VISIBLE_STATE_KEYS.every((stateKey) => left[stateKey] === right[stateKey]);
+}
+
+function buildLegacyFlowQuickFilterByState(
+  stateFilter: FlowFilter | null | undefined,
+  flowQuickFilter: FlowQuickFilter | null | undefined
+) {
+  const next: FlowQuickFilterByState = { ...DEFAULT_FLOW_QUICK_FILTER_BY_STATE };
+  if (!stateFilter || !flowQuickFilter) {
+    return next;
+  }
+
+  const stateKey = getFlowVisibleStateKey(stateFilter);
+  next[stateKey] = sanitizeFlowQuickFilterForState(stateKey, flowQuickFilter);
+  return next;
+}
+
+function resolveInitialFlowQuickFilterByState(
+  restoreState: TriggerListRestoreState | undefined,
+  storedFilters: StoredFlowListFilters | null
+) {
+  const next: FlowQuickFilterByState = storedFilters
+    ? { ...storedFilters.quickFilterByState }
+    : { ...DEFAULT_FLOW_QUICK_FILTER_BY_STATE };
+
+  if (restoreState?.quickFilterByState) {
+    const restoredFilters = sanitizeFlowQuickFilterByState(restoreState.quickFilterByState);
+    for (const stateKey of FLOW_VISIBLE_STATE_KEYS) {
+      next[stateKey] = restoredFilters[stateKey];
+    }
+  }
+
+  if (restoreState?.flowQuickFilter) {
+    const stateKey = getFlowVisibleStateKey(restoreState.stateFilter);
+    next[stateKey] = sanitizeFlowQuickFilterForState(stateKey, restoreState.flowQuickFilter);
+  }
+
+  return next;
 }
 
 function getStoredFlowListFilters() {
@@ -247,15 +337,23 @@ function getStoredFlowListFilters() {
       return null;
     }
 
-    const parsedValue = JSON.parse(rawValue) as Partial<StoredFlowListFilters>;
-    if (!isFlowFilter(parsedValue.stateFilter) || !isFlowQuickFilter(parsedValue.flowQuickFilter)) {
-      return null;
+    const parsedValue = JSON.parse(rawValue) as Partial<StoredFlowListFilters & LegacyStoredFlowListFilters>;
+
+    if (isFlowVisibleStateKey(parsedValue.activeStateFilter)) {
+      return {
+        activeStateFilter: parsedValue.activeStateFilter,
+        quickFilterByState: sanitizeFlowQuickFilterByState(parsedValue.quickFilterByState),
+      } satisfies StoredFlowListFilters;
     }
 
-    return {
-      stateFilter: normalizeVisibleFlowFilter(parsedValue.stateFilter, "flows"),
-      flowQuickFilter: parsedValue.flowQuickFilter,
-    } satisfies StoredFlowListFilters;
+    if (isFlowFilter(parsedValue.stateFilter) && isFlowQuickFilter(parsedValue.flowQuickFilter)) {
+      return {
+        activeStateFilter: getFlowVisibleStateKey(parsedValue.stateFilter),
+        quickFilterByState: buildLegacyFlowQuickFilterByState(parsedValue.stateFilter, parsedValue.flowQuickFilter),
+      } satisfies StoredFlowListFilters;
+    }
+
+    return null;
   } catch {
     return null;
   }
@@ -1160,13 +1258,17 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const restoreState = navigationState.restore;
   const initialViewMode = lockView ? defaultView : (restoreState?.viewMode ?? defaultView);
   const storedFlowListFilters = initialViewMode === "flows" ? getStoredFlowListFilters() : null;
+  const initialFlowQuickFilterByState =
+    initialViewMode === "flows"
+      ? resolveInitialFlowQuickFilterByState(restoreState, storedFlowListFilters)
+      : { ...DEFAULT_FLOW_QUICK_FILTER_BY_STATE };
   const [triggers, setTriggers] = useState<TriggerDetail[]>([]);
   const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
   const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode);
   const [stateFilter, setStateFilter] = useState<FlowFilter>(
     () =>
       normalizeVisibleFlowFilter(
-        restoreState?.stateFilter ?? storedFlowListFilters?.stateFilter ?? getDefaultFilterForView(initialViewMode),
+        restoreState?.stateFilter ?? storedFlowListFilters?.activeStateFilter ?? getDefaultFilterForView(initialViewMode),
         initialViewMode
       )
   );
@@ -1192,8 +1294,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [linkProjectSearch, setLinkProjectSearch] = useState("");
   const [linkProjectLoading, setLinkProjectLoading] = useState(false);
   const [pendingDates, setPendingDates] = useState<Map<string, string>>(new Map());
-  const [flowQuickFilter, setFlowQuickFilter] = useState<FlowQuickFilter>(
-    () => (initialViewMode === "flows" ? restoreState?.flowQuickFilter ?? storedFlowListFilters?.flowQuickFilter ?? "none" : "none")
+  const [flowQuickFilterByState, setFlowQuickFilterByState] = useState<FlowQuickFilterByState>(
+    () => initialFlowQuickFilterByState
   );
   const [flowQuickFilterAnchorEl, setFlowQuickFilterAnchorEl] = useState<HTMLElement | null>(null);
   const [flowColumnOrder, setFlowColumnOrder] = useState<string[]>(() => getStoredFlowColumnOrder());
@@ -1214,6 +1316,28 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const pendingDateInputRefs = useRef(new Map<string, HTMLInputElement | null>());
   const searchParams = new URLSearchParams(location.search);
   const isAmbitoAdminView = defaultView === "requirements" && searchParams.get("admin") === "ambito";
+  const isFlowsView = viewMode === "flows";
+  const activeFlowStateKey = getFlowVisibleStateKey(stateFilter);
+  const flowQuickFilter = isFlowsView ? flowQuickFilterByState[activeFlowStateKey] ?? "none" : "none";
+
+  function handleFlowStateFilterChange(nextFilter: FlowFilter) {
+    const normalizedFilter = normalizeVisibleFlowFilter(nextFilter, "flows");
+    setStateFilter(normalizedFilter);
+    setFlowQuickFilterAnchorEl(null);
+  }
+
+  function handleFlowQuickFilterChange(nextFilter: FlowQuickFilter) {
+    setFlowQuickFilterByState((previous) => {
+      if (previous[activeFlowStateKey] === nextFilter) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        [activeFlowStateKey]: nextFilter,
+      };
+    });
+  }
 
   useEffect(() => {
     const normalizedFilter = normalizeVisibleFlowFilter(stateFilter, viewMode);
@@ -1231,7 +1355,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       setViewMode(defaultView);
     }
     if (defaultView !== "flows") {
-      setFlowQuickFilter("none");
       setFlowQuickFilterAnchorEl(null);
     }
   }, [defaultView, lockView]);
@@ -1241,15 +1364,15 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   }, [activeAmbito]);
 
   useEffect(() => {
-    if (viewMode !== "flows") {
+    if (!isFlowsView) {
       return;
     }
 
     storeFlowListFilters({
-      stateFilter: normalizeVisibleFlowFilter(stateFilter, "flows"),
-      flowQuickFilter,
+      activeStateFilter: activeFlowStateKey,
+      quickFilterByState: flowQuickFilterByState,
     });
-  }, [flowQuickFilter, stateFilter, viewMode]);
+  }, [activeFlowStateKey, flowQuickFilterByState, isFlowsView]);
 
   useEffect(() => {
     const state = location.state as { openCreateRequirement?: boolean; toast?: string } | null;
@@ -1279,6 +1402,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       viewMode,
       stateFilter,
       flowQuickFilter,
+      quickFilterByState: isFlowsView ? flowQuickFilterByState : undefined,
       flowSearchOpen,
       flowSearchValue,
       flowSortModel,
@@ -1290,6 +1414,10 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       restoreState?.viewMode === nextRestore.viewMode &&
       restoreState?.stateFilter === nextRestore.stateFilter &&
       restoreState?.flowQuickFilter === nextRestore.flowQuickFilter &&
+      areFlowQuickFilterByStateEqual(
+        sanitizeFlowQuickFilterByState(restoreState?.quickFilterByState),
+        sanitizeFlowQuickFilterByState(nextRestore.quickFilterByState)
+      ) &&
       restoreState?.flowSearchOpen === nextRestore.flowSearchOpen &&
       restoreState?.flowSearchValue === nextRestore.flowSearchValue &&
       areSortModelsEqual(restoreState?.flowSortModel ?? [], nextRestore.flowSortModel) &&
@@ -1319,6 +1447,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     restoreState,
     stateFilter,
     viewMode,
+    flowQuickFilterByState,
+    isFlowsView,
   ]);
 
   async function loadData() {
@@ -1472,13 +1602,13 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const allowedFlowQuickFilterValues = useMemo(() => getAllowedFlowQuickFiltersForStateFilter(stateFilter), [stateFilter]);
   useEffect(() => {
     if (flowQuickFilter !== "none" && !allowedFlowQuickFilterValues.includes(flowQuickFilter)) {
-      setFlowQuickFilter("none");
+      handleFlowQuickFilterChange("none");
       setFlowQuickFilterAnchorEl(null);
     }
-  }, [allowedFlowQuickFilterValues, flowQuickFilter]);
+  }, [allowedFlowQuickFilterValues, flowQuickFilter, activeFlowStateKey]);
   const resetFilterAction =
     stateFilter !== "active" ? (
-      <Button size="small" variant="outlined" color="inherit" onClick={() => setStateFilter("active")}>
+      <Button size="small" variant="outlined" color="inherit" onClick={() => handleFlowStateFilterChange("active")}>
         Ver activos
       </Button>
     ) : undefined;
@@ -1628,7 +1758,6 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     });
   }, [flowSearchValue, quickFilteredFlowRows]);
 
-  const isFlowsView = viewMode === "flows";
   const basePageTitle = title || (isFlowsView ? "Flows" : "Proyectos");
   const currentCounts = isFlowsView ? flowCounts : requirementCounts;
   const visibleFlowRows = searchedFlowRows;
@@ -1713,7 +1842,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     <FlowStateFilterControl
       value={stateFilter}
       counts={currentCounts}
-      onChange={setStateFilter}
+      onChange={isFlowsView ? handleFlowStateFilterChange : setStateFilter}
       variant={isFlowsView ? "flows" : "projects"}
     />
   );
@@ -2964,9 +3093,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
               onChange={(_, value: ViewMode | null) => {
                 if (!value) return;
                 setViewMode(value);
-                setStateFilter(getDefaultFilterForView(value));
+                if (value === "flows") {
+                  handleFlowStateFilterChange(getDefaultFilterForView(value));
+                } else {
+                  setStateFilter(getDefaultFilterForView(value));
+                }
                 if (value !== "flows") {
-                  setFlowQuickFilter("none");
                   setFlowQuickFilterAnchorEl(null);
                 }
                 setCreateRequirementOpen(false);
@@ -3257,7 +3389,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                         setFlowQuickFilterAnchorEl(null);
                       }}
                       onFlowQuickFilterChange={(value: FlowQuickFilter) => {
-                        setFlowQuickFilter(value);
+                        handleFlowQuickFilterChange(value);
                       }}
                       onSearchToggle={() => {
                         if (flowSearchOpen && flowSearchValue.trim().length === 0) {
