@@ -54,6 +54,20 @@ WORKFLOW_OPEN_STATUSES = {
 }
 
 
+def _is_editable_manual_comment(comment: CommentPublic) -> bool:
+    text = (comment.comentario or "").strip()
+    if text:
+        normalized = " ".join(text.lower().split())
+        if (
+            "se creo la proxima tarea" in normalized
+            or "tarea creada desde cierre dinamico" in normalized
+            or "esperando respuesta externa de externo" in normalized
+            or "esperando respuesta de externo" in normalized
+        ):
+            return False
+    return bool(text) or bool(comment.attachments)
+
+
 class WorkflowService:
     def __init__(self, repository: WorkflowRepository) -> None:
         self.repository = repository
@@ -810,14 +824,15 @@ class WorkflowService:
         step = self.get_step(step_id)
         workflow = self.get_workflow(step.workflow_id)
         if workflow.estado not in WORKFLOW_OPEN_STATUSES:
-            raise BusinessRuleError("Solo se puede editar el ultimo comentario manual en flows abiertos")
+            raise BusinessRuleError("Solo se pueden editar registros manuales en flows abiertos")
         if not step.puede_tener_comentarios:
             raise BusinessRuleError("Esta tarea no admite registros")
-        if not any(comment.id == comment_id for comment in self.repository.list_comments(step_id)):
+        comments = self.repository.list_comments(step_id)
+        target_comment = next((comment for comment in comments if comment.id == comment_id), None)
+        if target_comment is None:
             raise EntityNotFoundError("Comment not found")
-        latest_manual_comment = self.repository.get_latest_manual_comment(step_id)
-        if latest_manual_comment is None or latest_manual_comment.id != comment_id:
-            raise BusinessRuleError("Solo se puede editar el ultimo comentario manual de la tarea")
+        if not _is_editable_manual_comment(target_comment):
+            raise BusinessRuleError("Solo se pueden editar registros manuales de la tarea")
         updated_comment = self.repository.update_comment(step_id, comment_id, payload)
         if updated_comment is None:
             raise EntityNotFoundError("Comment not found")

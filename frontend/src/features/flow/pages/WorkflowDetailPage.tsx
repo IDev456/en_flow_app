@@ -68,6 +68,7 @@ import type {
   ExternalResponseDecisionInput,
   Step,
   StepComment,
+  StepCommentUpdateInput,
   StepCompleteInput,
   StepHistoryEntry,
   StepJournalEntryInput,
@@ -267,11 +268,12 @@ export function WorkflowDetailPage() {
     await refreshAfterStepChange(selectedStepId);
   }
 
-  async function handleEditJournalComment(commentId: string, comentario: string | null) {
+  async function handleEditJournalComment(commentId: string, input: StepCommentUpdateInput) {
     if (!selectedStepId) return;
     await updateStepComment(selectedStepId, commentId, {
       autor: DEFAULT_ACTOR,
-      comentario,
+      comentario: input.comentario,
+      attachments: input.attachments ?? [],
     });
     await refreshAfterStepChange(selectedStepId);
   }

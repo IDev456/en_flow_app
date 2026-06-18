@@ -23,6 +23,7 @@ import type {
   ExternalResponseDecisionInput,
   Step,
   StepComment,
+  StepCommentUpdateInput,
   StepCompleteInput,
   StepHistoryEntry,
   StepJournalEntryInput,
@@ -111,12 +112,13 @@ export function StepDetailPage() {
     showToast("Tarea resuelta.", "success");
   }
 
-  async function handleEditJournalComment(commentId: string, comentario: string | null) {
+  async function handleEditJournalComment(commentId: string, input: StepCommentUpdateInput) {
     if (!step) return;
 
     await updateStepComment(step.id, commentId, {
       autor: DEFAULT_ACTOR,
-      comentario,
+      comentario: input.comentario,
+      attachments: input.attachments ?? [],
     });
     await loadStepData();
     showToast("Registro actualizado.", "success");

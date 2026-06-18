@@ -94,7 +94,9 @@ def _is_noisy_automatic_journal_text(value: str | None) -> bool:
 
 def _is_manual_comment(comment: CommentPublic) -> bool:
     text = _clean_text(comment.comentario)
-    return bool(text) and not _is_noisy_automatic_journal_text(text)
+    if text and _is_noisy_automatic_journal_text(text):
+        return False
+    return bool(text) or bool(comment.attachments)
 
 
 def _format_workflow_title(objetivo_final: str | None, workflow_id: str) -> str:
@@ -813,6 +815,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
                 update={
                     "autor": payload.autor or comment.autor,
                     "comentario": payload.comentario,
+                    "attachments": self._materialize_attachments(payload.attachments),
                 }
             )
             comments[index] = updated
@@ -1532,6 +1535,16 @@ class PostgresWorkflowRepository(WorkflowRepository):
             if payload.autor:
                 comment.autor = payload.autor
             comment.comentario = payload.comentario
+            comment.attachments = [
+                {
+                    "id": str(uuid4()),
+                    "nombre": item.nombre,
+                    "content_type": item.content_type,
+                    "size_bytes": item.size_bytes,
+                    "content_base64": item.content_base64,
+                }
+                for item in payload.attachments
+            ]
             session.flush()
             session.refresh(comment)
             return self._comment_to_public(comment)

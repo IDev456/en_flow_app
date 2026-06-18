@@ -382,6 +382,10 @@ export type JournalItem =
       previousStatus: string | null;
       nextStatus: string | null;
       attachments: Attachment[];
+      commentId: string | null;
+      editable: boolean;
+      editableBody: string | null;
+      editableAttachments: Attachment[];
     }
   | {
       id: string;
@@ -500,8 +504,8 @@ function mergeAttachments(primary: Attachment[], secondary: Attachment[]) {
 }
 
 export function buildJournalItems(history: StepHistoryEntry[], comments: StepComment[]): JournalItem[] {
-  const historyNoteTimestamps = new Map<string, number[]>();
   const nonCompletionStatusTimestamps: number[] = [];
+  const historyNoteTimestamps = new Map<string, number[]>();
 
   history.forEach((entry) => {
     if (entry.campo === "estado" && !isCompletionStatus(entry.valor_nuevo)) {
@@ -560,7 +564,11 @@ export function buildJournalItems(history: StepHistoryEntry[], comments: StepCom
         status: entry.valor_nuevo ?? "activo",
         previousStatus: entry.valor_anterior ?? null,
         nextStatus: entry.valor_nuevo ?? null,
-        attachments: mergeAttachments(entry.attachments ?? [], mergedComment?.attachments ?? [])
+        attachments: mergeAttachments(entry.attachments ?? [], mergedComment?.attachments ?? []),
+        commentId: mergedComment?.id ?? null,
+        editable: Boolean(mergedComment?.id),
+        editableBody: mergedComment?.comentario ?? null,
+        editableAttachments: mergedComment?.attachments ?? [],
       };
     });
 
@@ -634,20 +642,10 @@ export function buildJournalItems(history: StepHistoryEntry[], comments: StepCom
       secondaryText: null,
       attachments: comment.attachments ?? [],
       commentId: comment.id,
-      editable: false,
+      editable: true,
     }));
 
-  const latestEditableCommentId =
-    [...commentEntries]
-      .filter((entry) => entry.body.trim().length > 0 && Boolean(entry.commentId))
-      .sort((left, right) => formatJournalDateAsMs(right.date) - formatJournalDateAsMs(left.date))[0]?.commentId ?? null;
-
-  const editableCommentEntries = commentEntries.map((entry) => ({
-    ...entry,
-    editable: entry.commentId === latestEditableCommentId,
-  }));
-
-  return [...statusEntries, ...historyNameEntries, ...historyNoteEntries, ...editableCommentEntries].sort(
+  return [...statusEntries, ...historyNameEntries, ...historyNoteEntries, ...commentEntries].sort(
     (left, right) => formatJournalDateAsMs(right.date) - formatJournalDateAsMs(left.date)
   );
 }

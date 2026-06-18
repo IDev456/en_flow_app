@@ -445,11 +445,12 @@ class CommentCreate(BaseModel):
 class CommentUpdate(BaseModel):
     autor: str | None = Field(default=None, min_length=1, max_length=120)
     comentario: str | None = Field(default=None, max_length=1000)
+    attachments: list[AttachmentBase] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_content(self) -> "CommentUpdate":
-        if not (self.comentario and self.comentario.strip()):
-            raise ValueError("Debes enviar un registro")
+        if not (self.comentario and self.comentario.strip()) and not self.attachments:
+            raise ValueError("Debes enviar un registro o al menos un adjunto")
         return self
 
 

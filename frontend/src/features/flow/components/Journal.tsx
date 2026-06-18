@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import AddPhotoAlternateRoundedIcon from "@mui/icons-material/AddPhotoAlternateRounded";
 import AttachmentRoundedIcon from "@mui/icons-material/AttachmentRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
+import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import InsertDriveFileRoundedIcon from "@mui/icons-material/InsertDriveFileRounded";
 import {
   Alert,
@@ -25,7 +26,15 @@ import {
 import { alpha } from "@mui/material/styles";
 import type { Theme } from "@mui/material/styles";
 
-import type { Attachment, AttachmentInput, Step, StepComment, StepHistoryEntry, StepJournalEntryInput } from "../types";
+import type {
+  Attachment,
+  AttachmentInput,
+  Step,
+  StepComment,
+  StepCommentUpdateInput,
+  StepHistoryEntry,
+  StepJournalEntryInput,
+} from "../types";
 import { buildJournalItems, formatDate, formatElapsedTime, stepStatusOptions } from "../utils";
 import { StatusBadge } from "./StatusBadge";
 
@@ -42,7 +51,7 @@ type JournalProps = {
   onSubmitEntry: (input: StepJournalEntryInput) => Promise<void>;
   showComposer?: boolean;
   canEditEntries?: boolean;
-  onEditEntry?: (commentId: string, comentario: string | null) => Promise<void>;
+  onEditEntry?: (commentId: string, input: StepCommentUpdateInput) => Promise<void>;
 };
 
 type DraftAttachment = AttachmentInput & {
@@ -156,6 +165,26 @@ function renderMarkdownContent(text: string) {
 
   flushList();
   return blocks;
+}
+
+function toDraftAttachment(input: AttachmentInput, localId: string) {
+  return {
+    ...input,
+    local_id: localId,
+    preview_url: `data:${input.content_type};base64,${input.content_base64}`,
+  } satisfies DraftAttachment;
+}
+
+function toDraftAttachmentFromAttachment(attachment: Attachment) {
+  return toDraftAttachment(
+    {
+      nombre: attachment.nombre,
+      content_type: attachment.content_type,
+      size_bytes: attachment.size_bytes,
+      content_base64: attachment.content_base64,
+    },
+    attachment.id
+  );
 }
 
 export function Journal({
@@ -288,7 +317,15 @@ export function Journal({
         if (!editingCommentId || !onEditEntry) {
           throw new Error("No se pudo identificar el registro a editar.");
         }
-        await onEditEntry(editingCommentId, comentario);
+        await onEditEntry(editingCommentId, {
+          comentario,
+          attachments: attachments.map((item) => ({
+            nombre: item.nombre,
+            content_type: item.content_type,
+            size_bytes: item.size_bytes,
+            content_base64: item.content_base64,
+          })),
+        });
       } else {
         await onSubmitEntry({
           comentario,
@@ -374,10 +411,10 @@ export function Journal({
     setError(null);
   }
 
-  function handleStartEditing(commentId: string, body: string) {
+  function handleStartEditing(commentId: string, body: string, currentAttachments: Attachment[]) {
     setEditingCommentId(commentId);
     setText(body);
-    setAttachments([]);
+    setAttachments(currentAttachments.map((attachment) => toDraftAttachmentFromAttachment(attachment)));
     onSelectedStatusChange("");
     setError(null);
     onComposerExpandedChange(true);
@@ -501,7 +538,7 @@ export function Journal({
                   </Button>
                 </Stack>
 
-                {!isEditing ? <input ref={fileInputRef} type="file" multiple hidden onChange={handleFileChange} /> : null}
+                <input ref={fileInputRef} type="file" multiple hidden onChange={handleFileChange} />
                 <Stack
                   direction={{ xs: "column", sm: "row" }}
                   spacing={1.25}
@@ -515,35 +552,29 @@ export function Journal({
                     py: { xs: 1, sm: 1.1 },
                   }}
                 >
-                  {!isEditing ? (
-                    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-start" }}>
-                      <Tooltip title="Adjuntar archivos">
-                        <span>
-                          <IconButton
-                            type="button"
-                            color="inherit"
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={!canComment || submitting}
-                            aria-label="Adjuntar archivos"
-                            sx={{
-                              border: "1px solid",
-                              borderColor: "outline",
-                              backgroundColor: "background.paper",
-                              "&:hover": {
-                                backgroundColor: (theme) => alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.14 : 0.06),
-                              },
-                            }}
-                          >
-                            <AddPhotoAlternateRoundedIcon />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    </Box>
-                  ) : (
-                    <Typography variant="caption" color="text.secondary" sx={{ alignSelf: "center" }}>
-                      Editando solo el texto del registro
-                    </Typography>
-                  )}
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-start" }}>
+                    <Tooltip title="Adjuntar archivos">
+                      <span>
+                        <IconButton
+                          type="button"
+                          color="inherit"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={!canComment || submitting}
+                          aria-label="Adjuntar archivos"
+                          sx={{
+                            border: "1px solid",
+                            borderColor: "outline",
+                            backgroundColor: "background.paper",
+                            "&:hover": {
+                              backgroundColor: (theme) => alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.14 : 0.06),
+                            },
+                          }}
+                        >
+                          <AddPhotoAlternateRoundedIcon />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                  </Box>
 
                   <Stack
                     direction={{ xs: "row", sm: "row" }}
@@ -764,25 +795,55 @@ export function Journal({
             const secondaryText = item.secondaryText?.trim() ?? "";
             const elapsed = formatElapsedTime(item.date);
             const canEditItem =
-              item.kind === "comment" && item.editable && Boolean(item.commentId) && canEditEntries && Boolean(onEditEntry);
+              item.kind !== "rename" && item.editable && Boolean(item.commentId) && canEditEntries && Boolean(onEditEntry);
             const dateLabel = elapsed ? `${formatDate(item.date)} · ${elapsed}` : formatDate(item.date);
             return (
-            <Card key={item.id} variant="outlined" sx={{ borderColor: (theme) => alpha(theme.palette.divider, 0.85) }}>
+            <Card
+              key={item.id}
+              variant="outlined"
+              className="journal-entry-card"
+              sx={{
+                borderColor: (theme) => alpha(theme.palette.divider, 0.85),
+                "& .journal-edit-action": {
+                  opacity: 0,
+                  pointerEvents: "none",
+                  transition: (theme) => theme.transitions.create("opacity", {
+                    duration: theme.transitions.duration.shorter,
+                  }),
+                },
+                "&:hover .journal-edit-action, &:focus-within .journal-edit-action": {
+                  opacity: 1,
+                  pointerEvents: "auto",
+                },
+              }}
+            >
               <CardContent sx={{ display: "grid", gap: 0.9, p: 1.35 }}>
                 <Stack direction="row" spacing={1} sx={{ alignItems: "center", justifyContent: "space-between", gap: 1 }}>
                   <Typography variant="caption" color="text.secondary">
                     {dateLabel}
                   </Typography>
                   {canEditItem ? (
-                    <Button
-                      size="small"
-                      color="inherit"
-                      onClick={() => handleStartEditing(item.commentId as string, item.body)}
-                      disabled={submitting}
-                      sx={{ minWidth: 0, px: 0.75, py: 0.2, fontSize: 12 }}
-                    >
-                      Editar
-                    </Button>
+                    <Tooltip title="Editar registro">
+                      <span>
+                        <IconButton
+                          size="small"
+                          color="inherit"
+                          className="journal-edit-action"
+                          onClick={() =>
+                            handleStartEditing(
+                              item.commentId as string,
+                              item.kind === "status" ? (item.editableBody ?? "") : item.body,
+                              item.kind === "status" ? item.editableAttachments : item.attachments
+                            )
+                          }
+                          disabled={submitting}
+                          aria-label="Editar registro"
+                          sx={{ alignSelf: "flex-start" }}
+                        >
+                          <EditRoundedIcon fontSize="small" />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
                   ) : null}
                 </Stack>
 

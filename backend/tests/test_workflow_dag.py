@@ -985,6 +985,14 @@ class WorkflowDagTestCase(unittest.TestCase):
             CommentUpdate(
                 autor="qa",
                 comentario="Avance inicial ajustado",
+                attachments=[
+                    AttachmentBase(
+                        nombre="evidencia.txt",
+                        content_type="text/plain",
+                        size_bytes=4,
+                        content_base64="dGVzdA==",
+                    )
+                ],
             ),
         )
 
@@ -993,7 +1001,7 @@ class WorkflowDagTestCase(unittest.TestCase):
         self.assertEqual(len(updated.attachments), 1)
         self.assertEqual(updated.attachments[0].nombre, "evidencia.txt")
 
-    def test_cannot_edit_non_latest_manual_comment(self) -> None:
+    def test_can_edit_non_latest_manual_comment(self) -> None:
         workflow_id = self._start_workflow(build_linear_template())
         step = self._step_by_code(workflow_id, "A")
         first_comment = self.service.add_comment(
@@ -1013,17 +1021,16 @@ class WorkflowDagTestCase(unittest.TestCase):
             ),
         )
 
-        with self.assertRaises(BusinessRuleError) as ctx:
-            self.service.update_comment(
-                step.id,
-                first_comment.id,
-                CommentUpdate(
-                    autor="tester",
-                    comentario="Primer avance corregido",
-                ),
-            )
+        updated = self.service.update_comment(
+            step.id,
+            first_comment.id,
+            CommentUpdate(
+                autor="tester",
+                comentario="Primer avance corregido",
+            ),
+        )
 
-        self.assertIn("ultimo comentario manual", str(ctx.exception).lower())
+        self.assertEqual(updated.comentario, "Primer avance corregido")
 
     def test_noisy_automatic_comment_does_not_block_latest_manual_comment_edit(self) -> None:
         workflow_id = self._start_workflow(build_linear_template())
@@ -1055,6 +1062,110 @@ class WorkflowDagTestCase(unittest.TestCase):
         )
 
         self.assertEqual(updated.comentario, "Seguimiento real ajustado")
+
+    def test_cannot_edit_automatic_comment(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        step = self._step_by_code(workflow_id, "A")
+        automatic_comment = self.service.add_comment(
+            step.id,
+            CommentCreate(
+                autor="sistema",
+                comentario="Se creo la proxima tarea: Paso B",
+                attachments=[],
+            ),
+        )
+
+        with self.assertRaises(BusinessRuleError) as ctx:
+            self.service.update_comment(
+                step.id,
+                automatic_comment.id,
+                CommentUpdate(
+                    autor="tester",
+                    comentario="Intento de edicion",
+                ),
+            )
+
+        self.assertIn("registros manuales", str(ctx.exception).lower())
+
+    def test_can_edit_manual_comment_attachments_with_full_replacement(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        step = self._step_by_code(workflow_id, "A")
+        comment = self.service.add_comment(
+            step.id,
+            CommentCreate(
+                autor="tester",
+                comentario="Registro con adjuntos",
+                attachments=[
+                    AttachmentBase(
+                        nombre="viejo.txt",
+                        content_type="text/plain",
+                        size_bytes=5,
+                        content_base64="b2xkZXI=",
+                    )
+                ],
+            ),
+        )
+
+        updated = self.service.update_comment(
+            step.id,
+            comment.id,
+            CommentUpdate(
+                autor="tester",
+                comentario="Registro con adjuntos actualizado",
+                attachments=[
+                    AttachmentBase(
+                        nombre="nuevo.txt",
+                        content_type="text/plain",
+                        size_bytes=6,
+                        content_base64="bmV3ZXI=",
+                    )
+                ],
+            ),
+        )
+
+        self.assertEqual(updated.comentario, "Registro con adjuntos actualizado")
+        self.assertEqual(len(updated.attachments), 1)
+        self.assertEqual(updated.attachments[0].nombre, "nuevo.txt")
+
+    def test_can_edit_manual_comment_with_only_attachments(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        step = self._step_by_code(workflow_id, "A")
+        comment = self.service.add_comment(
+            step.id,
+            CommentCreate(
+                autor="tester",
+                comentario=None,
+                attachments=[
+                    AttachmentBase(
+                        nombre="evidencia.png",
+                        content_type="image/png",
+                        size_bytes=7,
+                        content_base64="cG5nZGF0YQ==",
+                    )
+                ],
+            ),
+        )
+
+        updated = self.service.update_comment(
+            step.id,
+            comment.id,
+            CommentUpdate(
+                autor="tester",
+                comentario=None,
+                attachments=[
+                    AttachmentBase(
+                        nombre="evidencia-final.png",
+                        content_type="image/png",
+                        size_bytes=8,
+                        content_base64="cG5nZGF0YTI=",
+                    )
+                ],
+            ),
+        )
+
+        self.assertIsNone(updated.comentario)
+        self.assertEqual(len(updated.attachments), 1)
+        self.assertEqual(updated.attachments[0].nombre, "evidencia-final.png")
 
     def test_finalized_workflow_blocks_comment_editing(self) -> None:
         workflow_id = self._start_workflow(build_linear_template())

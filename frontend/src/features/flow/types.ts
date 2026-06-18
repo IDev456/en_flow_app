@@ -260,6 +260,7 @@ export type StepCommentInput = {
 export type StepCommentUpdateInput = {
   autor?: string;
   comentario: string | null;
+  attachments?: AttachmentInput[];
 };
 
 export type StepJournalEntryInput = {

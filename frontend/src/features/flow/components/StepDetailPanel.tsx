@@ -35,6 +35,7 @@ import type {
   ExternalResponseDecisionInput,
   Step,
   StepComment,
+  StepCommentUpdateInput,
   StepCompleteInput,
   StepHistoryEntry,
   StepJournalEntryInput,
@@ -67,7 +68,7 @@ type StepDetailPanelProps = {
   onClose?: () => void;
   error?: string | null;
   onSubmitJournal: (input: StepJournalEntryInput) => Promise<void>;
-  onEditJournalComment?: (commentId: string, comentario: string | null) => Promise<void>;
+  onEditJournalComment?: (commentId: string, input: StepCommentUpdateInput) => Promise<void>;
   onCompleteTask: (stepId: string, input: StepCompleteInput) => Promise<void>;
   onStepUpdated?: (step: Step) => Promise<void> | void;
   onRegisterExternalEvent?: (input: ExternalEventCreateInput) => Promise<void>;
@@ -839,8 +840,8 @@ export function StepDetailPanel({
             onSubmitEntry={handleSubmitJournal}
             onEditEntry={
               onEditJournalComment
-                ? async (commentId, comentario) => {
-                    await onEditJournalComment(commentId, comentario);
+                ? async (commentId, input) => {
+                    await onEditJournalComment(commentId, input);
                   }
                 : undefined
             }
