@@ -77,6 +77,8 @@ import type {
 } from "../types";
 import { buildJournalItems, DEFAULT_ACTOR, getAmbitoLabel } from "../utils";
 
+const SAME_FORM_RESOLUTION_SOURCE = "same_form_resolution";
+
 type WorkflowDetailRestoreState = {
   selectedStepId: string | null;
 };
@@ -315,7 +317,9 @@ export function WorkflowDetailPage() {
         await registerExternalEvent(stepId, {
           event_type: "respuesta_externa_recibida",
           comentario: externalComment,
-          source: "manual",
+          // Keep the external event persisted for audit/listings, but prevent an
+          // extra visible journal card for this same-form resolution flow.
+          source: SAME_FORM_RESOLUTION_SOURCE,
           registrado_por: input.usuario,
           attachments: input.attachments,
         });

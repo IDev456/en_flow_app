@@ -363,7 +363,7 @@ function StepNameEditor({ step, onRenameStep, onEditingChange, dense = false }: 
 
   if (editing) {
     return (
-      <Stack spacing={0.5} sx={{ mt: dense ? 0 : 1, flex: 1 }}>
+      <Stack spacing={0.5} sx={{ mt: dense ? 0 : 1, flex: 1, minWidth: 0 }}>
         <Stack direction="row" spacing={0.75} sx={{ alignItems: "flex-start" }}>
           <TextField
             size="small"
@@ -428,6 +428,8 @@ function StepNameEditor({ step, onRenameStep, onEditingChange, dense = false }: 
       spacing={0.5}
       sx={{
         alignItems: "center",
+        flex: 1,
+        minWidth: 0,
         mt: dense ? 0 : 1,
         "& .step-name-edit-button": {
           opacity: 0,
@@ -440,7 +442,7 @@ function StepNameEditor({ step, onRenameStep, onEditingChange, dense = false }: 
         },
       }}
     >
-      <Typography variant="h6" sx={{ lineHeight: 1.2 }}>
+      <Typography variant="h6" sx={{ lineHeight: 1.2, flex: 1, minWidth: 0 }}>
         {step.nombre}
       </Typography>
       {allowInlineEdit ? (
@@ -619,7 +621,6 @@ function VerticalWorkflowGraph({
                     onStepSelect(step.id);
                   }}
                   sx={{
-                    position: "relative",
                     borderColor: isSelected ? "primary.main" : "outlineVariant",
                     backgroundColor: isSelected ? "surfaceContainerLow" : "surfaceContainerLowest",
                     boxShadow: isSelected ? `0 0 0 1px ${alpha(theme.palette.primary.main, 0.2)}` : theme.appElevation.surface,
@@ -637,42 +638,48 @@ function VerticalWorkflowGraph({
                     },
                   }}
                 >
-                  {canComplete && onCompleteStepIntent && !isEditingName ? (
-                    <Button
-                      className="complete-step-button"
-                      size="small"
-                      variant="contained"
-                      onClick={(event: MouseEvent<HTMLButtonElement>) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        onCompleteStepIntent(step.id);
-                      }}
-                      onMouseDown={(event: MouseEvent<HTMLButtonElement>) => event.stopPropagation()}
-                      onPointerDown={(event: PointerEvent<HTMLButtonElement>) => event.stopPropagation()}
-                      aria-label={`Completar tarea ${step.nombre}`}
-                      sx={{
-                        position: "absolute",
-                        top: 12,
-                        right: 12,
-                        opacity: 0,
-                        visibility: "hidden",
-                        transition: theme.transitions.create("opacity", {
-                          duration: theme.appMotion.short,
-                        }),
-                        textTransform: "none",
-                        zIndex: 1,
-                      }}
-                    >
-                      Listo
-                    </Button>
-                  ) : null}
                   <Box sx={{ p: 1.5 }}>
                     <Stack spacing={0.95}>
-                      <StepNameEditor
-                        step={step}
-                        onRenameStep={onRenameStep}
-                        onEditingChange={handleStepNameEditingChange}
-                      />
+                      <Stack
+                        direction={{ xs: "column", sm: "row" }}
+                        spacing={1}
+                        sx={{ alignItems: { xs: "stretch", sm: "flex-start" } }}
+                      >
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <StepNameEditor
+                            step={step}
+                            onRenameStep={onRenameStep}
+                            onEditingChange={handleStepNameEditingChange}
+                          />
+                        </Box>
+                        {canComplete && onCompleteStepIntent && !isEditingName ? (
+                          <Button
+                            className="complete-step-button"
+                            size="small"
+                            variant="contained"
+                            onClick={(event: MouseEvent<HTMLButtonElement>) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              onCompleteStepIntent(step.id);
+                            }}
+                            onMouseDown={(event: MouseEvent<HTMLButtonElement>) => event.stopPropagation()}
+                            onPointerDown={(event: PointerEvent<HTMLButtonElement>) => event.stopPropagation()}
+                            aria-label={`Completar tarea ${step.nombre}`}
+                            sx={{
+                              alignSelf: { xs: "flex-start", sm: "center" },
+                              flexShrink: 0,
+                              opacity: { xs: 1, sm: 0 },
+                              visibility: { xs: "visible", sm: "hidden" },
+                              transition: theme.transitions.create("opacity", {
+                                duration: theme.appMotion.short,
+                              }),
+                              textTransform: "none",
+                            }}
+                          >
+                            Listo
+                          </Button>
+                        ) : null}
+                      </Stack>
 
                       {renderStepTiming(step)}
                       <Stack direction="row" spacing={0.85} sx={{ alignItems: "center", flexWrap: "wrap", gap: 0.85 }}>

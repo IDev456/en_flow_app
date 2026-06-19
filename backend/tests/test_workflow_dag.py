@@ -692,6 +692,80 @@ class WorkflowDagTestCase(unittest.TestCase):
         self.assertEqual(workflow_finished.estado, WorkflowStatus.FINALIZADO)
         self.assertIsNone(workflow_finished.fecha_espera_desde)
 
+    def test_same_form_resolution_external_event_is_persisted_without_visible_history_entry(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        step = self.service.get_workflow(workflow_id).steps[0]
+
+        waiting_step = self.service.complete_step(
+            step.id,
+            StepCompletePayload(
+                usuario="tester",
+                comentario="Queda esperando confirmacion",
+                resultado_cierre="En espera",
+                observaciones=None,
+                transition_type=StepTransitionType.WAIT_EXTERNAL,
+                external_wait=ExternalWaitInput(que_se_espera="layout_aprobado", origen="sistema"),
+            ),
+        )
+
+        event = self.service.register_external_event(
+            waiting_step.id,
+            ExternalEventCreate(
+                event_type="respuesta_externa_recibida",
+                comentario="Cliente confirmo por mail",
+                source="same_form_resolution",
+                registrado_por="tester",
+            ),
+        )
+
+        history = self.service.list_history(waiting_step.id)
+        external_events = self.service.list_step_external_events(waiting_step.id)
+
+        self.assertEqual(event.source, "same_form_resolution")
+        self.assertEqual(len(external_events), 1)
+        self.assertEqual(external_events[0].id, event.id)
+        self.assertFalse(any(entry.campo == "evento_externo" for entry in history))
+
+    def test_manual_external_event_still_creates_visible_history_entry(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        step = self.service.get_workflow(workflow_id).steps[0]
+
+        waiting_step = self.service.complete_step(
+            step.id,
+            StepCompletePayload(
+                usuario="tester",
+                comentario="Queda esperando confirmacion",
+                resultado_cierre="En espera",
+                observaciones=None,
+                transition_type=StepTransitionType.WAIT_EXTERNAL,
+                external_wait=ExternalWaitInput(que_se_espera="layout_aprobado", origen="sistema"),
+            ),
+        )
+
+        event = self.service.register_external_event(
+            waiting_step.id,
+            ExternalEventCreate(
+                event_type="respuesta_externa_recibida",
+                comentario="Cliente confirmo por mail",
+                source="manual",
+                registrado_por="tester",
+            ),
+        )
+
+        history = self.service.list_history(waiting_step.id)
+        external_events = self.service.list_step_external_events(waiting_step.id)
+
+        self.assertEqual(event.source, "manual")
+        self.assertEqual(len(external_events), 1)
+        self.assertTrue(
+            any(
+                entry.campo == "evento_externo"
+                and entry.valor_nuevo == "respuesta_externa_recibida"
+                and entry.nota == "Cliente confirmo por mail"
+                for entry in history
+            )
+        )
+
     def test_today_reminder_is_allowed(self) -> None:
         workflow = self.service.quick_capture_flow(
             QuickCaptureRequest(

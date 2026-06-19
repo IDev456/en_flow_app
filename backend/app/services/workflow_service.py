@@ -52,6 +52,7 @@ WORKFLOW_OPEN_STATUSES = {
     WorkflowStatus.EN_ESPERA,
     WorkflowStatus.CON_PROBLEMA,
 }
+SAME_FORM_RESOLUTION_SOURCE = "same_form_resolution"
 
 
 def _is_editable_manual_comment(comment: CommentPublic) -> bool:
@@ -885,15 +886,16 @@ class WorkflowService:
 
         now = utc_now()
         event = self.repository.add_external_event(step_id, payload)
-        self._record_history(
-            step.id,
-            "evento_externo",
-            None,
-            payload.event_type,
-            payload.registrado_por,
-            note=payload.comentario or f"Evento externo recibido: {payload.event_type}",
-            attachments=payload.attachments,
-        )
+        if payload.source != SAME_FORM_RESOLUTION_SOURCE:
+            self._record_history(
+                step.id,
+                "evento_externo",
+                None,
+                payload.event_type,
+                payload.registrado_por,
+                note=payload.comentario or f"Evento externo recibido: {payload.event_type}",
+                attachments=payload.attachments,
+            )
         expected_event = (step.expected_external_event or "").strip()
         matches_expected_event = bool(expected_event) and payload.event_type.strip() == expected_event
         if matches_expected_event:
