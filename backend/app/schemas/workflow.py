@@ -172,6 +172,7 @@ class WaitingStartInput(BaseModel):
 class WorkflowStartRequest(WorkflowInstanceBase):
     workflow_template_id: str | None = None
     modo_inicio: WorkflowStartMode = WorkflowStartMode.TAREA_ACTIVA
+    registro_inicial: "InitialRecordInput | None" = None
     primer_paso: InitialStepOverride | None = None
     espera_inicial: WaitingStartInput | None = None
 
@@ -299,6 +300,17 @@ class AttachmentPublic(AttachmentBase):
     id: str
 
 
+class InitialRecordInput(BaseModel):
+    comentario: str | None = Field(default=None, max_length=1000)
+    attachments: list[AttachmentBase] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_content(self) -> "InitialRecordInput":
+        if not (self.comentario and self.comentario.strip()) and not self.attachments:
+            raise ValueError("Debes enviar un registro inicial o al menos un adjunto")
+        return self
+
+
 class StepStatusUpdate(BaseModel):
     estado: StepStatus
     usuario: str = Field(min_length=1, max_length=120)
@@ -384,6 +396,7 @@ class QuickCaptureRequest(BaseModel):
     fecha_vencimiento: datetime | None = None
     fecha_ejecucion_estimada: datetime | None = None
     modo_inicio: WorkflowStartMode = WorkflowStartMode.TAREA_ACTIVA
+    registro_inicial: "InitialRecordInput | None" = None
     espera_inicial: WaitingStartInput | None = None
     creado_por: str = Field(default="sistema", min_length=1, max_length=120)
     ambito: Ambito

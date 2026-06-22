@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import Session, sessionmaker
+from pydantic import ValidationError
 
 import app.repositories.workflow_repository as repo_mod
 from app.core.errors import BusinessRuleError
@@ -30,6 +31,7 @@ from app.schemas.workflow import (
     ExternalEventCreate,
     ExternalWaitInput,
     FinishFlowInput,
+    InitialRecordInput,
     QuickCaptureRequest,
     InitialStepOverride,
     NextTaskInput,
@@ -399,6 +401,75 @@ class WorkflowDagTestCase(unittest.TestCase):
         self.assertIsNone(first_step.fecha_ejecucion_estimada)
         self.assertEqual(first_step.fecha_vencimiento.date(), start_of_utc_day(1).date())
 
+    def test_quick_capture_creates_initial_record_with_attachments(self) -> None:
+        workflow = self.service.quick_capture_flow(
+            QuickCaptureRequest(
+                titulo="Comprar repuesto",
+                detalle="Validar modelo",
+                creado_por="tester",
+                ambito=Ambito.LABORAL,
+                registro_inicial=InitialRecordInput(
+                    comentario="Adjunto captura inicial",
+                    attachments=[
+                        AttachmentBase(
+                            nombre="captura.png",
+                            content_type="image/png",
+                            size_bytes=4,
+                            content_base64="dGVzdA==",
+                        )
+                    ],
+                ),
+            )
+        )
+
+        first_step = workflow.steps[0]
+        comments = self.service.list_comments(first_step.id)
+        self.assertEqual(len(comments), 1)
+        self.assertEqual(comments[0].comentario, "Adjunto captura inicial")
+        self.assertEqual(len(comments[0].attachments), 1)
+        self.assertEqual(comments[0].attachments[0].nombre, "captura.png")
+
+        refreshed = self.service.get_workflow(workflow.id)
+        self.assertEqual(refreshed.steps[0].ultimo_comentario, "Adjunto captura inicial")
+
+    def test_quick_capture_accepts_initial_record_with_only_attachment(self) -> None:
+        workflow = self.service.quick_capture_flow(
+            QuickCaptureRequest(
+                titulo="Comprar repuesto",
+                detalle=None,
+                creado_por="tester",
+                ambito=Ambito.LABORAL,
+                registro_inicial=InitialRecordInput(
+                    comentario=None,
+                    attachments=[
+                        AttachmentBase(
+                            nombre="evidencia.png",
+                            content_type="image/png",
+                            size_bytes=4,
+                            content_base64="dGVzdA==",
+                        )
+                    ],
+                ),
+            )
+        )
+
+        first_step = workflow.steps[0]
+        comments = self.service.list_comments(first_step.id)
+        self.assertEqual(len(comments), 1)
+        self.assertIsNone(comments[0].comentario)
+        self.assertEqual(len(comments[0].attachments), 1)
+        self.assertEqual(self.service.get_workflow(workflow.id).steps[0].ultimo_comentario, "Imagen adjunta")
+
+    def test_quick_capture_rejects_empty_initial_record(self) -> None:
+        with self.assertRaises(ValidationError):
+            QuickCaptureRequest(
+                titulo="Comprar repuesto",
+                detalle=None,
+                creado_por="tester",
+                ambito=Ambito.LABORAL,
+                registro_inicial=InitialRecordInput(comentario="   ", attachments=[]),
+            )
+
     def test_start_workflow_inherits_trigger_ambito(self) -> None:
         template = build_linear_template()
         self.repository._workflow_templates = {template.id: template}  # type: ignore[attr-defined]
@@ -423,6 +494,44 @@ class WorkflowDagTestCase(unittest.TestCase):
 
         self.assertEqual(workflow.ambito, Ambito.LABORAL)
         self.assertTrue(all(step.ambito == Ambito.LABORAL for step in workflow.steps))
+
+    def test_start_workflow_can_persist_initial_record(self) -> None:
+        template = build_linear_template()
+        self.repository._workflow_templates = {template.id: template}  # type: ignore[attr-defined]
+        trigger = self.service.create_trigger(
+            TriggerCreate(
+                solicitante="QA",
+                descripcion="Proyecto laboral",
+                tipo="requerimiento",
+                ambito=Ambito.LABORAL,
+                creado_por="tester",
+                metadata=None,
+            )
+        )
+
+        workflow = self.service.start_workflow(
+            trigger.id,
+            WorkflowStartRequest(
+                workflow_template_id=template.id,
+                primer_paso=InitialStepOverride(nombre="Paso inicial"),
+                registro_inicial=InitialRecordInput(
+                    comentario="Contexto inicial",
+                    attachments=[
+                        AttachmentBase(
+                            nombre="brief.txt",
+                            content_type="text/plain",
+                            size_bytes=4,
+                            content_base64="dGVzdA==",
+                        )
+                    ],
+                ),
+            ),
+        )
+
+        comments = self.service.list_comments(workflow.steps[0].id)
+        self.assertEqual(len(comments), 1)
+        self.assertEqual(comments[0].comentario, "Contexto inicial")
+        self.assertEqual(comments[0].attachments[0].nombre, "brief.txt")
 
     def test_quick_capture_rejects_past_reminder(self) -> None:
         with self.assertRaises(BusinessRuleError):
@@ -553,6 +662,52 @@ class WorkflowDagTestCase(unittest.TestCase):
         self.assertIn("Ref: LAYOUT-44", waiting_step.ultimo_comentario or "")
         history = self.service.list_history(waiting_step.id)
         self.assertTrue(any(entry.campo == "espera_externa" and "Layout aprobado" in (entry.nota or "") for entry in history))
+
+    def test_wait_external_preserves_attachments_in_wait_history(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        step = self.service.get_workflow(workflow_id).steps[0]
+
+        self.service.complete_step(
+            step.id,
+            StepCompletePayload(
+                usuario="tester",
+                comentario="Queda pendiente respuesta externa",
+                resultado_cierre="Queda pendiente respuesta externa",
+                observaciones=None,
+                transition_type=StepTransitionType.WAIT_EXTERNAL,
+                attachments=[
+                    AttachmentBase(
+                        nombre="cierre.png",
+                        content_type="image/png",
+                        size_bytes=4,
+                        content_base64="dGVzdA==",
+                    )
+                ],
+                external_wait=ExternalWaitInput(
+                    que_se_espera="Layout aprobado",
+                    esperando_de="Proveedor",
+                    detalle="Esperando confirmacion final",
+                    referencia_externa="LAYOUT-44",
+                    fecha_recordatorio=start_of_utc_day(2),
+                    attachments=[
+                        AttachmentBase(
+                            nombre="espera.png",
+                            content_type="image/png",
+                            size_bytes=4,
+                            content_base64="dGVzdA==",
+                        )
+                    ],
+                ),
+            ),
+        )
+
+        history = self.service.list_history(step.id)
+        status_entry = next(entry for entry in history if entry.campo == "estado" and entry.valor_nuevo == StepStatus.ESPERANDO_RESPUESTA)
+        wait_entry = next(entry for entry in history if entry.campo == "espera_externa")
+        self.assertEqual(len(status_entry.attachments), 1)
+        self.assertEqual(status_entry.attachments[0].nombre, "cierre.png")
+        self.assertEqual(len(wait_entry.attachments), 1)
+        self.assertEqual(wait_entry.attachments[0].nombre, "espera.png")
 
     def test_wait_external_preserves_free_form_comment_as_visible_record(self) -> None:
         workflow_id = self._start_workflow(build_linear_template())

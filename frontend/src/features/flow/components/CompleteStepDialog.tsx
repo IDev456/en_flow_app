@@ -1,3 +1,4 @@
+import type { ChangeEvent, ClipboardEvent } from "react";
 import { useEffect, useState } from "react";
 import {
   Alert,
@@ -13,9 +14,15 @@ import {
   Typography,
 } from "@mui/material";
 
+import { AttachmentDraftGrid } from "./AttachmentDraftGrid";
 import { ReminderDateField } from "./ReminderDateField";
 import type { Step, StepCompleteInput, StepTransitionType } from "../types";
 import { DEFAULT_ACTOR, getTodayLocalDateInput, isPastCalendarDateInput, toCalendarDateUtcIso } from "../utils";
+import {
+  extractImageFilesFromClipboardData,
+  readFilesAsLocalAttachments,
+  type LocalAttachmentDraft,
+} from "../utils/attachments";
 
 type CompleteStepDialogProps = {
   open: boolean;
@@ -33,6 +40,7 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
   const [waitReference, setWaitReference] = useState("");
   const [waitDetail, setWaitDetail] = useState("");
   const [comment, setComment] = useState("");
+  const [attachments, setAttachments] = useState<LocalAttachmentDraft[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -49,12 +57,45 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
       setWaitReference("");
       setWaitDetail("");
       setComment("");
+      setAttachments([]);
       setError(null);
       setSubmitting(false);
     }
   }, [open, step?.id]);
 
   if (!step) return null;
+
+  async function addFiles(files: File[]) {
+    if (files.length === 0) {
+      return;
+    }
+    try {
+      const parsed = await readFilesAsLocalAttachments(files);
+      setAttachments((current) => [...current, ...parsed]);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudieron adjuntar archivos");
+    }
+  }
+
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    void addFiles(files);
+    event.target.value = "";
+  }
+
+  function handleRemoveAttachment(localId: string) {
+    setAttachments((current) => current.filter((item) => item.local_id !== localId));
+  }
+
+  async function handleCommentPaste(event: ClipboardEvent<HTMLDivElement>) {
+    const imageFiles = extractImageFilesFromClipboardData(event.clipboardData);
+    if (imageFiles.length === 0) {
+      return;
+    }
+    event.preventDefault();
+    await addFiles(imageFiles);
+  }
 
   async function handleConfirm() {
     const currentStep = step;
@@ -86,7 +127,12 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
         comentario: comment.trim() || null,
         observaciones: null,
         transition_type: transition,
-        attachments: [],
+        attachments: attachments.map((item) => ({
+          nombre: item.nombre,
+          content_type: item.content_type,
+          size_bytes: item.size_bytes,
+          content_base64: item.content_base64,
+        })),
         next_task:
           transition === "next_task"
             ? {
@@ -101,6 +147,12 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
                 esperando_de: waitFrom.trim() || null,
                 detalle: waitDetail.trim() || null,
                 referencia_externa: waitReference.trim() || null,
+                attachments: attachments.map((item) => ({
+                  nombre: item.nombre,
+                  content_type: item.content_type,
+                  size_bytes: item.size_bytes,
+                  content_base64: item.content_base64,
+                })),
               }
             : null,
         finish_data: transition === "finish_flow" ? { resultado_final: "Flow finalizado" } : null,
@@ -198,9 +250,18 @@ export function CompleteStepDialog({ open, step, onClose, onSubmit }: CompleteSt
             onChange={(event) => setComment(event.target.value)}
             multiline
             minRows={2}
+            onPaste={(event) => void handleCommentPaste(event)}
             disabled={submitting}
             fullWidth
           />
+
+          <Stack spacing={1.25}>
+            <Button component="label" variant="outlined" color="inherit" disabled={submitting}>
+              Adjuntar archivos (opcional)
+              <input hidden multiple type="file" onChange={handleFileChange} />
+            </Button>
+            <AttachmentDraftGrid attachments={attachments} onRemove={handleRemoveAttachment} />
+          </Stack>
 
           {error && <Alert severity="error">{error}</Alert>}
         </Stack>

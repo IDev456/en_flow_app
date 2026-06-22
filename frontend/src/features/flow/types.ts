@@ -22,6 +22,11 @@ export type AttachmentInput = {
   content_base64: string;
 };
 
+export type InitialRecordInput = {
+  comentario?: string | null;
+  attachments?: AttachmentInput[];
+};
+
 export type Trigger = {
   id: string;
   solicitante: string | null;
@@ -186,6 +191,7 @@ export type WorkflowStartInput = {
   resolucion_esperada?: string | null;
   ambito?: Ambito;
   modo_inicio?: WorkflowStartMode;
+  registro_inicial?: InitialRecordInput | null;
   primer_paso?: {
     nombre: string;
     descripcion?: string | null;
@@ -295,6 +301,7 @@ export type QuickCaptureInput = {
   fecha_vencimiento?: string | null;
   fecha_ejecucion_estimada?: string | null;
   modo_inicio?: WorkflowStartMode;
+  registro_inicial?: InitialRecordInput | null;
   espera_inicial?: WaitingStartInput | null;
   creado_por?: string;
   ambito: Exclude<Ambito, null>;

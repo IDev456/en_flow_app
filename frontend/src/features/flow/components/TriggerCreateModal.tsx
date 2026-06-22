@@ -1,3 +1,4 @@
+import type { ChangeEvent, ClipboardEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import AddTaskRoundedIcon from "@mui/icons-material/AddTaskRounded";
 import TuneRoundedIcon from "@mui/icons-material/TuneRounded";
@@ -23,6 +24,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useToastContext } from "../../../components/Toast";
 import { getWorkflow, listTriggers, listWorkflows, quickCaptureFlow, startWorkflow } from "../api";
 import { navigateWithOrigin } from "../navigation";
+import { AttachmentDraftGrid } from "./AttachmentDraftGrid";
 import { ReminderDateField } from "./ReminderDateField";
 import { AmbitoChip } from "./AmbitoChip";
 import { DuplicateFlowWarningDialog } from "./DuplicateFlowWarningDialog";
@@ -52,6 +54,11 @@ import {
   type DuplicateCandidate,
   type RequirementByWorkflowId,
 } from "../utils/duplicateDetection";
+import {
+  extractImageFilesFromClipboardData,
+  readFilesAsLocalAttachments,
+  type LocalAttachmentDraft,
+} from "../utils/attachments";
 
 type TriggerCreateModalProps = {
   onClose: () => void;
@@ -89,6 +96,8 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
   const [waitingFrom, setWaitingFrom] = useState("");
   const [waitingReference, setWaitingReference] = useState("");
   const [waitingFollowUpDate, setWaitingFollowUpDate] = useState("");
+  const [initialRecordComment, setInitialRecordComment] = useState("");
+  const [initialRecordAttachments, setInitialRecordAttachments] = useState<LocalAttachmentDraft[]>([]);
   const [selectedRequirementId, setSelectedRequirementId] = useState("");
   const [availableRequirements, setAvailableRequirements] = useState<TriggerDetail[]>([]);
   const [loadingRequirements, setLoadingRequirements] = useState(false);
@@ -209,8 +218,42 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
         waitingFrom.trim() ||
         waitingReference.trim() ||
         waitingFollowUpDate ||
+        initialRecordComment.trim() ||
+        initialRecordAttachments.length > 0 ||
         selectedRequirementId
     );
+  }
+
+  async function addInitialRecordFiles(files: File[]) {
+    if (files.length === 0) {
+      return;
+    }
+    try {
+      const parsed = await readFilesAsLocalAttachments(files);
+      setInitialRecordAttachments((current) => [...current, ...parsed]);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudieron adjuntar archivos");
+    }
+  }
+
+  function handleInitialRecordFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    void addInitialRecordFiles(files);
+    event.target.value = "";
+  }
+
+  function handleRemoveInitialRecordAttachment(localId: string) {
+    setInitialRecordAttachments((current) => current.filter((item) => item.local_id !== localId));
+  }
+
+  async function handleInitialRecordPaste(event: ClipboardEvent<HTMLDivElement>) {
+    const imageFiles = extractImageFilesFromClipboardData(event.clipboardData);
+    if (imageFiles.length === 0) {
+      return;
+    }
+    event.preventDefault();
+    await addInitialRecordFiles(imageFiles);
   }
 
   function handleClose() {
@@ -246,12 +289,25 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
     const reminderDateIso = toCalendarDateUtcIso(reminderDate);
     const waitingFollowUpIso = toCalendarDateUtcIso(waitingFollowUpDate);
     const normalizedDetail = detail.trim() || null;
+    const initialRecord =
+      initialRecordComment.trim() || initialRecordAttachments.length > 0
+        ? {
+            comentario: initialRecordComment.trim() || null,
+            attachments: initialRecordAttachments.map((item) => ({
+              nombre: item.nombre,
+              content_type: item.content_type,
+              size_bytes: item.size_bytes,
+              content_base64: item.content_base64,
+            })),
+          }
+        : null;
 
     if (captureMode === "esperando") {
       const waitingPayload = {
         modo_inicio: "esperando" as const,
         objetivo_final: waitingWhat.trim(),
         resolucion_esperada: "Flow completado con validacion final",
+        registro_inicial: initialRecord,
         espera_inicial: {
           que_se_espera: waitingWhat.trim(),
           esperando_de: waitingFrom.trim() || null,
@@ -279,6 +335,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
           titulo: waitingWhat.trim(),
           detalle: normalizedDetail,
           modo_inicio: "esperando",
+          registro_inicial: initialRecord,
           espera_inicial: waitingPayload.espera_inicial,
           creado_por: DEFAULT_ACTOR,
           ambito,
@@ -296,6 +353,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
           resolucion_esperada: "Flow completado con validacion final",
           ambito: effectiveRequirementAmbito,
           modo_inicio: "tarea_activa",
+          registro_inicial: initialRecord,
           primer_paso: {
             nombre: title.trim(),
             descripcion: normalizedDetail,
@@ -316,6 +374,7 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
         fecha_vencimiento: reminderDateIso,
         fecha_ejecucion_estimada: executionDateIso,
         modo_inicio: "tarea_activa",
+        registro_inicial: initialRecord,
         creado_por: DEFAULT_ACTOR,
         ambito,
       },
@@ -665,6 +724,26 @@ export function TriggerCreateModal({ onClose, defaultRequirementId, defaultRequi
                 />
               </Stack>
             )}
+
+            <Stack spacing={1.25}>
+              <TextField
+                label="Registro inicial (opcional)"
+                multiline
+                minRows={2}
+                value={initialRecordComment}
+                onChange={(event) => setInitialRecordComment(event.target.value)}
+                onPaste={(event) => void handleInitialRecordPaste(event)}
+                placeholder="Contexto, evidencia o nota inicial..."
+                disabled={isLinkedCapture && effectiveRequirementAmbito === null}
+              />
+              <Stack spacing={1.25}>
+                <Button component="label" variant="outlined" color="inherit" disabled={isLinkedCapture && effectiveRequirementAmbito === null}>
+                  Adjuntar archivos al registro inicial
+                  <input hidden multiple type="file" onChange={handleInitialRecordFileChange} />
+                </Button>
+                <AttachmentDraftGrid attachments={initialRecordAttachments} onRemove={handleRemoveInitialRecordAttachment} />
+              </Stack>
+            </Stack>
 
             <LiveDuplicateSuggestions
               candidates={liveDuplicateCandidates}

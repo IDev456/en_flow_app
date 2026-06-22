@@ -4,7 +4,6 @@ import AddPhotoAlternateRoundedIcon from "@mui/icons-material/AddPhotoAlternateR
 import AttachmentRoundedIcon from "@mui/icons-material/AttachmentRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
-import InsertDriveFileRoundedIcon from "@mui/icons-material/InsertDriveFileRounded";
 import {
   Alert,
   Box,
@@ -28,7 +27,6 @@ import type { Theme } from "@mui/material/styles";
 
 import type {
   Attachment,
-  AttachmentInput,
   Step,
   StepComment,
   StepCommentUpdateInput,
@@ -36,6 +34,15 @@ import type {
   StepJournalEntryInput,
 } from "../types";
 import { buildJournalItems, formatDate, formatElapsedTime, stepStatusOptions } from "../utils";
+import {
+  attachmentToPreviewSrc,
+  extractImageFilesFromClipboardData,
+  formatAttachmentFileSize,
+  readFilesAsLocalAttachments,
+  toLocalAttachmentDraftFromAttachment,
+  type LocalAttachmentDraft,
+} from "../utils/attachments";
+import { AttachmentDraftGrid } from "./AttachmentDraftGrid";
 import { StatusBadge } from "./StatusBadge";
 
 type JournalProps = {
@@ -54,18 +61,12 @@ type JournalProps = {
   onEditEntry?: (commentId: string, input: StepCommentUpdateInput) => Promise<void>;
 };
 
-type DraftAttachment = AttachmentInput & {
-  local_id: string;
-  preview_url: string;
-};
-
 type ImagePreview = {
   name: string;
   src: string;
 };
 
 const MAX_CHARS = 1000;
-const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const SHAPE_RADIUS = 1.1;
 
 type StatusOptionValue = "espera" | "problema";
@@ -167,26 +168,6 @@ function renderMarkdownContent(text: string) {
   return blocks;
 }
 
-function toDraftAttachment(input: AttachmentInput, localId: string) {
-  return {
-    ...input,
-    local_id: localId,
-    preview_url: `data:${input.content_type};base64,${input.content_base64}`,
-  } satisfies DraftAttachment;
-}
-
-function toDraftAttachmentFromAttachment(attachment: Attachment) {
-  return toDraftAttachment(
-    {
-      nombre: attachment.nombre,
-      content_type: attachment.content_type,
-      size_bytes: attachment.size_bytes,
-      content_base64: attachment.content_base64,
-    },
-    attachment.id
-  );
-}
-
 export function Journal({
   step,
   comments,
@@ -206,7 +187,7 @@ export function Journal({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
-  const [attachments, setAttachments] = useState<DraftAttachment[]>([]);
+  const [attachments, setAttachments] = useState<LocalAttachmentDraft[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -254,36 +235,13 @@ export function Journal({
 
   const canSubmit = canComment && !missingComment && !insufficientLength && !submitting;
 
-  async function readFileAsAttachment(file: File): Promise<DraftAttachment> {
-    if (file.size > MAX_ATTACHMENT_BYTES) {
-      throw new Error(`El archivo "${file.name}" supera el limite de 5 MB`);
-    }
-
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result ?? ""));
-      reader.onerror = () => reject(new Error(`No se pudo leer "${file.name}"`));
-      reader.readAsDataURL(file);
-    });
-
-    const [, contentBase64 = ""] = dataUrl.split(",", 2);
-    return {
-      local_id: createLocalId(),
-      nombre: file.name,
-      content_type: file.type || "application/octet-stream",
-      size_bytes: file.size,
-      content_base64: contentBase64,
-      preview_url: dataUrl,
-    };
-  }
-
   async function addFiles(files: File[]) {
     if (files.length === 0) {
       return;
     }
 
     try {
-      const nextAttachments = await Promise.all(files.map((file) => readFileAsAttachment(file)));
+      const nextAttachments = await readFilesAsLocalAttachments(files);
       setAttachments((current) => [...current, ...nextAttachments]);
       setError(null);
       onComposerExpandedChange(true);
@@ -360,11 +318,7 @@ export function Journal({
   }
 
   async function handlePaste(event: ClipboardEvent<HTMLDivElement>) {
-    const imageFiles = Array.from(event.clipboardData.items)
-      .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
-      .map((item) => item.getAsFile())
-      .filter((file): file is File => file !== null);
-
+    const imageFiles = extractImageFilesFromClipboardData(event.clipboardData);
     if (imageFiles.length === 0) {
       return;
     }
@@ -414,7 +368,7 @@ export function Journal({
   function handleStartEditing(commentId: string, body: string, currentAttachments: Attachment[]) {
     setEditingCommentId(commentId);
     setText(body);
-    setAttachments(currentAttachments.map((attachment) => toDraftAttachmentFromAttachment(attachment)));
+    setAttachments(currentAttachments.map((attachment) => toLocalAttachmentDraftFromAttachment(attachment)));
     onSelectedStatusChange("");
     setError(null);
     onComposerExpandedChange(true);
@@ -625,67 +579,9 @@ export function Journal({
               </Button>
             )}
 
-            {composerExpanded && attachments.length > 0 && (
-              <Box
-                sx={{
-                  display: "grid",
-                  gap: 1.25,
-                  gridTemplateColumns: { xs: "1fr", sm: "repeat(auto-fit, minmax(220px, 1fr))" },
-                }}
-              >
-                {attachments.map((attachment) => (
-                  <Card key={attachment.local_id} variant="outlined">
-                    <CardContent sx={{ display: "grid", gap: 1.25 }}>
-                      <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between" }}>
-                        <Box sx={{ minWidth: 0 }}>
-                          <Typography noWrap sx={{ fontWeight: 700 }}>
-                            {attachment.nombre}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            {formatFileSize(attachment.size_bytes)}
-                          </Typography>
-                        </Box>
-                        <IconButton size="small" onClick={() => handleRemoveAttachment(attachment.local_id)}>
-                          <CloseRoundedIcon fontSize="small" />
-                        </IconButton>
-                      </Stack>
-                      {attachment.content_type.startsWith("image/") ? (
-                        <Box
-                          component="img"
-                          src={attachment.preview_url}
-                          alt={attachment.nombre}
-                          sx={{
-                            width: "100%",
-                            maxHeight: 220,
-                            objectFit: "cover",
-                            borderRadius: 2,
-                            border: "1px solid",
-                            borderColor: "divider",
-                          }}
-                        />
-                      ) : (
-                        <Stack
-                          spacing={1}
-                          sx={{
-                            alignItems: "center",
-                            justifyContent: "center",
-                            minHeight: 120,
-                            borderRadius: 2,
-                            border: "1px dashed",
-                            borderColor: "divider",
-                          }}
-                        >
-                          <InsertDriveFileRoundedIcon color="action" />
-                          <Typography variant="body2" color="text.secondary">
-                            Archivo listo para enviar
-                          </Typography>
-                        </Stack>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </Box>
-            )}
+            {composerExpanded && attachments.length > 0 ? (
+              <AttachmentDraftGrid attachments={attachments} onRemove={handleRemoveAttachment} />
+            ) : null}
 
             {composerExpanded && canChangeStatus && (
               <Stack spacing={1.25}>
@@ -892,7 +788,7 @@ export function Journal({
                     onOpenImage={(attachment) =>
                       setPreviewImage({
                         name: attachment.nombre,
-                        src: `data:${attachment.content_type};base64,${attachment.content_base64}`,
+                        src: attachmentToPreviewSrc(attachment),
                       })
                     }
                   />
@@ -922,7 +818,7 @@ function AttachmentList({ attachments, onOpenImage }: AttachmentListProps) {
       }}
     >
       {attachments.map((attachment) => {
-        const dataUrl = `data:${attachment.content_type};base64,${attachment.content_base64}`;
+        const dataUrl = attachmentToPreviewSrc(attachment);
         const isImage = attachment.content_type.startsWith("image/");
         const canPreviewImage = isImage && Boolean(onOpenImage);
         return (
@@ -988,7 +884,7 @@ function AttachmentList({ attachments, onOpenImage }: AttachmentListProps) {
                   {attachment.nombre}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  {formatFileSize(attachment.size_bytes)}
+                  {formatAttachmentFileSize(attachment.size_bytes)}
                 </Typography>
               </Box>
             </CardContent>
@@ -1047,22 +943,4 @@ export function HistoryList({ history }: HistoryListProps) {
       ))}
     </Stack>
   );
-}
-
-function createLocalId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  return `attachment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function formatFileSize(sizeBytes: number) {
-  if (sizeBytes < 1024) {
-    return `${sizeBytes} B`;
-  }
-  const sizeKb = sizeBytes / 1024;
-  if (sizeKb < 1024) {
-    return `${sizeKb.toFixed(1)} KB`;
-  }
-  return `${(sizeKb / 1024).toFixed(1)} MB`;
 }

@@ -1,3 +1,4 @@
+import type { ClipboardEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import EditCalendarRoundedIcon from "@mui/icons-material/EditCalendarRounded";
@@ -28,9 +29,9 @@ import { flushSync } from "react-dom";
 import { Link as RouterLink } from "react-router-dom";
 
 import { updateStep } from "../api";
+import { AttachmentDraftGrid } from "./AttachmentDraftGrid";
 import { ReminderDateField } from "./ReminderDateField";
 import type {
-  AttachmentInput,
   ExternalEventCreateInput,
   ExternalResponseDecisionInput,
   Step,
@@ -54,6 +55,11 @@ import {
   openNativeDateInputPicker,
   toCalendarDateUtcIso,
 } from "../utils";
+import {
+  extractImageFilesFromClipboardData,
+  readFilesAsLocalAttachments,
+  type LocalAttachmentDraft,
+} from "../utils/attachments";
 import { AmbitoChip } from "./AmbitoChip";
 import { Journal } from "./Journal";
 import { StatusBadge } from "./StatusBadge";
@@ -110,7 +116,7 @@ export function StepDetailPanel({
   const [externalDialogOpen, setExternalDialogOpen] = useState(false);
   const [externalComment, setExternalComment] = useState("");
   const [externalSource, setExternalSource] = useState("manual");
-  const [externalAttachments, setExternalAttachments] = useState<AttachmentInput[]>([]);
+  const [externalAttachments, setExternalAttachments] = useState<LocalAttachmentDraft[]>([]);
   const [registeringExternal, setRegisteringExternal] = useState(false);
   const [externalError, setExternalError] = useState<string | null>(null);
   const [externalAdvancedOpen, setExternalAdvancedOpen] = useState(false);
@@ -123,7 +129,7 @@ export function StepDetailPanel({
   const [resolveNextTaskAssignee, setResolveNextTaskAssignee] = useState("");
   const [resolveNextTaskDueDate, setResolveNextTaskDueDate] = useState("");
   const [resolveFinishReason, setResolveFinishReason] = useState("");
-  const [resolveAttachments, setResolveAttachments] = useState<AttachmentInput[]>([]);
+  const [resolveAttachments, setResolveAttachments] = useState<LocalAttachmentDraft[]>([]);
   const [resolving, setResolving] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [resolveAdvancedOpen, setResolveAdvancedOpen] = useState(false);
@@ -238,29 +244,10 @@ export function StepDetailPanel({
     setFocusRequestToken((value) => value + 1);
   }
 
-  async function readFileAsAttachment(file: File): Promise<AttachmentInput> {
-    if (file.size > 5 * 1024 * 1024) {
-      throw new Error(`El archivo "${file.name}" supera el limite de 5 MB`);
-    }
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result ?? ""));
-      reader.onerror = () => reject(new Error(`No se pudo leer "${file.name}"`));
-      reader.readAsDataURL(file);
-    });
-    const [, contentBase64 = ""] = dataUrl.split(",", 2);
-    return {
-      nombre: file.name,
-      content_type: file.type || "application/octet-stream",
-      size_bytes: file.size,
-      content_base64: contentBase64,
-    };
-  }
-
-  async function handleAttachmentSelection(files: FileList | null, target: "complete" | "external" | "resolve") {
+  async function handleAttachmentSelection(files: FileList | null, target: "external" | "resolve") {
     if (!files || files.length === 0) return;
     try {
-      const parsed = await Promise.all(Array.from(files).map((file) => readFileAsAttachment(file)));
+      const parsed = await readFilesAsLocalAttachments(Array.from(files));
       if (target === "external") setExternalAttachments((current) => [...current, ...parsed]);
       if (target === "resolve") setResolveAttachments((current) => [...current, ...parsed]);
       setExternalError(null);
@@ -269,6 +256,44 @@ export function StepDetailPanel({
       const message = err instanceof Error ? err.message : "No se pudieron adjuntar archivos";
       if (target === "external") setExternalError(message);
       if (target === "resolve") setResolveError(message);
+    }
+  }
+
+  function handleRemoveAttachment(target: "external" | "resolve", localId: string) {
+    if (target === "external") {
+      setExternalAttachments((current) => current.filter((item) => item.local_id !== localId));
+      return;
+    }
+    setResolveAttachments((current) => current.filter((item) => item.local_id !== localId));
+  }
+
+  async function handlePasteAttachments(event: ClipboardEvent<HTMLDivElement>, target: "external" | "resolve") {
+    const imageFiles = extractImageFilesFromClipboardData(event.clipboardData);
+    if (imageFiles.length === 0) {
+      return;
+    }
+    event.preventDefault();
+    if (target === "external") {
+      setExternalAdvancedOpen(true);
+    } else {
+      setResolveAdvancedOpen(true);
+    }
+    try {
+      const parsed = await readFilesAsLocalAttachments(imageFiles);
+      if (target === "external") {
+        setExternalAttachments((current) => [...current, ...parsed]);
+        setExternalError(null);
+      } else {
+        setResolveAttachments((current) => [...current, ...parsed]);
+        setResolveError(null);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudieron adjuntar archivos";
+      if (target === "external") {
+        setExternalError(message);
+      } else {
+        setResolveError(message);
+      }
     }
   }
 
@@ -291,7 +316,12 @@ export function StepDetailPanel({
         comentario: externalComment.trim() || null,
         source: externalSource.trim() || "manual",
         registrado_por: DEFAULT_ACTOR,
-        attachments: externalAttachments,
+        attachments: externalAttachments.map((item) => ({
+          nombre: item.nombre,
+          content_type: item.content_type,
+          size_bytes: item.size_bytes,
+          content_base64: item.content_base64,
+        })),
       });
       setExternalDialogOpen(false);
       setResolveDialogOpen(true);
@@ -348,10 +378,20 @@ export function StepDetailPanel({
             ? {
                 resultado_final: resultTrimmed,
                 motivo_cierre: resolveFinishReason.trim() || null,
-                attachments: resolveAttachments,
+                attachments: resolveAttachments.map((item) => ({
+                  nombre: item.nombre,
+                  content_type: item.content_type,
+                  size_bytes: item.size_bytes,
+                  content_base64: item.content_base64,
+                })),
               }
             : null,
-        attachments: resolveAttachments,
+        attachments: resolveAttachments.map((item) => ({
+          nombre: item.nombre,
+          content_type: item.content_type,
+          size_bytes: item.size_bytes,
+          content_base64: item.content_base64,
+        })),
       });
       setResolveDialogOpen(false);
     } catch (err) {
@@ -879,7 +919,15 @@ export function StepDetailPanel({
         <DialogTitle>Registrar respuesta recibida</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
-            <TextField label="¿Qué respuesta llegó? *" multiline minRows={3} value={externalComment} onChange={(event) => setExternalComment(event.target.value)} disabled={registeringExternal} />
+            <TextField
+              label="¿Qué respuesta llegó? *"
+              multiline
+              minRows={3}
+              value={externalComment}
+              onChange={(event) => setExternalComment(event.target.value)}
+              onPaste={(event) => void handlePasteAttachments(event, "external")}
+              disabled={registeringExternal}
+            />
             <Button variant="text" color="inherit" onClick={() => setExternalAdvancedOpen((value) => !value)}>
               {externalAdvancedOpen ? "Ocultar opciones avanzadas" : "Más detalle (opcional)"}
             </Button>
@@ -890,15 +938,7 @@ export function StepDetailPanel({
                   Adjuntar archivos (opcional)
                   <input hidden multiple type="file" onChange={(event) => void handleAttachmentSelection(event.target.files, "external")} />
                 </Button>
-                {externalAttachments.length > 0 && (
-                  <Stack spacing={0.5}>
-                    {externalAttachments.map((item, index) => (
-                      <Typography key={`${item.nombre}-${index}`} variant="body2" color="text.secondary">
-                        {item.nombre} ({Math.round(item.size_bytes / 1024)} KB)
-                      </Typography>
-                    ))}
-                  </Stack>
-                )}
+                <AttachmentDraftGrid attachments={externalAttachments} onRemove={(localId) => handleRemoveAttachment("external", localId)} />
               </Stack>
             </Collapse>
             {externalError && <Alert severity="error">{externalError}</Alert>}
@@ -924,6 +964,7 @@ export function StepDetailPanel({
               minRows={3}
               value={resolveResult}
               onChange={(event) => setResolveResult(event.target.value)}
+              onPaste={(event) => void handlePasteAttachments(event, "resolve")}
             />
             <ToggleButtonGroup
               exclusive
@@ -978,15 +1019,7 @@ export function StepDetailPanel({
                   Adjuntar archivos (opcional)
                   <input hidden multiple type="file" onChange={(event) => void handleAttachmentSelection(event.target.files, "resolve")} />
                 </Button>
-                {resolveAttachments.length > 0 && (
-                  <Stack spacing={0.5}>
-                    {resolveAttachments.map((item, index) => (
-                      <Typography key={`${item.nombre}-${index}`} variant="body2" color="text.secondary">
-                        {item.nombre} ({Math.round(item.size_bytes / 1024)} KB)
-                      </Typography>
-                    ))}
-                  </Stack>
-                )}
+                <AttachmentDraftGrid attachments={resolveAttachments} onRemove={(localId) => handleRemoveAttachment("resolve", localId)} />
               </Stack>
             </Collapse>
             {resolveError && <Alert severity="error">{resolveError}</Alert>}

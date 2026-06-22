@@ -14,6 +14,7 @@ from app.schemas.workflow import (
     ExternalEventCreate,
     ExternalEventPublic,
     ExternalWaitInput,
+    InitialRecordInput,
     QuickCaptureRequest,
     REMINDER_PAST_ERROR,
     RequirementCreateFromFlowPayload,
@@ -121,6 +122,30 @@ class WorkflowService:
             if step.ambito == ambito:
                 continue
             self.repository.save_step(step.model_copy(update={"ambito": ambito}))
+
+    def _get_initial_workflow_step(self, workflow: WorkflowDetail) -> StepInstancePublic:
+        step = min(workflow.steps, key=lambda item: item.orden, default=None)
+        if step is None:
+            raise EntityNotFoundError("Workflow step not found")
+        return step
+
+    def _create_initial_record(
+        self,
+        workflow: WorkflowDetail,
+        initial_record: InitialRecordInput | None,
+        author: str,
+    ) -> None:
+        if initial_record is None:
+            return
+        step = self._get_initial_workflow_step(workflow)
+        self.repository.add_comment(
+            step.id,
+            CommentCreate(
+                autor=author,
+                comentario=initial_record.comentario,
+                attachments=initial_record.attachments,
+            ),
+        )
 
     def list_triggers(self) -> list[TriggerDetail]:
         return self.repository.list_triggers()
@@ -247,6 +272,7 @@ class WorkflowService:
 
         workflow = self.repository.create_workflow(trigger_id, template, payload.model_copy(update={"ambito": trigger.ambito}))
         self._record_initial_wait_history(workflow, payload.espera_inicial, "sistema")
+        self._create_initial_record(workflow, payload.registro_inicial, "sistema")
         self._reconcile_trigger_status(trigger_id, utc_now(), preferred_workflow_id=workflow.id)
         return self.get_workflow(workflow.id)
 
@@ -267,6 +293,7 @@ class WorkflowService:
                 resolucion_esperada=None,
                 ambito=payload.ambito,
                 modo_inicio=payload.modo_inicio,
+                registro_inicial=payload.registro_inicial.model_dump() if payload.registro_inicial else None,
                 primer_paso=(
                     {
                         "nombre": payload.titulo.strip(),
@@ -282,6 +309,7 @@ class WorkflowService:
             ),
         )
         self._record_initial_wait_history(workflow, payload.espera_inicial, payload.creado_por)
+        self._create_initial_record(workflow, payload.registro_inicial, payload.creado_por)
         return self.get_workflow(workflow.id)
 
     def list_workflows(self) -> list[WorkflowSummary]:
