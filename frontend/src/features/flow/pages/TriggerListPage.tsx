@@ -78,6 +78,7 @@ import { AmbitoChip } from "../components/AmbitoChip";
 import { FlowStateFilterControl } from "../components/FlowStateFilterControl";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Ambito, Step, TriggerDetail, WorkflowDetail } from "../types";
+import { groupFlowRowsByDate } from "../utils/flowTable";
 import {
   activeAmbitoOptions,
   getStoredActiveAmbito,
@@ -182,6 +183,14 @@ type FlowGridRow = {
   canDelete: boolean;
 };
 
+type GroupedFlowSection = {
+  key: string;
+  dateInput: string | null;
+  label: string;
+  sortKey: number;
+  rows: FlowGridRow[];
+};
+
 type RequirementGridRow = {
   id: string;
   ambito: Ambito;
@@ -243,6 +252,11 @@ const DEFAULT_FLOW_QUICK_FILTER_BY_STATE = {
   waiting: "none",
   non_operational: "none",
 } as const satisfies FlowQuickFilterByState;
+const DATE_GROUPED_ACTIVE_FLOW_QUICK_FILTERS = new Set<FlowQuickFilter>(["today", "this_week", "past", "future"]);
+
+function shouldGroupActiveFlowsByDate(stateFilter: FlowFilter, flowQuickFilter: FlowQuickFilter) {
+  return stateFilter === "active" && DATE_GROUPED_ACTIVE_FLOW_QUICK_FILTERS.has(flowQuickFilter);
+}
 
 function isFlowFilter(value: unknown): value is FlowFilter {
   return typeof value === "string" && FLOW_STATE_FILTER_VALUES.has(value as FlowFilter);
@@ -1761,6 +1775,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const basePageTitle = title || (isFlowsView ? "Flows" : "Proyectos");
   const currentCounts = isFlowsView ? flowCounts : requirementCounts;
   const visibleFlowRows = searchedFlowRows;
+  const shouldGroupVisibleFlowRows = isFlowsView && shouldGroupActiveFlowsByDate(stateFilter, flowQuickFilter);
+  const groupedVisibleFlowRows = useMemo<GroupedFlowSection[]>(
+    () => (shouldGroupVisibleFlowRows ? (groupFlowRowsByDate(visibleFlowRows, today) as GroupedFlowSection[]) : []),
+    [shouldGroupVisibleFlowRows, today, visibleFlowRows]
+  );
   const pageTitle = isFlowsView ? activeFlowFilterDescription || basePageTitle : basePageTitle;
   const pageSubtitle = isFlowsView
     ? `${basePageTitle} · ${visibleFlowRows.length} ${visibleFlowRows.length === 1 ? "resultado visible" : "resultados visibles"}`
@@ -2790,6 +2809,43 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     ]
   );
 
+  const flowGridSx = useMemo(
+    () => ({
+      border: 0,
+      "& .flow-grid-sticky-column": {
+        position: "sticky",
+        left: 0,
+        zIndex: 4,
+        backgroundColor: theme.palette.background.paper,
+        borderRight: `1px solid ${theme.palette.divider}`,
+      },
+      "& .flow-grid-sticky-column-cell": {
+        position: "sticky",
+        left: 0,
+        zIndex: 3,
+        backgroundColor: theme.palette.background.paper,
+        borderRight: `1px solid ${theme.palette.divider}`,
+      },
+      "& .MuiDataGrid-row:hover .flow-grid-sticky-column-cell": {
+        backgroundColor: theme.palette.action.hover,
+      },
+    }),
+    [theme]
+  );
+
+  const handleFlowGridCellClick = useCallback((params: { field: string }, event: { defaultMuiPrevented?: boolean }) => {
+    if (params.field === "requirementsLabel") {
+      event.defaultMuiPrevented = true;
+    }
+  }, []);
+
+  const handleFlowGridRowClick = useCallback(
+    (params: GridRowParams<FlowGridRow>) => {
+      handleWorkflowNavigate(params.row.id);
+    },
+    [handleWorkflowNavigate]
+  );
+
   const requirementColumns = useMemo<GridColDef<RequirementGridRow>[]>(
     () => [
       {
@@ -3428,44 +3484,59 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                         />
                       )
                     ) : (
-                      <DataGrid
-                        rows={visibleFlowRows}
-                        columns={interactiveOrderedVisibleFlowColumns}
-                        rowHeight={62}
-                        sortModel={flowSortModel}
-                        onSortModelChange={setFlowSortModel}
-                        disableRowSelectionOnClick
-                        autoHeight
-                        hideFooter={visibleFlowRows.length <= 10}
-                        onCellClick={(params, event) => {
-                          if (params.field === "requirementsLabel") {
-                            event.defaultMuiPrevented = true;
-                          }
-                        }}
-                        onRowClick={(params: GridRowParams<FlowGridRow>) => {
-                          handleWorkflowNavigate(params.row.id);
-                        }}
-                        sx={{
-                          border: 0,
-                          "& .flow-grid-sticky-column": {
-                            position: "sticky",
-                            left: 0,
-                            zIndex: 4,
-                            backgroundColor: theme.palette.background.paper,
-                            borderRight: `1px solid ${theme.palette.divider}`,
-                          },
-                          "& .flow-grid-sticky-column-cell": {
-                            position: "sticky",
-                            left: 0,
-                            zIndex: 3,
-                            backgroundColor: theme.palette.background.paper,
-                            borderRight: `1px solid ${theme.palette.divider}`,
-                          },
-                          "& .MuiDataGrid-row:hover .flow-grid-sticky-column-cell": {
-                            backgroundColor: theme.palette.action.hover,
-                          },
-                        }}
-                      />
+                      shouldGroupVisibleFlowRows ? (
+                        <Stack spacing={1.25} sx={{ p: 1.25 }}>
+                          {groupedVisibleFlowRows.map((group) => (
+                            <Paper key={group.key} variant="outlined" sx={{ overflow: "hidden" }}>
+                              <Box
+                                sx={{
+                                  px: 1.5,
+                                  py: 1,
+                                  borderBottom: "1px solid",
+                                  borderColor: "divider",
+                                  backgroundColor: alpha(theme.palette.primary.main, 0.04),
+                                }}
+                              >
+                                <Stack direction="row" spacing={1} sx={{ alignItems: "baseline", justifyContent: "space-between", gap: 1 }}>
+                                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                                    {group.label}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {group.rows.length} {group.rows.length === 1 ? "flow" : "flows"}
+                                  </Typography>
+                                </Stack>
+                              </Box>
+                              <DataGrid
+                                rows={group.rows}
+                                columns={interactiveOrderedVisibleFlowColumns}
+                                rowHeight={62}
+                                sortModel={flowSortModel}
+                                onSortModelChange={setFlowSortModel}
+                                disableRowSelectionOnClick
+                                autoHeight
+                                hideFooter
+                                onCellClick={handleFlowGridCellClick}
+                                onRowClick={handleFlowGridRowClick}
+                                sx={flowGridSx}
+                              />
+                            </Paper>
+                          ))}
+                        </Stack>
+                      ) : (
+                        <DataGrid
+                          rows={visibleFlowRows}
+                          columns={interactiveOrderedVisibleFlowColumns}
+                          rowHeight={62}
+                          sortModel={flowSortModel}
+                          onSortModelChange={setFlowSortModel}
+                          disableRowSelectionOnClick
+                          autoHeight
+                          hideFooter={visibleFlowRows.length <= 10}
+                          onCellClick={handleFlowGridCellClick}
+                          onRowClick={handleFlowGridRowClick}
+                          sx={flowGridSx}
+                        />
+                      )
                     )}
                   </Box>
                 </Box>
