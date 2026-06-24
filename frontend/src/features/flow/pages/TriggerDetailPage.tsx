@@ -7,8 +7,6 @@ import {
   Box,
   Breadcrumbs,
   Button,
-  Card,
-  CardContent,
   Chip,
   CircularProgress,
   Dialog,
@@ -17,6 +15,7 @@ import {
   DialogTitle,
   Link,
   MenuItem,
+  Paper,
   Slide,
   Snackbar,
   Stack,
@@ -24,6 +23,7 @@ import {
   Typography,
   type SlideProps,
 } from "@mui/material";
+import type { GridSortModel } from "@mui/x-data-grid";
 import { Link as RouterLink, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { deleteTrigger, getTrigger, getWorkflow, updateTrigger } from "../api";
@@ -33,9 +33,10 @@ import {
   navigateWithOrigin,
 } from "../navigation";
 import { AmbitoChip } from "../components/AmbitoChip";
-import { FlowTableSection } from "../components/FlowTableSection";
+import { FlowWorkspace } from "../components/FlowWorkspace";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Ambito, TriggerDetail, WorkflowDetail } from "../types";
+import type { FlowFilter, FlowQuickFilter } from "../utils/flowTable";
 import { getFlowCounts, getLatestMovementAt, getOperationalFlowStatus } from "../utils/flowTable";
 import { getAmbitoLabel, getVisibleWorkflowStatus } from "../utils";
 
@@ -66,6 +67,11 @@ export function TriggerDetailPage() {
   const [requirementError, setRequirementError] = useState<string | null>(null);
   const [requirementToastOpen, setRequirementToastOpen] = useState(false);
   const [ambitoConfirmOpen, setAmbitoConfirmOpen] = useState(false);
+  const [projectFlowStateFilter, setProjectFlowStateFilter] = useState<FlowFilter>("active");
+  const [projectFlowQuickFilter, setProjectFlowQuickFilter] = useState<FlowQuickFilter>("none");
+  const [projectFlowSearchOpen, setProjectFlowSearchOpen] = useState(false);
+  const [projectFlowSearchValue, setProjectFlowSearchValue] = useState("");
+  const [projectFlowSortModel, setProjectFlowSortModel] = useState<GridSortModel>([{ field: "movementAt", sort: "asc" }]);
 
   function getPrimaryDetail(currentTrigger: TriggerDetail) {
     return currentTrigger.descripcion?.trim() || "Proyecto sin detalle";
@@ -319,215 +325,212 @@ export function TriggerDetailPage() {
       </Breadcrumbs>
 
       <Stack spacing={2}>
-        <Card
+        <Paper
+          variant="outlined"
           sx={{
-            border: "1px solid",
-            borderColor: (theme) => alpha(theme.palette.primary.main, 0.2),
+            p: { xs: 1.5, md: 2 },
+            borderColor: (theme) => alpha(theme.palette.primary.main, 0.18),
             background: (theme) =>
               theme.palette.mode === "dark"
-                ? `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.12)} 0%, ${alpha(theme.palette.background.paper, 0.95)} 52%, ${alpha(theme.palette.background.default, 0.99)} 100%)`
-                : `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.05)} 0%, ${alpha(theme.palette.background.paper, 0.98)} 48%, ${alpha(theme.palette.background.default, 1)} 100%)`,
+                ? `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, ${alpha(theme.palette.background.paper, 0.98)} 100%)`
+                : `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.04)} 0%, ${alpha(theme.palette.background.paper, 1)} 100%)`,
           }}
         >
-          <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
-            <Stack spacing={2.25}>
-              <Box
-                sx={{
-                  display: "grid",
-                  gap: 2,
-                  gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1.35fr) minmax(300px, 0.9fr)" },
-                  alignItems: "start",
-                }}
-              >
-                <Stack spacing={1.75} sx={{ minWidth: 0 }}>
-                  <Stack spacing={0.9}>
-                    <Typography variant="subtitle2" color="primary.light" sx={{ letterSpacing: 1, textTransform: "uppercase" }}>
-                      Proyecto
+          <Stack spacing={1.5}>
+            <Box
+              sx={{
+                display: "grid",
+                gap: 1.5,
+                gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1.4fr) minmax(320px, 0.95fr)" },
+                alignItems: "start",
+              }}
+            >
+              <Stack spacing={1.25} sx={{ minWidth: 0 }}>
+                <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: "0.08em", fontWeight: 700 }}>
+                  Proyecto
+                </Typography>
+
+                {editingRequirement ? (
+                  <Stack spacing={1}>
+                    <TextField
+                      label="Descripción"
+                      multiline
+                      minRows={2}
+                      value={editDescripcion}
+                      onChange={(event) => setEditDescripcion(event.target.value.slice(0, TRIGGER_DESCRIPTION_MAX))}
+                      disabled={savingRequirement}
+                    />
+                    <TextField
+                      label="Solicitante"
+                      value={editSolicitante}
+                      onChange={(event) => setEditSolicitante(event.target.value.slice(0, SOLICITANTE_MAX))}
+                      disabled={savingRequirement}
+                    />
+                    <TextField
+                      select
+                      label="Ámbito"
+                      value={editAmbito ?? ""}
+                      onChange={(event) => setEditAmbito((event.target.value || null) as Ambito)}
+                      disabled={savingRequirement}
+                    >
+                      <MenuItem value="laboral">{getAmbitoLabel("laboral")}</MenuItem>
+                      <MenuItem value="personal">{getAmbitoLabel("personal")}</MenuItem>
+                      <MenuItem value="">Sin definir</MenuItem>
+                    </TextField>
+                  </Stack>
+                ) : (
+                  <Stack spacing={0.6}>
+                    <Typography variant="h5" sx={{ lineHeight: 1.08, maxWidth: 920 }}>
+                      {getPrimaryDetail(trigger)}
                     </Typography>
-                    {editingRequirement ? (
-                      <Stack spacing={1.25}>
-                        <TextField
-                          label="Descripción"
-                          multiline
-                          minRows={3}
-                          value={editDescripcion}
-                          onChange={(event) => setEditDescripcion(event.target.value.slice(0, TRIGGER_DESCRIPTION_MAX))}
-                          disabled={savingRequirement}
-                        />
-                        <TextField
-                          label="Solicitante"
-                          value={editSolicitante}
-                          onChange={(event) => setEditSolicitante(event.target.value.slice(0, SOLICITANTE_MAX))}
-                          disabled={savingRequirement}
-                        />
-                        <TextField
-                          select
-                          label="Ámbito"
-                          value={editAmbito ?? ""}
-                          onChange={(event) => setEditAmbito((event.target.value || null) as Ambito)}
-                          disabled={savingRequirement}
-                        >
-                          <MenuItem value="laboral">{getAmbitoLabel("laboral")}</MenuItem>
-                          <MenuItem value="personal">{getAmbitoLabel("personal")}</MenuItem>
-                          <MenuItem value="">Sin definir</MenuItem>
-                        </TextField>
-                      </Stack>
-                    ) : (
-                      <>
-                        <Typography variant="h4" sx={{ lineHeight: 1.08, maxWidth: 920 }}>
-                          {getPrimaryDetail(trigger)}
-                        </Typography>
-                        <Typography variant="body1" color="text.secondary">
-                          Solicitante: {getSecondaryRequester(trigger)}
-                        </Typography>
-                      </>
-                    )}
-                  </Stack>
-
-                  <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", gap: 1 }}>
-                    <AmbitoChip ambito={editingRequirement ? editAmbito : trigger.ambito} />
-                    <StatusBadge value={projectStatusValue} />
-                  </Stack>
-
-                  <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", gap: 0.5 }}>
-                    <Chip size="small" variant="outlined" label={`${linkedWorkflows.length} flows`} />
-                    {projectSummaryCounts.operativos > 0 && (
-                      <Chip size="small" variant="filled" color="info" label={`${projectSummaryCounts.operativos} operativos`} />
-                    )}
-                    {projectSummaryCounts.noOperativos > 0 && (
-                      <Chip size="small" variant="filled" color="default" label={`${projectSummaryCounts.noOperativos} no operativos`} />
-                    )}
-                  </Stack>
-
-                  {requirementError && <Alert severity="error">{requirementError}</Alert>}
-                  {trigger.workflow_activo_id ? (
-                    <Alert severity="info" sx={{ alignSelf: "flex-start" }}>
-                      Hay al menos un flow activo asociado a este proyecto.
-                    </Alert>
-                  ) : (
                     <Typography variant="body2" color="text.secondary">
-                      No hay flow activo en este momento.
+                      Solicitante: {getSecondaryRequester(trigger)}
                     </Typography>
+                  </Stack>
+                )}
+
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", gap: 1 }}>
+                  <AmbitoChip ambito={editingRequirement ? editAmbito : trigger.ambito} />
+                  <StatusBadge value={projectStatusValue} />
+                  <Chip size="small" variant="outlined" label={`${linkedWorkflows.length} flows`} />
+                  {projectSummaryCounts.operativos > 0 && (
+                    <Chip size="small" variant="filled" color="info" label={`${projectSummaryCounts.operativos} operativos`} />
+                  )}
+                  {projectSummaryCounts.noOperativos > 0 && (
+                    <Chip size="small" variant="filled" color="default" label={`${projectSummaryCounts.noOperativos} no operativos`} />
                   )}
                 </Stack>
 
-                <Stack
-                  spacing={1.5}
-                  sx={{
-                    p: { xs: 1.4, md: 1.7 },
-                    borderRadius: 2,
-                    border: "1px solid",
-                    borderColor: "divider",
-                    backgroundColor: (theme) => alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.4 : 0.78),
-                    boxShadow: "none",
-                  }}
-                >
-                  <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: "0.08em", fontWeight: 700 }}>
-                    Configuración
+                {requirementError && <Alert severity="error">{requirementError}</Alert>}
+                {trigger.workflow_activo_id ? (
+                  <Typography variant="body2" color="text.secondary">
+                    Hay al menos un flow activo asociado a este proyecto.
                   </Typography>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    No hay flow activo en este momento.
+                  </Typography>
+                )}
+              </Stack>
 
-                  <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
-                    {editingRequirement ? (
-                      <>
-                        <Button variant="text" color="inherit" onClick={handleCancelEditRequirement} disabled={savingRequirement || deletingRequirement}>
-                          Cancelar
-                        </Button>
-                        <Button variant="contained" onClick={() => void handleSaveRequirement()} disabled={savingRequirement || deletingRequirement}>
-                          {savingRequirement ? "Guardando..." : "Guardar"}
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <Button variant="outlined" color="inherit" onClick={handleStartEditRequirement} disabled={deletingRequirement}>
-                          Editar proyecto
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          color="inherit"
-                          onClick={() => void handleDeleteRequirement()}
-                          disabled={deletingRequirement || !canDeleteRequirement}
-                        >
-                          {deletingRequirement ? "Eliminando..." : "Eliminar proyecto"}
-                        </Button>
-                      </>
-                    )}
-                  </Stack>
+              <Stack
+                spacing={1}
+                sx={{
+                  p: 1.25,
+                  borderRadius: 2,
+                  border: "1px solid",
+                  borderColor: "divider",
+                  backgroundColor: (theme) => alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.46 : 0.82),
+                }}
+              >
+                <Typography variant="subtitle2" color="text.secondary">
+                  Acciones del proyecto
+                </Typography>
 
-                  {!editingRequirement && !canDeleteRequirement ? (
-                    <Typography variant="caption" color="text.secondary">
-                      No se puede eliminar mientras tenga flows vinculados.
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
+                  {editingRequirement ? (
+                    <>
+                      <Button variant="text" color="inherit" onClick={handleCancelEditRequirement} disabled={savingRequirement || deletingRequirement}>
+                        Cancelar
+                      </Button>
+                      <Button variant="contained" onClick={() => void handleSaveRequirement()} disabled={savingRequirement || deletingRequirement}>
+                        {savingRequirement ? "Guardando..." : "Guardar"}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button variant="outlined" color="inherit" onClick={handleStartEditRequirement} disabled={deletingRequirement}>
+                        Editar proyecto
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        color="inherit"
+                        onClick={() => void handleDeleteRequirement()}
+                        disabled={deletingRequirement || !canDeleteRequirement}
+                      >
+                        {deletingRequirement ? "Eliminando..." : "Eliminar proyecto"}
+                      </Button>
+                    </>
+                  )}
+                </Stack>
+
+                {!editingRequirement && !canDeleteRequirement ? (
+                  <Typography variant="caption" color="text.secondary">
+                    No se puede eliminar mientras tenga flows vinculados.
+                  </Typography>
+                ) : null}
+
+                <Box sx={{ pt: 0.5, borderTop: "1px solid", borderColor: "divider" }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Usá la misma captura rápida para crear una tarea ya vinculada a este proyecto.
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    color="inherit"
+                    startIcon={<PlayCircleOutlineRoundedIcon />}
+                    onClick={openLinkedCaptureModal}
+                    disabled={trigger.ambito === null}
+                    fullWidth
+                  >
+                    Capturar tarea para este proyecto
+                  </Button>
+                  {trigger.ambito === null ? (
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, display: "block" }}>
+                      Definí el ámbito del proyecto antes de crear un flow vinculado.
                     </Typography>
                   ) : null}
-
-                  <Box
-                    sx={{
-                      pt: 0.5,
-                      borderTop: "1px solid",
-                      borderColor: "divider",
-                    }}
-                  >
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Captura vinculada
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4, mb: 1.2 }}>
-                      Usá la misma captura rápida para crear una tarea ya vinculada a este proyecto.
-                    </Typography>
-                    <Button
-                      variant="outlined"
-                      color="inherit"
-                      startIcon={<PlayCircleOutlineRoundedIcon />}
-                      onClick={openLinkedCaptureModal}
-                      disabled={trigger.ambito === null}
-                      fullWidth
-                    >
-                      Capturar tarea para este proyecto
-                    </Button>
-                    {trigger.ambito === null ? (
-                      <Typography variant="caption" color="text.secondary" sx={{ mt: 0.85, display: "block" }}>
-                        Definí el ámbito del proyecto antes de crear un flow vinculado.
-                      </Typography>
-                    ) : null}
-                  </Box>
-                </Stack>
-              </Box>
-            </Stack>
-          </CardContent>
-        </Card>
+                </Box>
+              </Stack>
+            </Box>
+          </Stack>
+        </Paper>
 
         {workflowsError && <Alert severity="warning">{workflowsError}</Alert>}
 
-        <Card sx={{ overflow: "hidden" }}>
-          <CardContent sx={{ p: 0 }}>
-            <FlowTableSection
-              items={linkedFlowItems}
-              stateFilter="all"
-              onStateFilterChange={() => {}}
-              currentCounts={projectFlowCounts}
-              showProjectColumn={false}
-              normalizeStateFilter={false}
-              statusPresentation="operational_category"
-              allowedQuickFilters={[
-                "today",
-                "this_week",
-                "past",
-                "future",
-                "without_date",
-                "waiting_today",
-                "waiting_days",
-                "waiting_week",
-                "waiting_15_plus",
-                "waiting_month_plus",
-              ]}
-              quickFilterPlaceholder="Buscar flow o tarea del proyecto..."
-              noRowsTitle="No hay flows asociados"
-              noRowsDescription="Capturá una nueva tarea para este proyecto cuando lo necesites."
-              noSearchTitle="No hay resultados para esta búsqueda"
-              noSearchDescription="Probá con otros términos para encontrar un flow o tarea de este proyecto."
-              onRowNavigate={(workflowId) => navigateWithOrigin(navigate, location, `/workflows/${workflowId}`, "/requirements")}
-              onWorkflowStepDatePatched={handleProjectWorkflowDatePatched}
-            />
-          </CardContent>
-        </Card>
+        <FlowWorkspace
+          items={linkedFlowItems}
+          stateFilter={projectFlowStateFilter}
+          onStateFilterChange={setProjectFlowStateFilter}
+          currentCounts={projectFlowCounts}
+          showProjectColumn={false}
+          normalizeStateFilter={false}
+          statusPresentation="operational_category"
+          allowedQuickFilters={[
+            "today",
+            "this_week",
+            "past",
+            "future",
+            "without_date",
+            "waiting_today",
+            "waiting_days",
+            "waiting_week",
+            "waiting_15_plus",
+            "waiting_month_plus",
+          ]}
+          quickFilterPlaceholder="Buscar flow o tarea del proyecto..."
+          noRowsTitle="No hay flows asociados"
+          noRowsDescription="Capturá una nueva tarea para este proyecto cuando lo necesites."
+          noSearchTitle="No hay resultados para esta búsqueda"
+          noSearchDescription="Probá con otros términos para encontrar un flow o tarea de este proyecto."
+          onRowNavigate={(workflowId) => navigateWithOrigin(navigate, location, `/workflows/${workflowId}`, "/requirements")}
+          onWorkflowStepDatePatched={handleProjectWorkflowDatePatched}
+          flowQuickFilter={projectFlowQuickFilter}
+          onFlowQuickFilterChange={setProjectFlowQuickFilter}
+          flowSearchOpen={projectFlowSearchOpen}
+          onFlowSearchOpenChange={setProjectFlowSearchOpen}
+          flowSearchValue={projectFlowSearchValue}
+          onFlowSearchValueChange={setProjectFlowSearchValue}
+          flowSortModel={projectFlowSortModel}
+          onFlowSortModelChange={setProjectFlowSortModel}
+          groupRowsByDate
+          contentSx={{
+            height: {
+              xs: "calc(100dvh - 360px)",
+              md: "calc(100dvh - 320px)",
+            },
+            minHeight: { xs: 520, md: 720 },
+          }}
+        />
       </Stack>
     </Stack>
   );

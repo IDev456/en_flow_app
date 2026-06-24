@@ -98,6 +98,13 @@ export const flowQuickFilterOptions = [
 
 export const selectableFlowQuickFilterOptions = flowQuickFilterOptions.filter((option) => option.value !== "none");
 
+export function shouldGroupFlowRowsByDate(stateFilter: FlowFilter, flowQuickFilter: FlowQuickFilter) {
+  return (
+    (stateFilter === "active" || stateFilter === "finalized" || stateFilter === "cancelled" || stateFilter === "non_operational") &&
+    (flowQuickFilter === "today" || flowQuickFilter === "this_week" || flowQuickFilter === "waiting_today" || flowQuickFilter === "waiting_days" || flowQuickFilter === "waiting_week")
+  );
+}
+
 export function getAllowedFlowQuickFiltersForStateFilter(stateFilter: FlowFilter): FlowQuickFilter[] {
   switch (stateFilter) {
     case "active":

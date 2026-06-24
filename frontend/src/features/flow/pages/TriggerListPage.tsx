@@ -75,6 +75,7 @@ import {
   omitNavigationStateKeys,
 } from "../navigation";
 import { AmbitoChip } from "../components/AmbitoChip";
+import { FlowWorkspace, renderFlowQuickFilterOptionLabel, type FlowWorkspaceViewMeta } from "../components/FlowWorkspace";
 import { FlowStateFilterControl } from "../components/FlowStateFilterControl";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Ambito, Step, TriggerDetail, WorkflowDetail } from "../types";
@@ -238,13 +239,6 @@ const selectableFlowQuickFilterOptions = flowQuickFilterOptions.filter((option) 
 const FLOW_PRIMARY_COLUMN_FIELD = "taskName";
 const FLOW_COLUMN_ORDER_STORAGE_KEY = "en-flow.trigger-list.flow-column-order";
 const FLOW_LIST_FILTERS_STORAGE_KEY = "en-flow.trigger-list.flow-filters";
-const attentionFlowQuickFilters = new Set<FlowQuickFilter>([
-  "past",
-  "without_project",
-  "without_date",
-  "waiting_15_plus",
-  "waiting_month_plus",
-]);
 const FLOW_STATE_FILTER_VALUES = new Set<FlowFilter>(["all", "operational", "non_operational", "active", "waiting", "cancelled", "finalized"]);
 const FLOW_QUICK_FILTER_VALUES = new Set<FlowQuickFilter>(flowQuickFilterOptions.map((option) => option.value));
 const FLOW_VISIBLE_STATE_KEYS = ["active", "waiting", "non_operational"] as const satisfies readonly FlowVisibleStateKey[];
@@ -465,10 +459,6 @@ function swapFlowColumnsInOrder(order: string[], draggedField: string, targetFie
   return nextOrder;
 }
 
-function isOperationalFlowQuickFilter(filter: FlowQuickFilter) {
-  return filter === "today" || filter === "this_week" || filter === "waiting_today" || filter === "waiting_days" || filter === "waiting_week";
-}
-
 function getAllowedFlowQuickFiltersForStateFilter(stateFilter: FlowFilter): FlowQuickFilter[] {
   switch (stateFilter) {
     case "active":
@@ -505,44 +495,6 @@ function normalizeVisibleFlowFilter(filter: FlowFilter | null | undefined, view:
   }
   return filter;
 }
-
-function renderFlowQuickFilterOptionLabel(
-  option: { value: FlowQuickFilter; label: string },
-  count: number,
-  selected = false
-) {
-  const isAttention = attentionFlowQuickFilters.has(option.value);
-  const isOperational = isOperationalFlowQuickFilter(option.value);
-
-  return (
-    <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", justifyContent: "space-between", width: "100%" }}>
-      <Typography
-        variant="body2"
-        sx={{
-          color: "text.primary",
-          fontWeight: 400,
-        }}
-      >
-        {option.label}
-      </Typography>
-      <Typography
-        variant="body2"
-        sx={(theme) => ({
-          color:
-            isAttention && count > 0
-              ? theme.palette.error.main
-              : isOperational && count > 0
-                ? theme.palette.status.active.accent
-                : theme.palette.text.secondary,
-          fontWeight: (isAttention && count > 0) || (isOperational && count > 0) ? 700 : 500,
-        })}
-      >
-        ({count})
-      </Typography>
-    </Stack>
-  );
-}
-
 
 function getAmbitoModeIcon(ambito: ActiveAmbitoMode) {
   if (ambito === "laboral") return <WorkOutlineRoundedIcon sx={{ fontSize: 14 }} />;
@@ -1239,6 +1191,11 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const [flowSortModel, setFlowSortModel] = useState<GridSortModel>(
     () => restoreState?.flowSortModel ?? [{ field: "movementAt", sort: "asc" }]
   );
+  const [flowWorkspaceMeta, setFlowWorkspaceMeta] = useState<FlowWorkspaceViewMeta>({
+    activeFlowFilterDescription: "",
+    visibleRowCount: 0,
+    flowSearchActive: false,
+  });
   const [requirementFilterModel, setRequirementFilterModel] = useState<GridFilterModel>({
     items: [],
     quickFilterValues: restoreState?.requirementSearchValue ? toQuickFilterValues(restoreState.requirementSearchValue) : [],
@@ -1697,9 +1654,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     () => (shouldGroupVisibleFlowRows ? (groupFlowRowsByDate(visibleFlowRows, today) as GroupedFlowSection[]) : []),
     [shouldGroupVisibleFlowRows, today, visibleFlowRows]
   );
-  const pageTitle = isFlowsView ? activeFlowFilterDescription || basePageTitle : basePageTitle;
+  const pageTitle = isFlowsView ? flowWorkspaceMeta.activeFlowFilterDescription || basePageTitle : basePageTitle;
   const pageSubtitle = isFlowsView
-    ? `${basePageTitle} · ${visibleFlowRows.length} ${visibleFlowRows.length === 1 ? "resultado visible" : "resultados visibles"}`
+    ? `${basePageTitle} · ${flowWorkspaceMeta.visibleRowCount} ${flowWorkspaceMeta.visibleRowCount === 1 ? "resultado visible" : "resultados visibles"}`
     : undefined;
   const headerPrimaryAction = isFlowsView ? (
     <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={openCaptureModal}>
@@ -2096,6 +2053,20 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     const nextParams = new URLSearchParams(location.search);
     nextParams.set("modal", "capture");
     navigate(`${location.pathname}?${nextParams.toString()}`);
+  }
+
+  function handleFlowWorkspaceDatePatched(workflowId: string, stepId: string, nextIsoValue: string | null) {
+    setWorkflowsById((previous) => {
+      const workflow = previous[workflowId];
+      if (!workflow) return previous;
+      return {
+        ...previous,
+        [workflowId]: {
+          ...workflow,
+          steps: workflow.steps.map((step) => (step.id === stepId ? { ...step, fecha_ejecucion_estimada: nextIsoValue } : step)),
+        },
+      };
+    });
   }
 
   const handleWorkflowNavigate = useCallback(
@@ -3300,178 +3271,74 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
           {error && <Alert severity="error">{error}</Alert>}
 
-          <Box
-            sx={{
-              display: "flex",
-              flexDirection: { xs: "column", lg: "row" },
-              alignItems: { xs: "stretch", lg: "flex-start" },
-              gap: 1.5,
-              width: "100%",
-            }}
-          >
+          {!isFlowsView ? (
             <Box
               sx={{
-                width: { xs: "100%", sm: isFlowsView ? 320 : 260 },
-                maxWidth: { xs: "100%", sm: isFlowsView ? 320 : 260 },
-                flexShrink: 0,
-              }}
-            >
-              {stateSelectorControl}
-            </Box>
-
-            <Box
-              sx={{
-                width: { xs: "100%", sm: "auto" },
-                maxWidth: "100%",
-                ml: { lg: "auto" },
                 display: "flex",
-                justifyContent: { xs: "stretch", sm: "flex-end" },
-                flexShrink: 0,
+                flexDirection: { xs: "column", lg: "row" },
+                alignItems: { xs: "stretch", lg: "flex-start" },
+                gap: 1.5,
+                width: "100%",
               }}
             >
-              {listActionsPanel}
-            </Box>
-          </Box>
-
-          <Paper sx={{ overflow: "hidden" }}>
-            {loading ? (
-              <LinearProgress />
-            ) : isFlowsView ? (
               <Box
                 sx={{
-                  height: {
-                    xs: "calc(100dvh - 320px)",
-                    md: "calc(100dvh - 300px)",
-                  },
-                  minHeight: { xs: 520, md: 720 },
-                  width: "100%",
+                  width: { xs: "100%", sm: 260 },
+                  maxWidth: { xs: "100%", sm: 260 },
+                  flexShrink: 0,
                 }}
               >
-                <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
-                  <Box
-                    sx={{
-                      position: "sticky",
-                      top: 0,
-                      zIndex: 1,
-                      backgroundColor: "background.paper",
-                      borderBottom: "1px solid",
-                      borderColor: "divider",
-                    }}
-                  >
-                    <FlowListToolbar
-                      quickFilterPlaceholder="Buscar flow, tarea o proyecto vinculado..."
-                      searchOpen={flowSearchOpen}
-                      searchValue={flowSearchValue}
-                      activeFlowFilterDescription={activeFlowFilterDescription}
-                      flowQuickFilter={flowQuickFilter}
-                      flowQuickFilterCounts={quickFilterCountsByValue}
-                      flowQuickFilterLabel={flowQuickFilter === "none" ? "Filtro rápido" : activeFlowQuickFilterLabel}
-                      allowedFlowQuickFilters={allowedFlowQuickFilterValues}
-                      quickFilterAnchorEl={flowQuickFilterAnchorEl}
-                      onQuickFilterOpen={(event: MouseEvent<HTMLElement>) => {
-                        setFlowQuickFilterAnchorEl(event.currentTarget);
-                      }}
-                      onQuickFilterClose={() => {
-                        setFlowQuickFilterAnchorEl(null);
-                      }}
-                      onFlowQuickFilterChange={(value: FlowQuickFilter) => {
-                        handleFlowQuickFilterChange(value);
-                      }}
-                      onSearchToggle={() => {
-                        if (flowSearchOpen && flowSearchValue.trim().length === 0) {
-                          setFlowSearchOpen(false);
-                          return;
-                        }
-                        setFlowSearchOpen(true);
-                      }}
-                      onSearchChange={(value: string) => {
-                        setFlowSearchValue(value);
-                      }}
-                      onSearchClearOrClose={() => {
-                        if (flowSearchValue.trim().length > 0) {
-                          setFlowSearchValue("");
-                          return;
-                        }
-                        setFlowSearchOpen(false);
-                      }}
-                    />
-                  </Box>
-
-                  <Box sx={{ flex: 1, overflowY: "auto" }}>
-                    {visibleFlowRows.length === 0 ? (
-                      flowSearchActive ? (
-                        <DataGridEmptyState
-                          icon={<SearchRoundedIcon color="action" />}
-                          title="No hay resultados para esta búsqueda"
-                          description="Probá con otros términos para encontrar el flow, la tarea o el proyecto asociado."
-                        />
-                      ) : (
-                        <DataGridEmptyState
-                          icon={<InboxRoundedIcon color="action" />}
-                          title="No hay flows para este filtro"
-                          description="Probá con otro estado o capturá una nueva tarea para iniciar el flujo."
-                          action={resetFilterAction}
-                        />
-                      )
-                    ) : (
-                      shouldGroupVisibleFlowRows ? (
-                        <Stack spacing={1.25} sx={{ p: 1.25 }}>
-                          {groupedVisibleFlowRows.map((group) => (
-                            <Paper key={group.key} variant="outlined" sx={{ overflow: "hidden" }}>
-                              <Box
-                                sx={{
-                                  px: 1.5,
-                                  py: 1,
-                                  borderBottom: "1px solid",
-                                  borderColor: "divider",
-                                  backgroundColor: alpha(theme.palette.primary.main, 0.04),
-                                }}
-                              >
-                                <Stack direction="row" spacing={1} sx={{ alignItems: "baseline", justifyContent: "space-between", gap: 1 }}>
-                                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                                    {group.label}
-                                  </Typography>
-                                  <Typography variant="caption" color="text.secondary">
-                                    {group.rows.length} {group.rows.length === 1 ? "flow" : "flows"}
-                                  </Typography>
-                                </Stack>
-                              </Box>
-                              <DataGrid
-                                rows={group.rows}
-                                columns={interactiveOrderedVisibleFlowColumns}
-                                rowHeight={62}
-                                sortModel={flowSortModel}
-                                onSortModelChange={setFlowSortModel}
-                                disableRowSelectionOnClick
-                                autoHeight
-                                hideFooter
-                                onCellClick={handleFlowGridCellClick}
-                                onRowClick={handleFlowGridRowClick}
-                                sx={flowGridSx}
-                              />
-                            </Paper>
-                          ))}
-                        </Stack>
-                      ) : (
-                        <DataGrid
-                          rows={visibleFlowRows}
-                          columns={interactiveOrderedVisibleFlowColumns}
-                          rowHeight={62}
-                          sortModel={flowSortModel}
-                          onSortModelChange={setFlowSortModel}
-                          disableRowSelectionOnClick
-                          autoHeight
-                          hideFooter={visibleFlowRows.length <= 10}
-                          onCellClick={handleFlowGridCellClick}
-                          onRowClick={handleFlowGridRowClick}
-                          sx={flowGridSx}
-                        />
-                      )
-                    )}
-                  </Box>
-                </Box>
+                {stateSelectorControl}
               </Box>
-            ) : (
+
+              <Box
+                sx={{
+                  width: { xs: "100%", sm: "auto" },
+                  maxWidth: "100%",
+                  ml: { lg: "auto" },
+                  display: "flex",
+                  justifyContent: { xs: "stretch", sm: "flex-end" },
+                  flexShrink: 0,
+                }}
+              >
+                {listActionsPanel}
+              </Box>
+            </Box>
+          ) : null}
+
+          {isFlowsView ? (
+            <FlowWorkspace
+              items={allFlowCards}
+              stateFilter={stateFilter}
+              onStateFilterChange={handleFlowStateFilterChange}
+              currentCounts={flowCounts}
+              quickFilterPlaceholder="Buscar flow, tarea o proyecto vinculado..."
+              noRowsTitle="No hay flows para este filtro"
+              noRowsDescription="Probá con otro estado o capturá una nueva tarea para iniciar el flujo."
+              noSearchTitle="No hay resultados para esta búsqueda"
+              noSearchDescription="Probá con otros términos para encontrar el flow, la tarea o el proyecto asociado."
+              emptyStateAction={resetFilterAction}
+              onRowNavigate={handleWorkflowNavigate}
+              onProjectNavigate={(requirementId, event) => handleProjectNavigate(requirementId, event as MouseEvent<HTMLElement>)}
+              onOpenLinkProject={(workflowId, workflowName) => {
+                setLinkProjectDialog({ workflowId, workflowName });
+              }}
+              onWorkflowStepDatePatched={handleFlowWorkspaceDatePatched}
+              loading={loading}
+              topActions={listActionsPanel}
+              flowQuickFilter={flowQuickFilter}
+              onFlowQuickFilterChange={handleFlowQuickFilterChange}
+              flowSearchOpen={flowSearchOpen}
+              onFlowSearchOpenChange={setFlowSearchOpen}
+              flowSearchValue={flowSearchValue}
+              onFlowSearchValueChange={setFlowSearchValue}
+              flowSortModel={flowSortModel}
+              onFlowSortModelChange={setFlowSortModel}
+              groupRowsByDate
+              onViewMetaChange={setFlowWorkspaceMeta}
+            />
+          ) : (
+            <Paper sx={{ overflow: "hidden" }}>
               <Box
                 sx={{
                   height: {
@@ -3549,8 +3416,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   sx={{ border: 0, height: "100%" }}
                 />
               </Box>
-            )}
-          </Paper>
+            </Paper>
+          )}
 
         </Stack>
       </PageContainer>

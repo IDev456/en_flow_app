@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FocusEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FocusEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import EditCalendarRoundedIcon from "@mui/icons-material/EditCalendarRounded";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -6,18 +6,17 @@ import InboxRoundedIcon from "@mui/icons-material/InboxRounded";
 import LocalFireDepartmentRoundedIcon from "@mui/icons-material/LocalFireDepartmentRounded";
 import ScheduleRoundedIcon from "@mui/icons-material/ScheduleRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
-import { alpha, type Theme, useTheme } from "@mui/material/styles";
+import { alpha, type SxProps, type Theme, useTheme } from "@mui/material/styles";
 import {
   Box,
-  Button,
   ButtonBase,
   Chip,
   IconButton,
+  LinearProgress,
   Menu,
   MenuItem,
+  Paper,
   Stack,
-  Tab,
-  Tabs,
   TextField,
   Tooltip,
   Typography,
@@ -40,14 +39,18 @@ import {
   getFlowCounts,
   getFlowSearchableContent,
   getFlowStatusDisplayValue,
+  groupFlowRowsByDate,
   matchesFlowQuickFilter,
   matchesFlowStateFilter,
   normalizeVisibleFlowFilter,
   selectableFlowQuickFilterOptions,
+  shouldGroupFlowRowsByDate,
   type FlowCountSummary,
+  type FlowDateGroupSection,
   type FlowFilter,
   type FlowGridRow,
   type FlowQuickFilter,
+  type FlowStatusPresentation,
   type FlowTableItem,
 } from "../utils/flowTable";
 import {
@@ -62,13 +65,17 @@ import {
   toCalendarDateUtcIso,
 } from "../utils";
 
-type FlowTableSectionProps = {
+export type FlowWorkspaceViewMeta = {
+  activeFlowFilterDescription: string;
+  visibleRowCount: number;
+  flowSearchActive: boolean;
+};
+
+type FlowWorkspaceProps = {
   items: FlowTableItem[];
   stateFilter: FlowFilter;
   onStateFilterChange: (value: FlowFilter) => void;
   currentCounts?: FlowCountSummary;
-  showStateTabs?: boolean;
-  stateTabsVariant?: "full" | "summary";
   showProjectColumn?: boolean;
   quickFilterPlaceholder?: string;
   allowedQuickFilters?: FlowQuickFilter[];
@@ -76,13 +83,29 @@ type FlowTableSectionProps = {
   noRowsDescription: string;
   noSearchTitle?: string;
   noSearchDescription?: string;
-  emptyStateAction?: React.ReactNode;
+  emptyStateAction?: ReactNode;
   onRowNavigate: (workflowId: string) => void;
   normalizeStateFilter?: boolean;
   onProjectNavigate?: (requirementId: string, event: ReactMouseEvent<HTMLElement>) => void;
   onOpenLinkProject?: (workflowId: string, workflowName: string) => void;
   onWorkflowStepDatePatched?: (workflowId: string, stepId: string, nextIsoValue: string | null) => void;
-  statusPresentation?: "detailed" | "operational_category";
+  statusPresentation?: FlowStatusPresentation;
+  loading?: boolean;
+  showStateFilterControl?: boolean;
+  stateFilterControlVariant?: "flows" | "projects";
+  topActions?: ReactNode;
+  paperSx?: SxProps<Theme>;
+  contentSx?: SxProps<Theme>;
+  groupRowsByDate?: boolean;
+  flowQuickFilter?: FlowQuickFilter;
+  onFlowQuickFilterChange?: (value: FlowQuickFilter) => void;
+  flowSearchOpen?: boolean;
+  onFlowSearchOpenChange?: (value: boolean) => void;
+  flowSearchValue?: string;
+  onFlowSearchValueChange?: (value: string) => void;
+  flowSortModel?: GridSortModel;
+  onFlowSortModelChange?: (value: GridSortModel) => void;
+  onViewMetaChange?: (value: FlowWorkspaceViewMeta) => void;
 };
 
 function normalizeSearchText(value: string) {
@@ -151,13 +174,68 @@ function orderFlowColumnsFixed(columns: GridColDef<FlowGridRow>[]) {
   });
 }
 
-export function FlowTableSection({
+function areSortModelsEqual(left: GridSortModel, right: GridSortModel) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((item, index) => item.field === right[index]?.field && item.sort === right[index]?.sort);
+}
+
+const attentionFlowQuickFilters = new Set<FlowQuickFilter>([
+  "past",
+  "without_project",
+  "without_date",
+  "waiting_15_plus",
+  "waiting_month_plus",
+]);
+
+function isOperationalFlowQuickFilter(filter: FlowQuickFilter) {
+  return filter === "today" || filter === "this_week" || filter === "waiting_today" || filter === "waiting_days" || filter === "waiting_week";
+}
+
+export function renderFlowQuickFilterOptionLabel(
+  option: { value: FlowQuickFilter; label: string },
+  count: number,
+  selected = false
+) {
+  const isAttention = attentionFlowQuickFilters.has(option.value);
+  const isOperational = isOperationalFlowQuickFilter(option.value);
+
+  return (
+    <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.primary",
+          fontWeight: selected ? 500 : 400,
+        }}
+      >
+        {option.label}
+      </Typography>
+      <Typography
+        variant="body2"
+        sx={(theme) => ({
+          color:
+            isAttention && count > 0
+              ? theme.palette.error.main
+              : isOperational && count > 0
+                ? theme.palette.status.active.accent
+                : theme.palette.text.secondary,
+          fontWeight: (isAttention && count > 0) || (isOperational && count > 0) ? 700 : 500,
+        })}
+      >
+        ({count})
+      </Typography>
+    </Stack>
+  );
+}
+
+export function FlowWorkspace({
   items,
   stateFilter,
   onStateFilterChange,
   currentCounts,
-  showStateTabs = false,
-  stateTabsVariant = "full",
   showProjectColumn = true,
   quickFilterPlaceholder = "Buscar flow o tarea...",
   allowedQuickFilters,
@@ -172,23 +250,87 @@ export function FlowTableSection({
   onOpenLinkProject,
   onWorkflowStepDatePatched,
   statusPresentation = "detailed",
-}: FlowTableSectionProps) {
+  loading = false,
+  showStateFilterControl = true,
+  stateFilterControlVariant = "flows",
+  topActions,
+  paperSx,
+  contentSx,
+  groupRowsByDate = true,
+  flowQuickFilter,
+  onFlowQuickFilterChange,
+  flowSearchOpen,
+  onFlowSearchOpenChange,
+  flowSearchValue,
+  onFlowSearchValueChange,
+  flowSortModel,
+  onFlowSortModelChange,
+  onViewMetaChange,
+}: FlowWorkspaceProps) {
   const theme = useTheme();
   const { showToast } = useToastContext();
-  const [flowQuickFilter, setFlowQuickFilter] = useState<FlowQuickFilter>("none");
+  const [internalFlowQuickFilter, setInternalFlowQuickFilter] = useState<FlowQuickFilter>("none");
   const [flowQuickFilterAnchorEl, setFlowQuickFilterAnchorEl] = useState<HTMLElement | null>(null);
-  const [flowSearchOpen, setFlowSearchOpen] = useState(false);
-  const [flowSearchValue, setFlowSearchValue] = useState("");
-  const [flowSortModel, setFlowSortModel] = useState<GridSortModel>([{ field: "movementAt", sort: "asc" }]);
+  const [internalFlowSearchOpen, setInternalFlowSearchOpen] = useState(false);
+  const [internalFlowSearchValue, setInternalFlowSearchValue] = useState("");
+  const [internalFlowSortModel, setInternalFlowSortModel] = useState<GridSortModel>([{ field: "movementAt", sort: "asc" }]);
   const [pendingDates, setPendingDates] = useState<Map<string, string>>(new Map());
   const [requirementsMenu, setRequirementsMenu] = useState<{ rowId: string; anchorEl: HTMLElement } | null>(null);
   const pendingDateInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const isFlowSortModelControlled = flowSortModel !== undefined;
 
+  const resolvedFlowQuickFilter = flowQuickFilter ?? internalFlowQuickFilter;
+  const resolvedFlowSearchOpen = flowSearchOpen ?? internalFlowSearchOpen;
+  const resolvedFlowSearchValue = flowSearchValue ?? internalFlowSearchValue;
+  const resolvedFlowSortModel = flowSortModel ?? internalFlowSortModel;
   const today = getTodayLocalDateInput();
   const flowRows = useMemo(() => buildFlowRows(items, today), [items, today]);
   const resolvedCounts = useMemo(() => currentCounts ?? getFlowCounts(items), [currentCounts, items]);
   const visibleStateFilter = normalizeStateFilter ? normalizeVisibleFlowFilter(stateFilter) : stateFilter;
+
+  const setResolvedFlowQuickFilter = useCallback(
+    (value: FlowQuickFilter) => {
+      onFlowQuickFilterChange?.(value);
+      if (flowQuickFilter === undefined) {
+        setInternalFlowQuickFilter(value);
+      }
+    },
+    [flowQuickFilter, onFlowQuickFilterChange]
+  );
+
+  const setResolvedFlowSearchOpen = useCallback(
+    (value: boolean) => {
+      onFlowSearchOpenChange?.(value);
+      if (flowSearchOpen === undefined) {
+        setInternalFlowSearchOpen(value);
+      }
+    },
+    [flowSearchOpen, onFlowSearchOpenChange]
+  );
+
+  const setResolvedFlowSearchValue = useCallback(
+    (value: string) => {
+      onFlowSearchValueChange?.(value);
+      if (flowSearchValue === undefined) {
+        setInternalFlowSearchValue(value);
+      }
+    },
+    [flowSearchValue, onFlowSearchValueChange]
+  );
+
+  const setResolvedFlowSortModel = useCallback(
+    (value: GridSortModel) => {
+      if (areSortModelsEqual(resolvedFlowSortModel, value)) {
+        return;
+      }
+      onFlowSortModelChange?.(value);
+      if (!isFlowSortModelControlled) {
+        setInternalFlowSortModel(value);
+      }
+    },
+    [isFlowSortModelControlled, onFlowSortModelChange, resolvedFlowSortModel]
+  );
 
   useEffect(() => {
     if (visibleStateFilter !== stateFilter) {
@@ -197,7 +339,7 @@ export function FlowTableSection({
   }, [onStateFilterChange, stateFilter, visibleStateFilter]);
 
   useEffect(() => {
-    if (!flowSearchOpen) {
+    if (!resolvedFlowSearchOpen) {
       return;
     }
 
@@ -212,18 +354,18 @@ export function FlowTableSection({
     }, 0);
 
     return () => window.clearTimeout(focusTimer);
-  }, [flowSearchOpen]);
+  }, [resolvedFlowSearchOpen]);
 
   useEffect(() => {
     if (visibleStateFilter === "waiting") {
-      setFlowSortModel([{ field: "movementAt", sort: "asc" }]);
+      setResolvedFlowSortModel([{ field: "movementAt", sort: "asc" }]);
     }
-  }, [visibleStateFilter]);
+  }, [setResolvedFlowSortModel, visibleStateFilter]);
 
   const activeFlowQuickFilterLabel =
-    flowQuickFilterOptions.find((option) => option.value === flowQuickFilter)?.label ?? "Filtro rápido";
-  const activeFlowFilterDescription = buildActiveFlowFilterDescription(visibleStateFilter, flowQuickFilter);
-  const flowSearchActive = flowSearchValue.trim().length > 0;
+    flowQuickFilterOptions.find((option) => option.value === resolvedFlowQuickFilter)?.label ?? "Filtro rápido";
+  const activeFlowFilterDescription = buildActiveFlowFilterDescription(visibleStateFilter, resolvedFlowQuickFilter);
+  const flowSearchActive = resolvedFlowSearchValue.trim().length > 0;
 
   const allowedQuickFilterValues = useMemo(
     () => {
@@ -235,11 +377,11 @@ export function FlowTableSection({
   );
 
   useEffect(() => {
-    if (flowQuickFilter !== "none" && !allowedQuickFilterValues.includes(flowQuickFilter)) {
-      setFlowQuickFilter("none");
+    if (resolvedFlowQuickFilter !== "none" && !allowedQuickFilterValues.includes(resolvedFlowQuickFilter)) {
+      setResolvedFlowQuickFilter("none");
       setFlowQuickFilterAnchorEl(null);
     }
-  }, [allowedQuickFilterValues, flowQuickFilter]);
+  }, [allowedQuickFilterValues, resolvedFlowQuickFilter, setResolvedFlowQuickFilter]);
 
   const stateFilteredFlowRows = useMemo(
     () => flowRows.filter((row) => matchesFlowStateFilter(row.status, visibleStateFilter)),
@@ -265,12 +407,12 @@ export function FlowTableSection({
   );
 
   const quickFilteredFlowRows = useMemo(
-    () => stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, flowQuickFilter, today)),
-    [flowQuickFilter, stateFilteredFlowRows, today]
+    () => stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, resolvedFlowQuickFilter, today)),
+    [resolvedFlowQuickFilter, stateFilteredFlowRows, today]
   );
 
   const visibleFlowRows = useMemo(() => {
-    const normalizedQuery = normalizeSearchText(flowSearchValue.trim());
+    const normalizedQuery = normalizeSearchText(resolvedFlowSearchValue.trim());
     if (!normalizedQuery) {
       return quickFilteredFlowRows;
     }
@@ -280,7 +422,21 @@ export function FlowTableSection({
       const searchableContent = normalizeSearchText(getFlowSearchableContent(row, statusPresentation));
       return searchTerms.every((term) => searchableContent.includes(term));
     });
-  }, [flowSearchValue, quickFilteredFlowRows, statusPresentation]);
+  }, [quickFilteredFlowRows, resolvedFlowSearchValue, statusPresentation]);
+
+  const shouldGroupVisibleFlowRows = groupRowsByDate && shouldGroupFlowRowsByDate(visibleStateFilter, resolvedFlowQuickFilter);
+  const groupedVisibleFlowRows = useMemo<FlowDateGroupSection[]>(
+    () => (shouldGroupVisibleFlowRows ? groupFlowRowsByDate(visibleFlowRows, today) : []),
+    [shouldGroupVisibleFlowRows, today, visibleFlowRows]
+  );
+
+  useEffect(() => {
+    onViewMetaChange?.({
+      activeFlowFilterDescription,
+      visibleRowCount: visibleFlowRows.length,
+      flowSearchActive,
+    });
+  }, [activeFlowFilterDescription, flowSearchActive, onViewMetaChange, visibleFlowRows.length]);
 
   const setPendingDateInputRef = useCallback((rowId: string, input: HTMLInputElement | null) => {
     const inputRefs = pendingDateInputRefs.current;
@@ -364,6 +520,8 @@ export function FlowTableSection({
         minWidth: 300,
         align: "left",
         headerAlign: "left",
+        headerClassName: "flow-grid-sticky-column",
+        cellClassName: "flow-grid-sticky-column-cell",
         valueGetter: (_, row) => `${row.stepLabel} ${row.taskName}`,
         renderCell: (params) => {
           const row = params.row;
@@ -822,228 +980,326 @@ export function FlowTableSection({
     today,
   ]);
 
-  const visibleFlowColumns = flowColumns;
   const requirementsMenuRow = requirementsMenu
-    ? visibleFlowRows.find((row) => row.id === requirementsMenu.rowId) ??
-      null
+    ? visibleFlowRows.find((row) => row.id === requirementsMenu.rowId) ?? null
     : null;
 
+  const flowGridSx = useMemo(
+    () => ({
+      border: 0,
+      "& .flow-grid-sticky-column": {
+        position: "sticky",
+        left: 0,
+        zIndex: 4,
+        backgroundColor: theme.palette.background.paper,
+        borderRight: `1px solid ${theme.palette.divider}`,
+      },
+      "& .flow-grid-sticky-column-cell": {
+        position: "sticky",
+        left: 0,
+        zIndex: 3,
+        backgroundColor: theme.palette.background.paper,
+        borderRight: `1px solid ${theme.palette.divider}`,
+      },
+      "& .MuiDataGrid-row:hover .flow-grid-sticky-column-cell": {
+        backgroundColor: theme.palette.action.hover,
+      },
+    }),
+    [theme]
+  );
+
+  const handleFlowGridCellClick = useCallback((params: { field: string }, event: { defaultMuiPrevented?: boolean }) => {
+    if (params.field === "requirementsLabel") {
+      event.defaultMuiPrevented = true;
+    }
+  }, []);
+
+  const renderRows = (rows: FlowGridRow[], hideFooter: boolean) => (
+    <DataGrid
+      rows={rows}
+      columns={flowColumns}
+      rowHeight={62}
+      sortModel={resolvedFlowSortModel}
+      onSortModelChange={setResolvedFlowSortModel}
+      disableRowSelectionOnClick
+      autoHeight
+      hideFooter={hideFooter}
+      onCellClick={handleFlowGridCellClick}
+      onRowClick={(params: GridRowParams<FlowGridRow>) => {
+        onRowNavigate(params.row.id);
+      }}
+      sx={flowGridSx}
+    />
+  );
+
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      {showStateTabs ? (
-        <Box sx={{ px: 1.5, pt: 1.25, borderBottom: "1px solid", borderColor: "divider" }}>
-          {stateTabsVariant === "summary" ? (
-            <FlowStateFilterControl
-              value={visibleStateFilter}
-              counts={resolvedCounts}
-              onChange={onStateFilterChange}
-            />
-          ) : (
-            <Tabs
-              value={visibleStateFilter}
-              onChange={(_, value: FlowFilter) => onStateFilterChange(value)}
-              variant="scrollable"
-              scrollButtons="auto"
-              allowScrollButtonsMobile
+    <Stack spacing={1.5}>
+      {(showStateFilterControl || topActions) ? (
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: { xs: "column", lg: "row" },
+            alignItems: { xs: "stretch", lg: "flex-start" },
+            gap: 1.5,
+            width: "100%",
+          }}
+        >
+          {showStateFilterControl ? (
+            <Box
+              sx={{
+                width: { xs: "100%", sm: 320 },
+                maxWidth: { xs: "100%", sm: 320 },
+                flexShrink: 0,
+              }}
             >
-              <Tab key="tab_active" value="active" label={`Activos (${resolvedCounts.active})`} />
-              <Tab key="tab_waiting" value="waiting" label={`Esperando (${resolvedCounts.waiting})`} />
-              <Tab
-                key="tab_non_operational"
-                value="non_operational"
-                label={`No operativos (${resolvedCounts.cancelled + resolvedCounts.finalized})`}
-              />
-            </Tabs>
-          )}
+              <FlowStateFilterControl value={visibleStateFilter} counts={resolvedCounts} onChange={onStateFilterChange} variant={stateFilterControlVariant} />
+            </Box>
+          ) : null}
+
+          {topActions ? (
+            <Box
+              sx={{
+                width: { xs: "100%", sm: "auto" },
+                maxWidth: "100%",
+                ml: { lg: "auto" },
+                display: "flex",
+                justifyContent: { xs: "stretch", sm: "flex-end" },
+                flexShrink: 0,
+              }}
+            >
+              {topActions}
+            </Box>
+          ) : null}
         </Box>
       ) : null}
 
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 0.75,
-          px: 1,
-          py: 0.75,
-          borderBottom: "1px solid",
-          borderColor: "divider",
-        }}
-      >
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          sx={{
-            flex: 1,
-            minWidth: 0,
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            fontWeight: 600,
-          }}
-        >
-          {activeFlowFilterDescription}
-        </Typography>
-
-        <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", minWidth: 0 }}>
-          <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", minWidth: 0 }}>
-            <IconButton aria-label={flowSearchOpen ? "Alternar búsqueda" : "Buscar"} size="small" onClick={() => {
-              if (flowSearchOpen && flowSearchValue.trim().length === 0) {
-                setFlowSearchOpen(false);
-                return;
-              }
-              setFlowSearchOpen(true);
-            }}>
-              <SearchRoundedIcon fontSize="small" />
-            </IconButton>
-            {flowSearchOpen ? (
-              <>
-                <TextField
-                  aria-label="Búsqueda rápida"
-                  placeholder={quickFilterPlaceholder}
-                  size="small"
-                  fullWidth={false}
-                  autoFocus
-                  inputRef={searchInputRef}
-                  value={flowSearchValue}
-                  onClick={(event) => event.stopPropagation()}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  onChange={(event) => {
-                    event.stopPropagation();
-                    setFlowSearchValue(event.target.value);
-                  }}
-                  onKeyDown={(event) => {
-                    event.stopPropagation();
-                    if (event.key === "Escape" && flowSearchValue.trim().length === 0) {
-                      setFlowSearchOpen(false);
-                    }
-                  }}
-                  sx={{ width: { xs: 180, sm: 280 } }}
-                />
-                <IconButton
-                  aria-label={flowSearchValue.trim().length === 0 ? "Cerrar búsqueda" : "Limpiar búsqueda"}
-                  size="small"
-                  onClick={() => {
-                    if (flowSearchValue.trim().length > 0) {
-                      setFlowSearchValue("");
-                      return;
-                    }
-                    setFlowSearchOpen(false);
+      <Paper sx={{ overflow: "hidden", ...paperSx }}>
+        {loading ? (
+          <LinearProgress />
+        ) : (
+          <Box
+            sx={{
+              height: {
+                xs: "calc(100dvh - 320px)",
+                md: "calc(100dvh - 300px)",
+              },
+              minHeight: { xs: 520, md: 720 },
+              width: "100%",
+              ...contentSx,
+            }}
+          >
+            <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
+              <Box
+                sx={{
+                  position: "sticky",
+                  top: 0,
+                  zIndex: 1,
+                  backgroundColor: "background.paper",
+                  borderBottom: "1px solid",
+                  borderColor: "divider",
+                }}
+              >
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 0.75,
+                    px: 1,
+                    py: 0.75,
                   }}
                 >
-                  <CancelOutlinedIcon fontSize="small" />
-                </IconButton>
-              </>
-            ) : null}
-          </Stack>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{
+                      flex: 1,
+                      minWidth: 0,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {activeFlowFilterDescription}
+                  </Typography>
 
-          <ButtonBase
-            aria-label={flowQuickFilter === "none" ? "Filtro rápido" : activeFlowQuickFilterLabel}
-            onClick={(event) => setFlowQuickFilterAnchorEl(event.currentTarget)}
-            sx={{
-              px: 1,
-              py: 0.5,
-              borderRadius: (theme) => theme.appShape.sm,
-              color: "text.secondary",
-              "&:hover": { backgroundColor: "action.hover" },
-            }}
-          >
-            <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
-              <ScheduleRoundedIcon fontSize="small" />
-              <Typography variant="body2" sx={{ whiteSpace: "nowrap" }}>
-                {flowQuickFilter === "none" ? "Filtro rápido" : activeFlowQuickFilterLabel}
-              </Typography>
-              <ExpandMoreIcon fontSize="small" />
-            </Stack>
-          </ButtonBase>
-          {flowQuickFilter !== "none" ? (
-            <IconButton
-              aria-label="Restablecer filtro rápido"
-              size="small"
-              onClick={() => {
-                setFlowQuickFilter("none");
-                setFlowQuickFilterAnchorEl(null);
-              }}
-            >
-              <CancelOutlinedIcon fontSize="small" />
-            </IconButton>
-          ) : null}
-        </Stack>
-      </Box>
+                  <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", minWidth: 0 }}>
+                    <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", minWidth: 0 }}>
+                      <IconButton
+                        aria-label={resolvedFlowSearchOpen ? "Alternar búsqueda" : "Buscar"}
+                        size="small"
+                        onClick={() => {
+                          if (resolvedFlowSearchOpen && resolvedFlowSearchValue.trim().length === 0) {
+                            setResolvedFlowSearchOpen(false);
+                            return;
+                          }
+                          setResolvedFlowSearchOpen(true);
+                        }}
+                      >
+                        <SearchRoundedIcon fontSize="small" />
+                      </IconButton>
+                      {resolvedFlowSearchOpen ? (
+                        <>
+                          <TextField
+                            aria-label="Búsqueda rápida"
+                            placeholder={quickFilterPlaceholder}
+                            size="small"
+                            fullWidth={false}
+                            autoFocus
+                            inputRef={searchInputRef}
+                            value={resolvedFlowSearchValue}
+                            onClick={(event) => event.stopPropagation()}
+                            onMouseDown={(event) => event.stopPropagation()}
+                            onChange={(event) => {
+                              event.stopPropagation();
+                              setResolvedFlowSearchValue(event.target.value);
+                            }}
+                            onKeyDown={(event) => {
+                              event.stopPropagation();
+                              if (event.key === "Escape" && resolvedFlowSearchValue.trim().length === 0) {
+                                setResolvedFlowSearchOpen(false);
+                              }
+                            }}
+                            sx={{ width: { xs: 180, sm: 280 } }}
+                          />
+                          <IconButton
+                            aria-label={resolvedFlowSearchValue.trim().length === 0 ? "Cerrar búsqueda" : "Limpiar búsqueda"}
+                            size="small"
+                            onClick={() => {
+                              if (resolvedFlowSearchValue.trim().length > 0) {
+                                setResolvedFlowSearchValue("");
+                                return;
+                              }
+                              setResolvedFlowSearchOpen(false);
+                            }}
+                          >
+                            <CancelOutlinedIcon fontSize="small" />
+                          </IconButton>
+                        </>
+                      ) : null}
+                    </Stack>
 
-      <Menu anchorEl={flowQuickFilterAnchorEl} open={Boolean(flowQuickFilterAnchorEl)} onClose={() => setFlowQuickFilterAnchorEl(null)}>
-        {selectableFlowQuickFilterOptions
-          .filter((option) => allowedQuickFilterValues.includes(option.value))
-          .map((option) => (
-            <MenuItem
-              key={option.value}
-              selected={option.value === flowQuickFilter}
-              onClick={() => {
-                setFlowQuickFilter(option.value);
-                setFlowQuickFilterAnchorEl(null);
-              }}
-            >
-              {`${option.label} (${quickFilterCountsByValue[option.value] ?? 0})`}
-            </MenuItem>
-          ))}
-      </Menu>
+                    <ButtonBase
+                      aria-label={resolvedFlowQuickFilter === "none" ? "Filtro rápido" : activeFlowQuickFilterLabel}
+                      onClick={(event) => setFlowQuickFilterAnchorEl(event.currentTarget)}
+                      sx={{
+                        px: 1,
+                        py: 0.5,
+                        borderRadius: theme.appShape.sm,
+                        color: "text.secondary",
+                        "&:hover": { backgroundColor: "action.hover" },
+                      }}
+                    >
+                      <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+                        <ScheduleRoundedIcon fontSize="small" />
+                        <Typography variant="body2" sx={{ whiteSpace: "nowrap" }}>
+                          {resolvedFlowQuickFilter === "none" ? "Filtro rápido" : activeFlowQuickFilterLabel}
+                        </Typography>
+                        <ExpandMoreIcon fontSize="small" />
+                      </Stack>
+                    </ButtonBase>
+                    {resolvedFlowQuickFilter !== "none" ? (
+                      <IconButton
+                        aria-label="Restablecer filtro rápido"
+                        size="small"
+                        onClick={() => {
+                          setResolvedFlowQuickFilter("none");
+                          setFlowQuickFilterAnchorEl(null);
+                        }}
+                      >
+                        <CancelOutlinedIcon fontSize="small" />
+                      </IconButton>
+                    ) : null}
+                  </Stack>
+                </Box>
+              </Box>
 
-      <Menu
-        anchorEl={requirementsMenu?.anchorEl ?? null}
-        open={Boolean(requirementsMenu)}
-        onClose={() => setRequirementsMenu(null)}
-      >
-        {(requirementsMenuRow?.linkedRequirements ?? []).map((requirement) => (
-          <MenuItem
-            key={requirement.id}
-            onClick={(event) => {
-              setRequirementsMenu(null);
-              onProjectNavigate?.(requirement.id, event as unknown as ReactMouseEvent<HTMLElement>);
-            }}
-          >
-            {requirement.label}
-          </MenuItem>
-        ))}
-      </Menu>
+              <Menu anchorEl={flowQuickFilterAnchorEl} open={Boolean(flowQuickFilterAnchorEl)} onClose={() => setFlowQuickFilterAnchorEl(null)}>
+                {selectableFlowQuickFilterOptions
+                  .filter((option) => allowedQuickFilterValues.includes(option.value))
+                  .map((option) => (
+                    <MenuItem
+                      key={option.value}
+                      selected={option.value === resolvedFlowQuickFilter}
+                      onClick={() => {
+                        setResolvedFlowQuickFilter(option.value);
+                        setFlowQuickFilterAnchorEl(null);
+                      }}
+                    >
+                      {renderFlowQuickFilterOptionLabel(
+                        option,
+                        quickFilterCountsByValue[option.value] ?? 0,
+                        option.value === resolvedFlowQuickFilter
+                      )}
+                    </MenuItem>
+                  ))}
+              </Menu>
 
-      <Box sx={{ flex: 1, overflowY: "auto" }}>
-        {visibleFlowRows.length === 0 ? (
-          flowSearchActive ? (
-            <DataGridEmptyState
-              icon={<SearchRoundedIcon color="action" />}
-              title={noSearchTitle}
-              description={noSearchDescription}
-            />
-          ) : (
-            <DataGridEmptyState
-              icon={<InboxRoundedIcon color="action" />}
-              title={noRowsTitle}
-              description={noRowsDescription}
-              action={emptyStateAction}
-            />
-          )
-        ) : (
-          <DataGrid
-            rows={visibleFlowRows}
-            columns={visibleFlowColumns}
-            rowHeight={62}
-            sortModel={flowSortModel}
-            onSortModelChange={setFlowSortModel}
-            disableRowSelectionOnClick
-            autoHeight
-            hideFooter={visibleFlowRows.length <= 10}
-            onCellClick={(params, event) => {
-              if (params.field === "requirementsLabel") {
-                event.defaultMuiPrevented = true;
-              }
-            }}
-            onRowClick={(params: GridRowParams<FlowGridRow>) => {
-              onRowNavigate(params.row.id);
-            }}
-            sx={{ border: 0 }}
-          />
+              <Menu
+                anchorEl={requirementsMenu?.anchorEl ?? null}
+                open={Boolean(requirementsMenu)}
+                onClose={() => setRequirementsMenu(null)}
+              >
+                {(requirementsMenuRow?.linkedRequirements ?? []).map((requirement) => (
+                  <MenuItem
+                    key={requirement.id}
+                    onClick={(event) => {
+                      setRequirementsMenu(null);
+                      onProjectNavigate?.(requirement.id, event as unknown as ReactMouseEvent<HTMLElement>);
+                    }}
+                  >
+                    {requirement.label}
+                  </MenuItem>
+                ))}
+              </Menu>
+
+              <Box sx={{ flex: 1, overflowY: "auto" }}>
+                {visibleFlowRows.length === 0 ? (
+                  flowSearchActive ? (
+                    <DataGridEmptyState icon={<SearchRoundedIcon color="action" />} title={noSearchTitle} description={noSearchDescription} />
+                  ) : (
+                    <DataGridEmptyState
+                      icon={<InboxRoundedIcon color="action" />}
+                      title={noRowsTitle}
+                      description={noRowsDescription}
+                      action={emptyStateAction}
+                    />
+                  )
+                ) : shouldGroupVisibleFlowRows ? (
+                  <Stack spacing={1.25} sx={{ p: 1.25 }}>
+                    {groupedVisibleFlowRows.map((group) => (
+                      <Paper key={group.key} variant="outlined" sx={{ overflow: "hidden" }}>
+                        <Box
+                          sx={{
+                            px: 1.5,
+                            py: 1,
+                            borderBottom: "1px solid",
+                            borderColor: "divider",
+                            backgroundColor: alpha(theme.palette.primary.main, 0.04),
+                          }}
+                        >
+                          <Stack direction="row" spacing={1} sx={{ alignItems: "baseline", justifyContent: "space-between", gap: 1 }}>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                              {group.label}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {group.rows.length} {group.rows.length === 1 ? "flow" : "flows"}
+                            </Typography>
+                          </Stack>
+                        </Box>
+                        {renderRows(group.rows, true)}
+                      </Paper>
+                    ))}
+                  </Stack>
+                ) : (
+                  renderRows(visibleFlowRows, visibleFlowRows.length <= 10)
+                )}
+              </Box>
+            </Box>
+          </Box>
         )}
-      </Box>
-    </Box>
+      </Paper>
+    </Stack>
   );
 }
