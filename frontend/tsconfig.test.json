@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "../.frontend-test-dist",
+    "rootDir": ".",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "ignoreDeprecations": "6.0",
+    "types": ["node"]
+  },
+  "include": [
+    "tests/**/*.ts",
+    "src/features/flow/types.ts",
+    "src/features/flow/utils.ts",
+    "src/features/flow/utils/flowTable.ts"
+  ]
+}

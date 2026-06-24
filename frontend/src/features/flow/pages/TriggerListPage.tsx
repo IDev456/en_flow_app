@@ -78,7 +78,7 @@ import { AmbitoChip } from "../components/AmbitoChip";
 import { FlowStateFilterControl } from "../components/FlowStateFilterControl";
 import { StatusBadge } from "../components/StatusBadge";
 import type { Ambito, Step, TriggerDetail, WorkflowDetail } from "../types";
-import { groupFlowRowsByDate } from "../utils/flowTable";
+import { groupFlowRowsByDate, matchesFlowQuickFilter } from "../utils/flowTable";
 import {
   activeAmbitoOptions,
   getStoredActiveAmbito,
@@ -193,10 +193,11 @@ type GroupedFlowSection = {
 
 type RequirementGridRow = {
   id: string;
-  ambito: Ambito;
   description: string;
-  requester: string;
-  status: string;
+  lastRecord: string;
+  movementLabel: string;
+  movementAt: number;
+  movementDays: number | null;
   flowsLabel: string;
   waitingLabel: string;
   flowCount: number;
@@ -739,90 +740,6 @@ function getFlowDateGroupSortKey(dateInput: string | null, todayInput: string) {
   if (diffDays === 0) return 0;
   if (diffDays < 0) return 1_000_000 + Math.abs(diffDays);
   return 2_000_000 + diffDays;
-}
-
-function getRowContextualDateInput(row: FlowGridRow) {
-  return row.primaryDateInput || row.contextualDateInput || "";
-}
-
-function rowMatchesWithoutDateFilter(row: FlowGridRow) {
-  return getFlowFilterFromStatus(row.status) === "active" && !row.executionDateInput;
-}
-
-function getWaitingAgeDays(row: FlowGridRow, today: string) {
-  if (getFlowFilterFromStatus(row.status) !== "waiting" || !row.waitingSinceInput) {
-    return null;
-  }
-
-  const diffDays = getCalendarDayDiff(row.waitingSinceInput, today);
-  return diffDays === null ? null : Math.max(0, -diffDays);
-}
-
-function matchesWaitingAgeQuickFilter(row: FlowGridRow, filter: FlowQuickFilter, today: string) {
-  const waitingAgeDays = getWaitingAgeDays(row, today);
-  if (waitingAgeDays === null) {
-    return false;
-  }
-
-  if (filter === "waiting_today") return waitingAgeDays === 0;
-  if (filter === "waiting_days") return waitingAgeDays >= 1 && waitingAgeDays <= 6;
-  if (filter === "waiting_week") return waitingAgeDays >= 7 && waitingAgeDays <= 14;
-  if (filter === "waiting_15_plus") return waitingAgeDays >= 15 && waitingAgeDays <= 30;
-  if (filter === "waiting_month_plus") return waitingAgeDays >= 31;
-  return false;
-}
-
-function matchesFlowQuickFilter(row: FlowGridRow, filter: FlowQuickFilter, today: string) {
-  if (filter === "none") {
-    return true;
-  }
-
-  if (filter === "without_project") {
-    return row.requirementsCount === 0;
-  }
-
-  if (filter === "without_date") {
-    return rowMatchesWithoutDateFilter(row);
-  }
-
-  if (
-    filter === "waiting_today" ||
-    filter === "waiting_days" ||
-    filter === "waiting_week" ||
-    filter === "waiting_15_plus" ||
-    filter === "waiting_month_plus"
-  ) {
-    return matchesWaitingAgeQuickFilter(row, filter, today);
-  }
-
-  const rowDay = toCalendarDayValue(getRowContextualDateInput(row) || null);
-  const todayDay = toCalendarDayValue(today);
-
-  if (rowDay === null || todayDay === null) {
-    return false;
-  }
-
-  if (filter === "today") {
-    return rowDay === todayDay;
-  }
-
-  if (filter === "past") {
-    return rowDay < todayDay;
-  }
-
-  if (filter === "future") {
-    return rowDay > todayDay;
-  }
-
-  if (filter === "this_week") {
-    const todayDate = new Date(`${today}T00:00:00`);
-    const dayOfWeek = todayDate.getDay();
-    const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
-    const endOfWeekDay = todayDay + daysUntilSunday;
-    return rowDay >= todayDay && rowDay <= endOfWeekDay;
-  }
-
-  return true;
 }
 
 function getStatusHighlight(statusValue: string, theme: Theme) {
@@ -1961,6 +1878,13 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       const linkedWorkflows = trigger.workflow_ids
         .map((workflowId) => workflowsById[workflowId])
         .filter((workflow): workflow is WorkflowDetail => Boolean(workflow));
+      const latestWorkflow =
+        linkedWorkflows.reduce<WorkflowDetail | null>((latest, workflow) => {
+          if (!latest) return workflow;
+          const latestTimestamp = Date.parse(getLatestMovementAt(latest) ?? latest.fecha_inicio);
+          const workflowTimestamp = Date.parse(getLatestMovementAt(workflow) ?? workflow.fecha_inicio);
+          return workflowTimestamp > latestTimestamp ? workflow : latest;
+        }, null) ?? null;
 
       const openCount = linkedWorkflows.filter((workflow) => {
         const filter = getFlowFilterFromStatus(getVisibleWorkflowStatus(workflow));
@@ -1970,15 +1894,22 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       const waitingCount = linkedWorkflows.filter(
         (workflow) => getFlowFilterFromStatus(getVisibleWorkflowStatus(workflow)) === "waiting"
       ).length;
+      const latestMovementAt = latestWorkflow ? getLatestMovementAt(latestWorkflow) ?? latestWorkflow.fecha_inicio : null;
+      const movementAtValue = getDateValue(latestMovementAt);
+      const movementAt = movementAtValue ?? Number.MAX_SAFE_INTEGER;
+      const movementDateInput = movementAtValue === null ? null : formatLocalDateInput(new Date(movementAtValue));
+      const movementDayDiff = getCalendarDayDiff(movementDateInput, today);
+      const movementDays = movementDayDiff === null ? null : Math.max(0, -movementDayDiff);
 
-        return {
-          id: trigger.id,
-          ambito: trigger.ambito,
-          description: trigger.descripcion?.trim() || "Proyecto sin detalle",
-          requester: trigger.solicitante?.trim() || "Sin solicitante",
-          status: getVisibleTriggerStatus(trigger.estado_general),
-          flowsLabel:
-            linkedWorkflows.length === 0
+      return {
+        id: trigger.id,
+        description: trigger.descripcion?.trim() || "Proyecto sin detalle",
+        lastRecord: latestWorkflow ? getLatestMeaningfulWorkflowRecord(latestWorkflow) : "Sin registros todavia",
+        movementLabel: formatElapsedTime(latestMovementAt) ?? "Sin movimiento reciente",
+        movementAt,
+        movementDays,
+        flowsLabel:
+          linkedWorkflows.length === 0
             ? "Sin flows"
             : openCount > 0
               ? `${linkedWorkflows.length} flows Â· ${openCount} abiertos`
@@ -1990,7 +1921,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         canDelete: trigger.workflow_ids.length === 0,
       };
     });
-  }, [filteredRequirements, workflowsById]);
+  }, [filteredRequirements, today, workflowsById]);
 
   async function handleDeleteTrigger(trigger: TriggerDetail) {
     const detail = trigger.descripcion?.trim() || "Proyecto sin detalle";
@@ -2874,10 +2805,10 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         ),
       },
       {
-        field: "requester",
-        headerName: "Solicitante",
-        flex: 1.1,
-        minWidth: 220,
+        field: "lastRecord",
+        headerName: "Registro",
+        flex: 1.35,
+        minWidth: 300,
         align: "left",
         headerAlign: "left",
         renderCell: (params) => (
@@ -2899,26 +2830,25 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         ),
       },
       {
-        field: "status",
-        headerName: "Estado",
-        width: 150,
-        minWidth: 140,
-        align: "left",
-        headerAlign: "left",
-        sortable: false,
-        renderCell: (params) => (
-          <Box sx={{ display: "flex", alignItems: "center", height: "100%", width: "100%" }}>
-            <StatusBadge value={params.value} />
-          </Box>
-        ),
-      },
-      {
-        field: "ambito",
-        headerName: "Ãmbito",
-        width: 128,
+        field: "movementAt",
+        headerName: "Inactividad",
+        width: 126,
         minWidth: 120,
-        sortable: false,
-        renderCell: (params) => <AmbitoChip ambito={params.row.ambito} />,
+        align: "center",
+        headerAlign: "center",
+        renderCell: (params) => {
+          const heatVisual = getMovementHeatVisual(params.row.movementDays);
+          return (
+            <Stack direction="row" spacing={0.45} sx={{ alignItems: "center", justifyContent: "center" }}>
+              <Typography variant="caption" color="text.secondary">
+                {params.row.movementLabel}
+              </Typography>
+              {heatVisual ? (
+                <LocalFireDepartmentRoundedIcon sx={{ fontSize: 14, color: heatVisual.color, opacity: heatVisual.opacity }} />
+              ) : null}
+            </Stack>
+          );
+        },
       },
       {
         field: "flowsLabel",
@@ -3576,7 +3506,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                   }}
                   slotProps={{
                     toolbar: {
-                      quickFilterPlaceholder: "Buscar proyecto o solicitante...",
+                      quickFilterPlaceholder: "Buscar proyecto o registro...",
                       searchOpen: requirementSearchOpen,
                       searchValue: requirementSearchValue,
                       showGridActions: true,

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "npx tsc -b && npx vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "npx tsc -p tsconfig.test.json && node --test ../.frontend-test-dist/tests/flow-week-filter.test.js"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

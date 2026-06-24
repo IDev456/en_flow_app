@@ -6,6 +6,7 @@ import {
   getTodayLocalDateInput,
   getVisibleWorkflowStatusValue,
   getVisibleWorkflowStatus,
+  isDayInCurrentWeek,
   isNoisyAutomaticJournalText,
   toCalendarDateInputValue,
   toCalendarDayValue,
@@ -368,11 +369,7 @@ export function matchesFlowQuickFilter(row: FlowGridRow, filter: FlowQuickFilter
   }
 
   if (filter === "this_week") {
-    const todayDate = new Date(`${today}T00:00:00`);
-    const dayOfWeek = todayDate.getDay();
-    const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
-    const endOfWeekDay = todayDay + daysUntilSunday;
-    return rowDay >= todayDay && rowDay <= endOfWeekDay;
+    return isDayInCurrentWeek(getRowContextualDateInput(row), today);
   }
 
   return true;

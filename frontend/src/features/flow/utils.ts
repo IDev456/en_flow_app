@@ -254,6 +254,26 @@ export function getCalendarDayDiff(targetValue: string | null, baseValue: string
   return targetDay - baseDay;
 }
 
+export function isDayInCurrentWeek(value: string | null | undefined, todayValue: string | null = null) {
+  const targetDay = toCalendarDayValue(value ?? null);
+  if (targetDay === null) {
+    return false;
+  }
+
+  const resolvedToday = todayValue ?? getTodayLocalDateInput();
+  const todayDay = toCalendarDayValue(resolvedToday);
+  if (todayDay === null) {
+    return false;
+  }
+
+  const todayDate = new Date(`${resolvedToday}T00:00:00`);
+  const dayOfWeek = todayDate.getDay();
+  const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const startOfWeekDay = todayDay - daysSinceMonday;
+  const endOfWeekDay = startOfWeekDay + 6;
+  return targetDay >= startOfWeekDay && targetDay <= endOfWeekDay;
+}
+
 export function formatRelativeCalendarDay(value: string | null) {
   if (!value) {
     return null;
