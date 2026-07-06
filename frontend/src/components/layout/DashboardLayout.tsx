@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
+import CalendarMonthRoundedIcon from "@mui/icons-material/CalendarMonthRounded";
 import FormatListBulletedRoundedIcon from "@mui/icons-material/FormatListBulletedRounded";
 import HistoryRoundedIcon from "@mui/icons-material/HistoryRounded";
 import TimelineRoundedIcon from "@mui/icons-material/TimelineRounded";
@@ -23,6 +24,13 @@ const navItems: DashboardNavItem[] = [
     description: "Secuencias activas",
     path: "/flows",
     icon: <TimelineRoundedIcon fontSize="small" />,
+    group: "main",
+  },
+  {
+    label: "Agenda",
+    description: "Fechas y recordatorios",
+    path: "/agenda",
+    icon: <CalendarMonthRoundedIcon fontSize="small" />,
     group: "main",
   },
   {
@@ -67,6 +75,9 @@ export function DashboardLayout({ mode, onToggleMode, children }: DashboardLayou
     () => (path: string) => {
       if (path === "/flows") {
         return location.pathname === "/flows" || location.pathname.startsWith("/workflows/") || location.pathname.startsWith("/steps/");
+      }
+      if (path === "/agenda") {
+        return location.pathname === "/agenda";
       }
       if (path === "/requirements") {
         return (

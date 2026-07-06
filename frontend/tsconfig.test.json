@@ -13,6 +13,7 @@
     "tests/**/*.ts",
     "src/features/flow/types.ts",
     "src/features/flow/utils.ts",
-    "src/features/flow/utils/flowTable.ts"
+    "src/features/flow/utils/flowTable.ts",
+    "src/features/flow/utils/flowAgenda.ts"
   ]
 }

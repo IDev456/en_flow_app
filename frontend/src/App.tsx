@@ -6,6 +6,7 @@ import { DashboardLayout } from "./components/layout/DashboardLayout";
 import { PageTransition } from "./components/motion/PageTransition";
 import { TriggerCreateModal } from "./features/flow/components/TriggerCreateModal";
 import { NotFoundPage } from "./features/flow/pages/NotFoundPage";
+import { FlowAgendaPage } from "./features/flow/pages/FlowAgendaPage";
 import { StepDetailPage } from "./features/flow/pages/StepDetailPage";
 import { TriggerCreatePage } from "./features/flow/pages/TriggerCreatePage";
 import { TriggerDetailPage } from "./features/flow/pages/TriggerDetailPage";
@@ -41,6 +42,7 @@ function App() {
           <Route path="/dashboard" element={<Navigate to="/flows" replace />} />
           <Route path="/board" element={<Navigate to="/flows" replace />} />
           <Route path="/flows" element={<TriggerListPage defaultView="flows" lockView title="Flows" />} />
+          <Route path="/agenda" element={<FlowAgendaPage />} />
           <Route path="/bitacora" element={<WorkLogPage />} />
           <Route
             path="/requirements"
