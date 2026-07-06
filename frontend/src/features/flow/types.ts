@@ -92,6 +92,7 @@ export type Step = {
   fecha_creacion: string;
   fecha_inicio: string | null;
   fecha_vencimiento: string | null;
+  fecha_recordatorio_espera: string | null;
   fecha_ejecucion_estimada: string | null;
   fecha_cierre: string | null;
   resultado: string | null;
@@ -250,7 +251,14 @@ export type StepStatusUpdateInput = {
   estado: StepStatus;
   usuario: string;
   nota?: string | null;
+  fecha_recordatorio_espera?: string | null;
   attachments?: AttachmentInput[];
+};
+
+export type StepWaitingReminderUpdateInput = {
+  fecha_recordatorio_espera: string | null;
+  usuario: string;
+  nota?: string | null;
 };
 
 export type StepDateUpdateInput = {
@@ -272,6 +280,7 @@ export type StepCommentUpdateInput = {
 export type StepJournalEntryInput = {
   comentario: string | null;
   estado?: Extract<StepStatus, "espera" | "problema"> | null;
+  fecha_recordatorio_espera?: string | null;
   attachments?: AttachmentInput[];
 };
 

@@ -87,6 +87,7 @@ export function StepDetailPage() {
       estado: input.estado,
       usuario: DEFAULT_ACTOR,
       nota: input.comentario,
+      fecha_recordatorio_espera: input.fecha_recordatorio_espera,
       attachments: input.attachments ?? [],
     });
     await loadStepData();

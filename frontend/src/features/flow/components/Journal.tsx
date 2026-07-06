@@ -33,7 +33,7 @@ import type {
   StepHistoryEntry,
   StepJournalEntryInput,
 } from "../types";
-import { buildJournalItems, formatDate, formatElapsedTime, stepStatusOptions } from "../utils";
+import { buildJournalItems, formatDate, formatElapsedTime, getReminderDateError, stepStatusOptions, toCalendarDateUtcIso } from "../utils";
 import {
   attachmentToPreviewSrc,
   extractImageFilesFromClipboardData,
@@ -43,6 +43,7 @@ import {
   type LocalAttachmentDraft,
 } from "../utils/attachments";
 import { AttachmentDraftGrid } from "./AttachmentDraftGrid";
+import { ReminderDateField } from "./ReminderDateField";
 import { StatusBadge } from "./StatusBadge";
 
 type JournalProps = {
@@ -188,6 +189,7 @@ export function Journal({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<LocalAttachmentDraft[]>([]);
+  const [waitingReminderDate, setWaitingReminderDate] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -233,6 +235,12 @@ export function Journal({
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [attachments.length, composerExpanded, onComposerExpandedChange, submitting, text]);
 
+  useEffect(() => {
+    if (selectedStatus !== "espera") {
+      setWaitingReminderDate("");
+    }
+  }, [selectedStatus]);
+
   const canSubmit = canComment && !missingComment && !insufficientLength && !submitting;
 
   async function addFiles(files: File[]) {
@@ -268,6 +276,14 @@ export function Journal({
       return;
     }
 
+    if (selectedStatus === "espera") {
+      const reminderError = getReminderDateError(waitingReminderDate);
+      if (reminderError) {
+        setError(reminderError);
+        return;
+      }
+    }
+
     try {
       setSubmitting(true);
       setError(null);
@@ -288,6 +304,7 @@ export function Journal({
         await onSubmitEntry({
           comentario,
           estado: selectedStatus || null,
+          fecha_recordatorio_espera: selectedStatus === "espera" ? toCalendarDateUtcIso(waitingReminderDate) : undefined,
           attachments: attachments.map((item) => ({
             nombre: item.nombre,
             content_type: item.content_type,
@@ -298,6 +315,7 @@ export function Journal({
       }
       setText("");
       setAttachments([]);
+      setWaitingReminderDate("");
       setEditingCommentId(null);
       onSelectedStatusChange("");
       onComposerExpandedChange(false);
@@ -617,6 +635,21 @@ export function Journal({
                 </ToggleButtonGroup>
               </Stack>
             )}
+
+            {composerExpanded && selectedStatus === "espera" ? (
+              <ReminderDateField
+                value={waitingReminderDate}
+                onChange={(value) => {
+                  setWaitingReminderDate(value);
+                  setError(null);
+                }}
+                label="Recordatorio de espera"
+                helperText="Opcional. Fecha para revisar o retomar lo que quedó en espera."
+                disabled={submitting}
+                error={Boolean(waitingReminderDate && getReminderDateError(waitingReminderDate))}
+                compact
+              />
+            ) : null}
 
             {error && <Alert severity="error">{error}</Alert>}
         </Stack>

@@ -73,6 +73,10 @@ export const stepStatusOptions: Array<{
   }
 ];
 
+export function isWaitingStepStatus(status: StepStatus | null | undefined) {
+  return status === "espera" || status === "esperando_respuesta";
+}
+
 export function formatDate(value: string | null) {
   if (!value) {
     return "Sin fecha";

@@ -163,13 +163,13 @@ def _resolve_workflow_date_projection(
         }
 
     waiting_step = next(
-        (step for step in _sort_step_instances(steps) if step.estado == StepStatus.ESPERANDO_RESPUESTA),
+        (step for step in _sort_step_instances(steps) if step.estado in {StepStatus.ESPERANDO_RESPUESTA, StepStatus.ESPERA}),
         None,
     )
     if waiting_step is not None:
         return {
             "fecha_ejecucion_actual": None,
-            "fecha_recordatorio_actual": waiting_step.fecha_vencimiento,
+            "fecha_recordatorio_actual": waiting_step.fecha_recordatorio_espera,
             "fecha_espera_desde": workflow.fecha_espera_desde or waiting_step.fecha_estado_actual,
             "contexto_fecha_actual": WorkflowDateContext.ESPERA,
         }
@@ -634,7 +634,8 @@ class InMemoryWorkflowRepository(WorkflowRepository):
                     asignado_a=first_step_override.asignado_a if first_step_override else None,
                     fecha_creacion=now,
                     fecha_inicio=None,
-                    fecha_vencimiento=waiting_start.fecha_recordatorio if waiting_start else None,
+                    fecha_vencimiento=None,
+                    fecha_recordatorio_espera=waiting_start.fecha_recordatorio if waiting_start else None,
                     fecha_ejecucion_estimada=None,
                     fecha_cierre=None,
                     resultado=None,
@@ -671,6 +672,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
                         fecha_creacion=now,
                         fecha_inicio=now,
                         fecha_vencimiento=first_step_override.fecha_vencimiento if first_step_override and index == 0 else None,
+                        fecha_recordatorio_espera=None,
                         fecha_ejecucion_estimada=(
                             first_step_override.fecha_ejecucion_estimada if first_step_override and index == 0 else None
                         ),
@@ -776,6 +778,7 @@ class InMemoryWorkflowRepository(WorkflowRepository):
             fecha_creacion=now,
             fecha_inicio=now if estado == StepStatus.ACTIVO else None,
             fecha_vencimiento=payload.fecha_vencimiento,
+            fecha_recordatorio_espera=payload.fecha_recordatorio_espera,
             fecha_ejecucion_estimada=payload.fecha_ejecucion_estimada,
             fecha_cierre=None,
             resultado=None,
@@ -1247,7 +1250,8 @@ class PostgresWorkflowRepository(WorkflowRepository):
                     asignado_a=first_step_override.asignado_a if first_step_override else None,
                     fecha_creacion=now,
                     fecha_inicio=None,
-                    fecha_vencimiento=waiting_start.fecha_recordatorio if waiting_start else None,
+                    fecha_vencimiento=None,
+                    fecha_recordatorio_espera=waiting_start.fecha_recordatorio if waiting_start else None,
                     fecha_ejecucion_estimada=None,
                     fecha_cierre=None,
                     resultado=None,
@@ -1283,6 +1287,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
                         fecha_creacion=now,
                         fecha_inicio=now,
                         fecha_vencimiento=first_step_override.fecha_vencimiento if first_step_override and index == 0 else None,
+                        fecha_recordatorio_espera=None,
                         fecha_ejecucion_estimada=(
                             first_step_override.fecha_ejecucion_estimada if first_step_override and index == 0 else None
                         ),
@@ -1441,6 +1446,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             fecha_creacion=now,
             fecha_inicio=now if estado == StepStatus.ACTIVO else None,
             fecha_vencimiento=payload.fecha_vencimiento,
+            fecha_recordatorio_espera=payload.fecha_recordatorio_espera,
             fecha_ejecucion_estimada=payload.fecha_ejecucion_estimada,
             fecha_cierre=None,
             resultado=None,
@@ -1487,6 +1493,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             existing.fecha_creacion = step.fecha_creacion
             existing.fecha_inicio = step.fecha_inicio
             existing.fecha_vencimiento = step.fecha_vencimiento
+            existing.fecha_recordatorio_espera = step.fecha_recordatorio_espera
             existing.fecha_ejecucion_estimada = step.fecha_ejecucion_estimada
             existing.fecha_cierre = step.fecha_cierre
             existing.resultado = step.resultado
@@ -1925,6 +1932,7 @@ class PostgresWorkflowRepository(WorkflowRepository):
             fecha_creacion=step.fecha_creacion,
             fecha_inicio=step.fecha_inicio,
             fecha_vencimiento=step.fecha_vencimiento,
+            fecha_recordatorio_espera=step.fecha_recordatorio_espera,
             fecha_ejecucion_estimada=step.fecha_ejecucion_estimada,
             fecha_cierre=step.fecha_cierre,
             resultado=step.resultado,

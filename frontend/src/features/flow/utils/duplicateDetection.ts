@@ -357,7 +357,7 @@ export function findSimilarFlows(
     const containmentBonus = hasContainmentMatch(inputPrimary, candidateName) ? 0.06 : 0;
     const dateBonus = getDateBonus(
       input.reminderAt,
-      workflow.fecha_recordatorio_actual ?? relevantStep.fecha_vencimiento ?? relevantStep.fecha_ejecucion_estimada
+      workflow.fecha_recordatorio_actual ?? relevantStep.fecha_recordatorio_espera ?? relevantStep.fecha_vencimiento ?? relevantStep.fecha_ejecucion_estimada
     );
     const matchedTokenBonus = countMatchedTokens(inputTokens, candidateAllTokens) >= 2 ? 0.05 : 0;
 
@@ -389,7 +389,8 @@ export function findSimilarFlows(
       workflowStatus: workflow.estado,
       stepStatus: relevantStep.estado,
       requirements: requirementReferences,
-      reminderAt: workflow.fecha_recordatorio_actual ?? relevantStep.fecha_vencimiento ?? relevantStep.fecha_ejecucion_estimada,
+      reminderAt:
+        workflow.fecha_recordatorio_actual ?? relevantStep.fecha_recordatorio_espera ?? relevantStep.fecha_vencimiento ?? relevantStep.fecha_ejecucion_estimada,
       latestComment: latestComment && !isNoisyAutomaticJournalText(latestComment) ? latestComment : null,
       latestMovementAt: getLatestMovementAt(workflow),
       workflowObjective: workflow.objetivo_final?.trim() || null,

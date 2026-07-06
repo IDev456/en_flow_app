@@ -25,6 +25,7 @@ from app.schemas.workflow import (
     StepHistoryPublic,
     StepInstancePublic,
     StepUpdate,
+    StepWaitingReminderUpdate,
     StepStatus,
     StepTransitionType,
     StepStatusUpdate,
@@ -607,6 +608,7 @@ class WorkflowService:
         workflow = self.get_workflow(step.workflow_id)
         self._ensure_workflow_operable(workflow)
         previous_status = step.estado
+        waiting_reminder_in_payload = "fecha_recordatorio_espera" in payload.model_fields_set
 
         if payload.estado == StepStatus.COMPLETADO:
             raise BusinessRuleError("Usa el cierre dinamico para completar la tarea")
@@ -620,15 +622,23 @@ class WorkflowService:
         if step.estado not in {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA}:
             raise BusinessRuleError("Solo una tarea abierta puede cambiar de estado")
 
+        if payload.estado == StepStatus.PROBLEMA and waiting_reminder_in_payload:
+            raise BusinessRuleError("El recordatorio de espera solo aplica a tareas en espera")
+
         if not payload.nota or len(payload.nota.strip()) < 3:
             raise BusinessRuleError("Todo cambio de estado debe incluir un comentario justificando el motivo")
 
-        updated_step = step.model_copy(
-            update={
-                "estado": payload.estado,
-                "fecha_estado_actual": utc_now(),
-            }
-        )
+        if payload.estado == StepStatus.ESPERA and waiting_reminder_in_payload:
+            self._ensure_reminder_not_past(payload.fecha_recordatorio_espera)
+
+        update_data: dict[str, object] = {
+            "estado": payload.estado,
+            "fecha_estado_actual": utc_now(),
+        }
+        if payload.estado == StepStatus.ESPERA and waiting_reminder_in_payload:
+            update_data["fecha_recordatorio_espera"] = payload.fecha_recordatorio_espera
+
+        updated_step = step.model_copy(update=update_data)
         self.repository.save_step(updated_step)
         self._record_history(
             updated_step.id,
@@ -639,8 +649,45 @@ class WorkflowService:
             note=payload.nota,
             attachments=payload.attachments,
         )
+        if (
+            payload.estado == StepStatus.ESPERA
+            and waiting_reminder_in_payload
+            and step.fecha_recordatorio_espera != updated_step.fecha_recordatorio_espera
+        ):
+            self._record_history(
+                updated_step.id,
+                "fecha_recordatorio_espera",
+                step.fecha_recordatorio_espera,
+                updated_step.fecha_recordatorio_espera,
+                payload.usuario,
+            )
 
         self._sync_workflow_and_trigger_status(step.workflow_id, utc_now())
+        return self.get_step(step_id)
+
+    def update_step_waiting_reminder(self, step_id: str, payload: StepWaitingReminderUpdate) -> StepInstancePublic:
+        step = self.get_step(step_id)
+        workflow = self.get_workflow(step.workflow_id)
+        self._ensure_workflow_operable(workflow)
+
+        if step.estado not in {StepStatus.ESPERA, StepStatus.ESPERANDO_RESPUESTA}:
+            raise BusinessRuleError("Solo puedes editar el recordatorio en tareas en espera")
+
+        self._ensure_reminder_not_past(payload.fecha_recordatorio_espera)
+
+        if step.fecha_recordatorio_espera == payload.fecha_recordatorio_espera:
+            return step
+
+        updated_step = step.model_copy(update={"fecha_recordatorio_espera": payload.fecha_recordatorio_espera})
+        self.repository.save_step(updated_step)
+        self._record_history(
+            updated_step.id,
+            "fecha_recordatorio_espera",
+            step.fecha_recordatorio_espera,
+            updated_step.fecha_recordatorio_espera,
+            payload.usuario,
+            note=payload.nota,
+        )
         return self.get_step(step_id)
 
     def complete_step(self, step_id: str, payload: StepCompletePayload) -> StepInstancePublic:
@@ -666,7 +713,7 @@ class WorkflowService:
                 esperando_de=step.esperando_de,
                 detalle=step.external_wait_reason,
                 referencia_externa=step.external_reference,
-                fecha_recordatorio=step.fecha_vencimiento,
+                fecha_recordatorio=step.fecha_recordatorio_espera,
             )
 
         if step.estado == StepStatus.ESPERANDO_RESPUESTA and effective_transition == StepTransitionType.WAIT_EXTERNAL:
@@ -706,7 +753,7 @@ class WorkflowService:
                     "esperando_de": wait.esperando_de.strip() if isinstance(wait.esperando_de, str) else None,
                     "external_wait_reason": wait_detail,
                     "external_reference": wait.referencia_externa,
-                    "fecha_vencimiento": wait.fecha_recordatorio,
+                    "fecha_recordatorio_espera": wait.fecha_recordatorio,
                 }
             )
             self.repository.save_step(updated_step)

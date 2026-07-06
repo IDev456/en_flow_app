@@ -13,7 +13,7 @@ import {
 import { Link as RouterLink } from "react-router-dom";
 
 import type { Step } from "../types";
-import { DEFAULT_ACTOR, formatDate, formatDateOnly } from "../utils";
+import { DEFAULT_ACTOR, formatDate, formatDateOnly, isWaitingStepStatus } from "../utils";
 import { StatusBadge } from "./StatusBadge";
 
 type WorkflowInspectorProps = {
@@ -86,6 +86,7 @@ export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInsp
   }
 
   const canComplete = step.estado === "activo" || step.estado === "espera" || step.estado === "problema";
+  const showWaitingReminder = isWaitingStepStatus(step.estado) || Boolean(step.fecha_recordatorio_espera);
 
   return (
     <Card>
@@ -115,7 +116,9 @@ export function WorkflowInspector({ workflowId, step, onComplete }: WorkflowInsp
             Fecha: {formatDateOnly(step.fecha_ejecucion_estimada)}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Vencimiento: {formatDate(step.fecha_vencimiento)}
+            {showWaitingReminder
+              ? `Recordatorio de espera: ${formatDate(step.fecha_recordatorio_espera)}`
+              : `Vencimiento: ${formatDate(step.fecha_vencimiento)}`}
           </Typography>
           <Typography variant="body2" color="text.secondary">
             Resultado: {step.resultado ?? "Todavía sin resultado"}

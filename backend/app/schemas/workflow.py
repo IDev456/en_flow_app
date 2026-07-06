@@ -238,6 +238,7 @@ class StepInstancePublic(StepInstanceBase):
     fecha_creacion: datetime
     fecha_inicio: datetime | None = None
     fecha_vencimiento: datetime | None = None
+    fecha_recordatorio_espera: datetime | None = None
     fecha_ejecucion_estimada: datetime | None = None
     fecha_cierre: datetime | None = None
     resultado: str | None = None
@@ -262,6 +263,7 @@ class StepCreate(BaseModel):
     puede_tener_comentarios: bool = True
     asignado_a: str | None = None
     fecha_vencimiento: datetime | None = None
+    fecha_recordatorio_espera: datetime | None = None
     fecha_ejecucion_estimada: datetime | None = None
     action_type: str = Field(default="continue", min_length=1, max_length=80)
     action_config: dict[str, Any] | None = None
@@ -315,7 +317,14 @@ class StepStatusUpdate(BaseModel):
     estado: StepStatus
     usuario: str = Field(min_length=1, max_length=120)
     nota: str | None = Field(default=None, max_length=1000)
+    fecha_recordatorio_espera: datetime | None = None
     attachments: list[AttachmentBase] = Field(default_factory=list)
+
+
+class StepWaitingReminderUpdate(BaseModel):
+    fecha_recordatorio_espera: datetime | None = None
+    usuario: str = Field(min_length=1, max_length=120)
+    nota: str | None = Field(default=None, max_length=1000)
 
 
 class NextTaskInput(BaseModel):

@@ -42,6 +42,7 @@ from app.schemas.workflow import (
     StepUpdate,
     StepStatus,
     StepStatusUpdate,
+    StepWaitingReminderUpdate,
     StepTemplatePublic,
     StepTransitionType,
     TriggerCreate,
@@ -399,7 +400,9 @@ class WorkflowDagTestCase(unittest.TestCase):
         history = self.service.list_history(first_step.id)
         self.assertTrue(any(entry.campo == "espera_externa" and "Confirmacion de proveedor" in (entry.nota or "") for entry in history))
         self.assertIsNone(first_step.fecha_ejecucion_estimada)
-        self.assertEqual(first_step.fecha_vencimiento.date(), start_of_utc_day(1).date())
+        self.assertIsNone(first_step.fecha_vencimiento)
+        self.assertEqual(first_step.fecha_recordatorio_espera.date(), start_of_utc_day(1).date())
+        self.assertEqual(workflow.fecha_recordatorio_actual.date(), start_of_utc_day(1).date())
 
     def test_quick_capture_creates_initial_record_with_attachments(self) -> None:
         workflow = self.service.quick_capture_flow(
@@ -652,9 +655,10 @@ class WorkflowDagTestCase(unittest.TestCase):
         self.assertEqual(updated_step.estado, StepStatus.ESPERANDO_RESPUESTA)
         self.assertEqual(updated_step.esperando_de, "Proveedor")
         self.assertEqual(updated_step.external_wait_reason, "Esperando confirmacion final")
-        self.assertEqual(updated_step.fecha_vencimiento.date(), start_of_utc_day(2).date())
+        self.assertEqual(updated_step.fecha_recordatorio_espera.date(), start_of_utc_day(2).date())
         self.assertEqual(workflow.estado, WorkflowStatus.ESPERANDO_RESPUESTA)
         self.assertEqual(workflow.fecha_espera_desde, updated_step.fecha_estado_actual)
+        self.assertEqual(workflow.fecha_recordatorio_actual.date(), start_of_utc_day(2).date())
         waiting_step = workflow.steps[0]
         self.assertIn("Esperando: Layout aprobado", waiting_step.ultimo_comentario or "")
         self.assertIn("De: Proveedor", waiting_step.ultimo_comentario or "")
@@ -760,12 +764,16 @@ class WorkflowDagTestCase(unittest.TestCase):
                 estado=StepStatus.ESPERA,
                 usuario="tester",
                 nota="Espero respuesta de Juan",
+                fecha_recordatorio_espera=start_of_utc_day(3),
             ),
         )
 
-        waiting_step = self.service.get_workflow(workflow_id).steps[0]
+        workflow = self.service.get_workflow(workflow_id)
+        waiting_step = workflow.steps[0]
         self.assertEqual(waiting_step.estado, StepStatus.ESPERA)
         self.assertEqual(waiting_step.ultimo_comentario, "Espero respuesta de Juan")
+        self.assertEqual(waiting_step.fecha_recordatorio_espera.date(), start_of_utc_day(3).date())
+        self.assertEqual(workflow.fecha_recordatorio_actual.date(), start_of_utc_day(3).date())
         history = self.service.list_history(waiting_step.id)
         self.assertTrue(
             any(
@@ -775,6 +783,105 @@ class WorkflowDagTestCase(unittest.TestCase):
                 for entry in history
             )
         )
+        self.assertTrue(
+            any(
+                entry.campo == "fecha_recordatorio_espera"
+                and entry.valor_nuevo == start_of_utc_day(3).isoformat()
+                for entry in history
+            )
+        )
+
+    def test_manual_wait_status_without_reminder_keeps_existing_value(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        step = self.service.get_workflow(workflow_id).steps[0]
+        step_with_reminder = self.service.update_step_status(
+            step.id,
+            StepStatusUpdate(
+                estado=StepStatus.ESPERA,
+                nota="Primera pausa con recordatorio",
+                fecha_recordatorio_espera=start_of_utc_day(4),
+                usuario="tester",
+            ),
+        )
+
+        updated = self.service.update_step_status(
+            step_with_reminder.id,
+            StepStatusUpdate(
+                estado=StepStatus.ESPERA,
+                usuario="tester",
+                nota="Queda en pausa sin redefinir recordatorio",
+            ),
+        )
+
+        self.assertEqual(updated.fecha_recordatorio_espera.date(), start_of_utc_day(4).date())
+
+    def test_can_update_waiting_reminder_for_paused_and_external_steps(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        step = self.service.get_workflow(workflow_id).steps[0]
+        self.service.update_step_status(
+            step.id,
+            StepStatusUpdate(
+                estado=StepStatus.ESPERA,
+                usuario="tester",
+                nota="Pausa inicial",
+            ),
+        )
+        paused_step = self.service.get_workflow(workflow_id).steps[0]
+
+        paused_updated = self.service.update_step_waiting_reminder(
+            paused_step.id,
+            StepWaitingReminderUpdate(
+                fecha_recordatorio_espera=start_of_utc_day(5),
+                usuario="tester",
+                nota="Revisar el jueves",
+            ),
+        )
+        self.assertEqual(paused_updated.fecha_recordatorio_espera.date(), start_of_utc_day(5).date())
+
+        external_wait_step = self.service.complete_step(
+            paused_updated.id,
+            StepCompletePayload(
+                usuario="tester",
+                comentario="Queda a la espera externa",
+                resultado_cierre="Queda a la espera externa",
+                observaciones=None,
+                transition_type=StepTransitionType.WAIT_EXTERNAL,
+                external_wait=ExternalWaitInput(
+                    que_se_espera="Aprobacion externa",
+                    esperando_de="Cliente",
+                    detalle="Pendiente de revision",
+                    referencia_externa="REV-55",
+                    fecha_recordatorio=start_of_utc_day(6),
+                ),
+            ),
+        )
+        self.assertEqual(external_wait_step.estado, StepStatus.ESPERANDO_RESPUESTA)
+        self.assertEqual(external_wait_step.fecha_recordatorio_espera.date(), start_of_utc_day(6).date())
+
+        external_updated = self.service.update_step_waiting_reminder(
+            external_wait_step.id,
+            StepWaitingReminderUpdate(
+                fecha_recordatorio_espera=None,
+                usuario="tester",
+                nota="Ya no hace falta seguimiento",
+            ),
+        )
+        self.assertIsNone(external_updated.fecha_recordatorio_espera)
+        history = self.service.list_history(external_wait_step.id)
+        self.assertTrue(any(entry.campo == "fecha_recordatorio_espera" for entry in history))
+
+    def test_cannot_update_waiting_reminder_for_non_waiting_step(self) -> None:
+        workflow_id = self._start_workflow(build_linear_template())
+        step = self.service.get_workflow(workflow_id).steps[0]
+
+        with self.assertRaises(BusinessRuleError):
+            self.service.update_step_waiting_reminder(
+                step.id,
+                StepWaitingReminderUpdate(
+                    fecha_recordatorio_espera=start_of_utc_day(2),
+                    usuario="tester",
+                ),
+            )
 
     def test_wait_since_clears_when_flow_leaves_wait_and_recalculates_on_reentry(self) -> None:
         workflow_id = self._start_workflow(build_linear_template())

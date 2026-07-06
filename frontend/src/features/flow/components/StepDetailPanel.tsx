@@ -28,7 +28,7 @@ import {
 import { flushSync } from "react-dom";
 import { Link as RouterLink } from "react-router-dom";
 
-import { updateStep } from "../api";
+import { updateStep, updateStepWaitingReminder } from "../api";
 import { AttachmentDraftGrid } from "./AttachmentDraftGrid";
 import { ReminderDateField } from "./ReminderDateField";
 import type {
@@ -52,6 +52,7 @@ import {
   formatElapsedTime,
   getTodayLocalDateInput,
   isPastCalendarDateInput,
+  isWaitingStepStatus,
   openNativeDateInputPicker,
   toCalendarDateUtcIso,
 } from "../utils";
@@ -147,6 +148,9 @@ export function StepDetailPanel({
   const [executionDateDraft, setExecutionDateDraft] = useState("");
   const [savingExecutionDate, setSavingExecutionDate] = useState(false);
   const executionDateInputRef = useRef<HTMLInputElement | null>(null);
+  const [isWaitingReminderEditing, setIsWaitingReminderEditing] = useState(false);
+  const [waitingReminderDraft, setWaitingReminderDraft] = useState("");
+  const [savingWaitingReminder, setSavingWaitingReminder] = useState(false);
 
   useEffect(() => {
     if (!step) {
@@ -184,6 +188,9 @@ export function StepDetailPanel({
     setIsExecutionDateEditing(false);
     setExecutionDateDraft(toCalendarDateInputValue(step.fecha_ejecucion_estimada));
     setSavingExecutionDate(false);
+    setIsWaitingReminderEditing(false);
+    setWaitingReminderDraft(toCalendarDateInputValue(step.fecha_recordatorio_espera));
+    setSavingWaitingReminder(false);
     setStepEditError(null);
     setStepToastOpen(false);
   }, [step?.id, step?.estado, step?.expected_external_event, step?.external_reference, step?.external_wait_reason]);
@@ -214,6 +221,8 @@ export function StepDetailPanel({
     !["finalizado", "cancelado"].includes(workflowStatus) &&
     Boolean(onEditJournalComment);
   const isWaitingExternal = step.estado === "esperando_respuesta";
+  const isWaitingStep = isWaitingStepStatus(step.estado);
+  const showWaitingReminder = isWaitingStep || Boolean(step.fecha_recordatorio_espera);
   const latestJournalItem = buildJournalItems(history, comments).find(
     (item) => item.body.trim().length > 0 || item.attachments.length > 0
   );
@@ -225,6 +234,7 @@ export function StepDetailPanel({
   const displayStepName = stepDraftName.trim() || step.nombre;
   const displayStepDescription = stepDraftDescription.trim();
   const todayLocalDateInput = getTodayLocalDateInput();
+  const waitingReminderCurrentValue = toCalendarDateInputValue(step.fecha_recordatorio_espera);
 
   async function handleSubmitJournal(input: StepJournalEntryInput) {
     if (operationLocked) {
@@ -548,6 +558,56 @@ export function StepDetailPanel({
     }
   }
 
+  function startWaitingReminderEdit() {
+    if (operationLocked || !step || !isWaitingStep) return;
+    setWaitingReminderDraft(waitingReminderCurrentValue);
+    setStepEditError(null);
+    setIsWaitingReminderEditing(true);
+  }
+
+  function cancelWaitingReminderEdit() {
+    setWaitingReminderDraft(waitingReminderCurrentValue);
+    setStepEditError(null);
+    setIsWaitingReminderEditing(false);
+  }
+
+  async function saveWaitingReminderEdit() {
+    if (!step) return;
+    if (operationLocked) {
+      setStepEditError(operationLockMessage ?? "El flow está en modo solo lectura.");
+      return;
+    }
+    if (!isWaitingStep) {
+      setStepEditError("Solo puedes editar el recordatorio en tareas en espera.");
+      return;
+    }
+    if (waitingReminderDraft === waitingReminderCurrentValue) {
+      setIsWaitingReminderEditing(false);
+      return;
+    }
+    if (isPastCalendarDateInput(waitingReminderDraft, todayLocalDateInput)) {
+      setStepEditError("El recordatorio no puede ser una fecha pasada.");
+      return;
+    }
+
+    try {
+      setSavingWaitingReminder(true);
+      setStepEditError(null);
+      const updatedStep = await updateStepWaitingReminder(step.id, {
+        fecha_recordatorio_espera: toCalendarDateUtcIso(waitingReminderDraft),
+        usuario: DEFAULT_ACTOR,
+      });
+      setWaitingReminderDraft(toCalendarDateInputValue(updatedStep.fecha_recordatorio_espera));
+      await onStepUpdated?.(updatedStep);
+      setIsWaitingReminderEditing(false);
+      setStepToastOpen(true);
+    } catch (err) {
+      setStepEditError(err instanceof Error ? err.message : "No se pudo actualizar el recordatorio de espera");
+    } finally {
+      setSavingWaitingReminder(false);
+    }
+  }
+
   return (
     <Card
       sx={{
@@ -636,6 +696,57 @@ export function StepDetailPanel({
                   }}
                   sx={{ maxWidth: 210 }}
                 />
+              ) : null}
+              {showWaitingReminder ? (
+                <Card variant="outlined">
+                  <CardContent sx={{ p: 1.5 }}>
+                    <Stack spacing={1}>
+                      <Stack direction="row" spacing={1} sx={{ alignItems: "center", justifyContent: "space-between" }}>
+                        <Typography variant="subtitle2" color="text.secondary">
+                          Recordatorio de espera
+                        </Typography>
+                        {isWaitingStep && !isWaitingReminderEditing ? (
+                          <Button
+                            variant="text"
+                            color="inherit"
+                            size="small"
+                            onClick={startWaitingReminderEdit}
+                            disabled={savingWaitingReminder || operationLocked}
+                          >
+                            {step.fecha_recordatorio_espera ? "Editar" : "Agregar"}
+                          </Button>
+                        ) : null}
+                      </Stack>
+                      {isWaitingReminderEditing ? (
+                        <Stack spacing={1}>
+                          <ReminderDateField
+                            value={waitingReminderDraft}
+                            onChange={(value) => {
+                              setWaitingReminderDraft(value);
+                              setStepEditError(null);
+                            }}
+                            label="Recordatorio de espera"
+                            helperText="Opcional. Fecha para revisar o retomar esta espera."
+                            disabled={savingWaitingReminder || operationLocked}
+                            compact
+                          />
+                          <Stack direction="row" spacing={1}>
+                            <Button variant="text" color="inherit" onClick={cancelWaitingReminderEdit} disabled={savingWaitingReminder}>
+                              Cancelar
+                            </Button>
+                            <Button variant="contained" onClick={() => void saveWaitingReminderEdit()} disabled={savingWaitingReminder}>
+                              {savingWaitingReminder ? "Guardando..." : "Guardar"}
+                            </Button>
+                          </Stack>
+                        </Stack>
+                      ) : (
+                        <Typography variant="body2" color={step.fecha_recordatorio_espera ? "text.primary" : "text.secondary"}>
+                          {step.fecha_recordatorio_espera ? formatCalendarDate(step.fecha_recordatorio_espera) : "Sin fecha definida"}
+                        </Typography>
+                      )}
+                    </Stack>
+                  </CardContent>
+                </Card>
               ) : null}
               {operationLocked && operationLockMessage && <Alert severity="warning">{operationLockMessage}</Alert>}
               {stepEditError && <Alert severity="error">{stepEditError}</Alert>}
@@ -765,7 +876,7 @@ export function StepDetailPanel({
                         {latestMessage}
                       </Typography>
                     </Stack>
-                    {isWaitingExternal ? (
+                    {isWaitingStep ? (
                       <Stack spacing={0.25}>
                         <Typography variant="body2" color="text.secondary">
                           En espera desde
@@ -795,16 +906,35 @@ export function StepDetailPanel({
                         {step.fecha_ejecucion_estimada ? formatCalendarDate(step.fecha_ejecucion_estimada) : "Sin fecha definida"}
                       </Typography>
                     </Stack>
+                    {showWaitingReminder ? (
+                      <Stack spacing={0.5}>
+                        <Typography variant="body2" color="text.secondary">
+                          Recordatorio de espera
+                        </Typography>
+                        <Typography variant="body2" color={step.fecha_recordatorio_espera ? "text.primary" : "text.secondary"}>
+                          {step.fecha_recordatorio_espera ? formatCalendarDate(step.fecha_recordatorio_espera) : "Sin fecha definida"}
+                        </Typography>
+                      </Stack>
+                    ) : null}
                   </Stack>
                 </CardContent>
               </Card>
               ) : null}
 
-              {isWaitingExternal ? (
+              {isWaitingStep ? (
                 <Card variant="outlined">
                   <CardContent sx={{ p: 1.75 }}>
                     <Stack spacing={1}>
-                      <Alert severity="info">Esperando respuesta externa</Alert>
+                      <Stack direction="row" spacing={1} sx={{ alignItems: "center", justifyContent: "space-between" }}>
+                        <Alert severity="info" sx={{ flex: 1 }}>
+                          {isWaitingExternal ? "Esperando respuesta externa" : "Tarea en espera"}
+                        </Alert>
+                        {isWaitingStep && !isWaitingReminderEditing ? (
+                          <Button variant="text" color="inherit" onClick={startWaitingReminderEdit} disabled={savingWaitingReminder || operationLocked}>
+                            {step.fecha_recordatorio_espera ? "Editar recordatorio" : "Agregar recordatorio"}
+                          </Button>
+                        ) : null}
+                      </Stack>
                       <Stack spacing={0.25}>
                         <Typography variant="body2" color="text.secondary">
                           En espera desde
@@ -815,6 +945,38 @@ export function StepDetailPanel({
                         <Typography variant="caption" color="text.secondary">
                           {formatCalendarDate(step.fecha_estado_actual)}
                         </Typography>
+                      </Stack>
+                      <Stack spacing={0.35}>
+                        <Typography variant="body2" color="text.secondary">
+                          Recordatorio de espera
+                        </Typography>
+                        {isWaitingReminderEditing ? (
+                          <Stack spacing={1}>
+                            <ReminderDateField
+                              value={waitingReminderDraft}
+                              onChange={(value) => {
+                                setWaitingReminderDraft(value);
+                                setStepEditError(null);
+                              }}
+                              label="Recordatorio de espera"
+                              helperText="Opcional. Fecha para revisar o retomar esta espera."
+                              disabled={savingWaitingReminder || operationLocked}
+                              compact
+                            />
+                            <Stack direction="row" spacing={1}>
+                              <Button variant="text" color="inherit" onClick={cancelWaitingReminderEdit} disabled={savingWaitingReminder}>
+                                Cancelar
+                              </Button>
+                              <Button variant="contained" onClick={() => void saveWaitingReminderEdit()} disabled={savingWaitingReminder}>
+                                {savingWaitingReminder ? "Guardando..." : "Guardar"}
+                              </Button>
+                            </Stack>
+                          </Stack>
+                        ) : (
+                          <Typography variant="body2" color={step.fecha_recordatorio_espera ? "text.primary" : "text.secondary"}>
+                            {step.fecha_recordatorio_espera ? formatCalendarDate(step.fecha_recordatorio_espera) : "Sin fecha definida"}
+                          </Typography>
+                        )}
                       </Stack>
                       {step.expected_external_event && (
                         <Typography variant="body2" color="text.secondary">

@@ -14,6 +14,7 @@ from app.schemas.workflow import (
     StepHistoryPublic,
     StepInstancePublic,
     StepUpdate,
+    StepWaitingReminderUpdate,
     StepStatusUpdate,
 )
 from app.services.workflow_service import WorkflowService
@@ -65,6 +66,20 @@ def update_step_status(
 ) -> StepInstancePublic:
     try:
         return service.update_step_status(step_id, payload)
+    except EntityNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except BusinessRuleError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.patch("/{step_id}/waiting-reminder", response_model=StepInstancePublic)
+def update_step_waiting_reminder(
+    step_id: str,
+    payload: StepWaitingReminderUpdate,
+    service: WorkflowService = Depends(get_workflow_service),
+) -> StepInstancePublic:
+    try:
+        return service.update_step_waiting_reminder(step_id, payload)
     except EntityNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except BusinessRuleError as exc:

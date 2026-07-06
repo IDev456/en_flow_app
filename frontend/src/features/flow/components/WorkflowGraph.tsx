@@ -11,7 +11,7 @@ import { Box, Button, Card, Chip, IconButton, Stack, TextField, Typography } fro
 
 import { getStatusToken } from "../../../theme";
 import type { Step } from "../types";
-import { formatCalendarDate, formatElapsedTime, getStatusTone, humanizeStatus } from "../utils";
+import { formatCalendarDate, formatElapsedTime, getStatusTone, humanizeStatus, isWaitingStepStatus } from "../utils";
 import type { WorkflowVariant } from "./WorkflowVariantSwitcher";
 
 type WorkflowGraphProps = {
@@ -149,14 +149,15 @@ function renderStepRecordsIndicator(hasRecords: boolean): React.ReactElement {
 }
 
 function renderStepContextDate(step: Step): React.ReactElement {
-  const isWaitingExternal = step.estado === "esperando_respuesta";
+  const isWaitingStep = isWaitingStepStatus(step.estado);
   const isClosed = step.estado === "completado" || step.estado === "cancelada";
-  const waitingElapsed = isWaitingExternal ? formatElapsedTime(step.fecha_estado_actual) : null;
-  const waitingDate = isWaitingExternal ? formatCalendarDate(step.fecha_estado_actual) : null;
+  const waitingElapsed = isWaitingStep ? formatElapsedTime(step.fecha_estado_actual) : null;
+  const waitingDate = isWaitingStep ? formatCalendarDate(step.fecha_estado_actual) : null;
+  const waitingReminderDate = step.fecha_recordatorio_espera ? formatCalendarDate(step.fecha_recordatorio_espera) : null;
   const executionDate = step.fecha_ejecucion_estimada ? formatCalendarDate(step.fecha_ejecucion_estimada) : null;
   const closedDate = step.fecha_cierre ? formatCalendarDate(step.fecha_cierre) : null;
 
-  if (isWaitingExternal) {
+  if (isWaitingStep) {
     return (
       <Stack
         direction="row"
@@ -182,6 +183,9 @@ function renderStepContextDate(step: Step): React.ReactElement {
           </Typography>
           <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
             En espera desde: {waitingDate}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
+            Recordatorio de espera: {waitingReminderDate ?? "Sin fecha definida"}
           </Typography>
         </Stack>
       </Stack>

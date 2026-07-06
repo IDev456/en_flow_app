@@ -15,6 +15,7 @@ import type {
   StepDateUpdateInput,
   QuickCaptureInput,
   StepStatusUpdateInput,
+  StepWaitingReminderUpdateInput,
   StepUpdateInput,
   Trigger,
   TriggerCreateInput,
@@ -128,6 +129,10 @@ export function updateStepDate(stepId: string, input: StepDateUpdateInput) {
 
 export function updateStepStatus(stepId: string, input: StepStatusUpdateInput) {
   return apiPatch<Step>(`/steps/${stepId}/status`, input);
+}
+
+export function updateStepWaitingReminder(stepId: string, input: StepWaitingReminderUpdateInput) {
+  return apiPatch<Step>(`/steps/${stepId}/waiting-reminder`, input);
 }
 
 export function completeStep(stepId: string, input: StepCompleteInput) {

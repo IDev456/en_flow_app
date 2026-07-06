@@ -152,6 +152,7 @@ def _migrate_workflow_schema() -> None:
         "ALTER TABLE steps ADD COLUMN IF NOT EXISTS external_wait_reason VARCHAR(300)",
         "ALTER TABLE steps ADD COLUMN IF NOT EXISTS external_reference VARCHAR(200)",
         "ALTER TABLE steps ADD COLUMN IF NOT EXISTS fecha_ejecucion_estimada TIMESTAMPTZ",
+        "ALTER TABLE steps ADD COLUMN IF NOT EXISTS fecha_recordatorio_espera TIMESTAMPTZ",
         "ALTER TABLE triggers ADD COLUMN IF NOT EXISTS ambito VARCHAR(20)",
         "ALTER TABLE workflows ADD COLUMN IF NOT EXISTS ambito VARCHAR(20)",
         "ALTER TABLE workflows ADD COLUMN IF NOT EXISTS fecha_espera_desde TIMESTAMPTZ",
@@ -181,6 +182,13 @@ def _migrate_workflow_schema() -> None:
         WHERE workflows.id = source.workflow_id
           AND workflows.estado = 'esperando_respuesta'
           AND workflows.fecha_espera_desde IS NULL
+        """,
+        """
+        UPDATE steps
+        SET fecha_recordatorio_espera = fecha_vencimiento
+        WHERE fecha_recordatorio_espera IS NULL
+          AND fecha_vencimiento IS NOT NULL
+          AND estado IN ('espera', 'esperando_respuesta')
         """,
     ]
     if is_postgres:

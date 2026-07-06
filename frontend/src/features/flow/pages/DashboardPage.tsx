@@ -9,7 +9,7 @@ import { Link as RouterLink } from "react-router-dom";
 import { getDailyBoard } from "../api";
 import { StatusBadge } from "../components/StatusBadge";
 import type { DailyBoardData, Step, WorkflowSummary } from "../types";
-import { formatCalendarDate, formatElapsedTime, getVisibleWorkflowStatusValue } from "../utils";
+import { formatCalendarDate, formatElapsedTime, getVisibleWorkflowStatusValue, isWaitingStepStatus } from "../utils";
 
 export function DashboardPage() {
   const [board, setBoard] = useState<DailyBoardData | null>(null);
@@ -162,15 +162,20 @@ function SectionCard({ title, subtitle, items, emptyTitle, emptyDescription, emp
 function WorkItemCard({ step }: { step: Step }) {
   const elapsed = formatElapsedTime(step.ultimo_comentario_fecha ?? step.fecha_estado_actual);
   const latest = step.ultimo_comentario?.trim();
+  const isWaitingStep = isWaitingStepStatus(step.estado);
   const isWaitingExternal = step.estado === "esperando_respuesta";
-  const timingLabel = isWaitingExternal
+  const timingLabel = isWaitingStep
     ? `Esperando desde: ${formatCalendarDate(step.fecha_estado_actual)}`
     : step.fecha_ejecucion_estimada
       ? `Fecha operativa: ${formatCalendarDate(step.fecha_ejecucion_estimada)}`
       : "Sin fecha operativa";
-  const followUpLabel = step.fecha_vencimiento
-    ? `${isWaitingExternal ? "Seguimiento" : "Recordatorio"}: ${formatCalendarDate(step.fecha_vencimiento)}`
-    : (isWaitingExternal ? "Sin seguimiento" : "Sin recordatorio");
+  const followUpLabel = isWaitingStep
+    ? step.fecha_recordatorio_espera
+      ? `Recordatorio de espera: ${formatCalendarDate(step.fecha_recordatorio_espera)}`
+      : "Sin recordatorio de espera"
+    : step.fecha_vencimiento
+      ? `${isWaitingExternal ? "Seguimiento" : "Recordatorio"}: ${formatCalendarDate(step.fecha_vencimiento)}`
+      : (isWaitingExternal ? "Sin seguimiento" : "Sin recordatorio");
 
   return (
     <Card

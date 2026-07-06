@@ -163,6 +163,7 @@ class StepModel(Base):
     fecha_creacion: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     fecha_inicio: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     fecha_vencimiento: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    fecha_recordatorio_espera: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     fecha_ejecucion_estimada: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     fecha_cierre: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     resultado: Mapped[str | None] = mapped_column(Text)
