@@ -143,7 +143,7 @@ export function FlowAgendaPage() {
     workflowId: string,
     stepId: string,
     nextDateInput: string,
-    previousDateInput: string
+    previousDateInput: string | null
   ) {
     const previousWorkflow = workflowsById[workflowId];
     if (!previousWorkflow) {
@@ -151,7 +151,7 @@ export function FlowAgendaPage() {
     }
 
     const nextIsoValue = toCalendarDateUtcIso(nextDateInput);
-    const previousIsoValue = toCalendarDateUtcIso(previousDateInput);
+    const previousIsoValue = previousDateInput ? toCalendarDateUtcIso(previousDateInput) : null;
 
     setWorkflowsById((current) => {
       const workflow = current[workflowId];

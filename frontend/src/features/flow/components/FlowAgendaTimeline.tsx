@@ -15,7 +15,7 @@ type FlowAgendaTimelineProps = {
     workflowId: string,
     stepId: string,
     nextDateInput: string,
-    previousDateInput: string
+    previousDateInput: string | null
   ) => Promise<void>;
 };
 
@@ -97,7 +97,7 @@ function TimelineBackground({ columns, height }: { columns: FlowAgendaColumn[]; 
   );
 }
 
-function TodayGuide({ model, zIndex = 1 }: { model: FlowAgendaModel; zIndex?: number }) {
+function TodayGuide({ model, zIndex = 6 }: { model: FlowAgendaModel; zIndex?: number }) {
   const theme = useTheme();
   const todayGuideLeft = getTodayGuideLeft(model);
 
@@ -287,9 +287,20 @@ function AgendaTrack({
   );
 }
 
-function TimelinePlaceholder({ model, label = "Sin fecha" }: { model: FlowAgendaModel; label?: string }) {
+function TimelinePlaceholder({
+  model,
+  label = "Sin fecha",
+  onAssign,
+  stepId,
+}: {
+  model: FlowAgendaModel;
+  label?: string;
+  onAssign?: (nextDateInput: string) => Promise<void>;
+  stepId?: string | null;
+}) {
   const theme = useTheme();
   const timelineWidth = model.columns.length * DAY_COLUMN_WIDTH;
+  const [hoverColumnIndex, setHoverColumnIndex] = useState<number | null>(null);
 
   return (
     <Box
@@ -304,8 +315,35 @@ function TimelinePlaceholder({ model, label = "Sin fecha" }: { model: FlowAgenda
       }}
     >
       <TimelineBackground columns={model.columns} height={FLOW_ROW_HEIGHT} />
-      <TodayGuide model={model} zIndex={1} />
+      <TodayGuide model={model} />
+
       <Box
+        onMouseMove={(event) => {
+          if (!onAssign) return;
+          const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+          const x = event.clientX - rect.left;
+          const columnIndex = Math.floor((x / timelineWidth) * model.columns.length);
+          if (columnIndex < 0 || columnIndex >= model.columns.length) {
+            setHoverColumnIndex(null);
+            return;
+          }
+          setHoverColumnIndex(columnIndex);
+        }}
+        onMouseLeave={() => setHoverColumnIndex(null)}
+        onClick={async (event) => {
+          if (!onAssign || !stepId) return;
+          const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+          const x = event.clientX - rect.left;
+          const columnIndex = Math.floor((x / timelineWidth) * model.columns.length);
+          if (columnIndex < 0 || columnIndex >= model.columns.length) return;
+          const column = model.columns[columnIndex];
+          const target = column.dateInput;
+          try {
+            await onAssign(target);
+          } catch {
+            // caller handles toast/revert
+          }
+        }}
         sx={{
           position: "absolute",
           top: 10,
@@ -319,8 +357,24 @@ function TimelinePlaceholder({ model, label = "Sin fecha" }: { model: FlowAgenda
           border: "1px dashed",
           borderColor: alpha(theme.palette.warning.main, 0.42),
           bgcolor: alpha(theme.palette.warning.main, theme.palette.mode === "dark" ? 0.13 : 0.07),
+          cursor: onAssign && stepId ? "pointer" : "default",
         }}
       >
+        {hoverColumnIndex !== null ? (
+          <Box
+            aria-hidden
+            sx={{
+              position: "absolute",
+              top: 0,
+              left: hoverColumnIndex * DAY_COLUMN_WIDTH,
+              width: DAY_COLUMN_WIDTH,
+              height: "100%",
+              bgcolor: (theme) => alpha(theme.palette.primary.main, 0.12),
+              pointerEvents: "none",
+              borderRadius: `${theme.appShape.sm}px`,
+            }}
+          />
+        ) : null}
         <Typography variant="caption" color="text.secondary">
           {label}
         </Typography>
@@ -356,6 +410,7 @@ function AgendaRow({
   dragState,
   setDragState,
   onDragFinish,
+  onExecutionDateChange,
   contentInset = 0,
 }: {
   item: FlowAgendaItem;
@@ -364,6 +419,7 @@ function AgendaRow({
   dragState: DragState | null;
   setDragState: Dispatch<SetStateAction<DragState | null>>;
   onDragFinish: (dragState: DragState, commit: boolean) => Promise<void>;
+  onExecutionDateChange: (workflowId: string, stepId: string, nextDateInput: string, previousDateInput: string | null) => Promise<void>;
   contentInset?: number;
 }) {
   const theme = useTheme();
@@ -383,7 +439,7 @@ function AgendaRow({
           width: "100%",
           position: "sticky",
           left: 0,
-          zIndex: 3,
+          zIndex: 30,
           minHeight: FLOW_ROW_HEIGHT,
           height: FLOW_ROW_HEIGHT,
           borderRadius: 0,
@@ -452,7 +508,17 @@ function AgendaRow({
       </Box>
 
       {item.isWithoutDate ? (
-        <TimelinePlaceholder model={model} label="Sin fecha" />
+        <TimelinePlaceholder
+          model={model}
+          label="Sin fecha"
+          stepId={item.row.stepId ?? null}
+          onAssign={(nextDateInput) => {
+            if (!item.row.stepId) {
+              return Promise.reject(new Error("no-step"));
+            }
+            return onExecutionDateChange(item.row.id, item.row.stepId, nextDateInput, null);
+          }}
+        />
       ) : (
         <AgendaTrack
           item={item}
@@ -494,7 +560,7 @@ function UnscheduledGroupRow({
         sx={{
           position: "sticky",
           left: 0,
-          zIndex: 3,
+          zIndex: 30,
           minHeight: FLOW_ROW_HEIGHT,
           height: FLOW_ROW_HEIGHT,
           justifyContent: "flex-start",
@@ -742,10 +808,10 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
                   color="primary"
                   sx={{
                     position: "absolute",
-                    top: "calc(100% - 10px)",
+                    top: -18,
                     left: getTodayGuideLeft(model) ?? 0,
                     height: 20,
-                    zIndex: 3,
+                    zIndex: 10,
                     transform: "translateX(-50%)",
                     pointerEvents: "none",
                     "& .MuiChip-label": {
@@ -812,7 +878,7 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
                   sx={{
                     position: "sticky",
                     left: 0,
-                    zIndex: 4,
+                    zIndex: 30,
                     minHeight: GROUP_ROW_HEIGHT,
                     height: GROUP_ROW_HEIGHT,
                     justifyContent: "flex-start",
@@ -851,48 +917,48 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
                 <AgendaGroupTimeline model={model} />
               </Box>
 
-              {!isCollapsed
-                ? (
+              {!isCollapsed ? (
+                <>
+                  {group.scheduledItems.map((item) => (
+                    <AgendaRow
+                      key={item.id}
+                      item={item}
+                      model={model}
+                      onWorkflowOpen={onWorkflowOpen}
+                      dragState={dragState}
+                      setDragState={setDragState}
+                      onDragFinish={handleBarPointerFinish}
+                      onExecutionDateChange={onExecutionDateChange}
+                    />
+                  ))}
+                  {group.unscheduledItems.length > 0 ? (
                     <>
-                      {group.scheduledItems.map((item) => (
-                        <AgendaRow
-                          key={item.id}
-                          item={item}
-                          model={model}
-                          onWorkflowOpen={onWorkflowOpen}
-                          dragState={dragState}
-                          setDragState={setDragState}
-                          onDragFinish={handleBarPointerFinish}
-                        />
-                      ))}
-                      {group.unscheduledItems.length > 0 ? (
-                        <>
-                          <UnscheduledGroupRow
-                            count={group.unscheduledItems.length}
-                            model={model}
-                            expanded={!(collapsedUnscheduledGroups[group.key] ?? true)}
-                            onToggle={() => handleToggleUnscheduledGroup(group.key)}
-                            contentInset={UNSCHEDULED_GROUP_INDENT}
-                          />
-                          {!(collapsedUnscheduledGroups[group.key] ?? true)
-                            ? group.unscheduledItems.map((item) => (
-                                <AgendaRow
-                                  key={item.id}
-                                  item={item}
-                                  model={model}
-                                  onWorkflowOpen={onWorkflowOpen}
-                                  dragState={dragState}
-                                  setDragState={setDragState}
-                                  onDragFinish={handleBarPointerFinish}
-                                  contentInset={UNSCHEDULED_ITEM_INDENT}
-                                />
-                              ))
-                            : null}
-                        </>
-                      ) : null}
+                      <UnscheduledGroupRow
+                        count={group.unscheduledItems.length}
+                        model={model}
+                        expanded={!(collapsedUnscheduledGroups[group.key] ?? true)}
+                        onToggle={() => handleToggleUnscheduledGroup(group.key)}
+                        contentInset={UNSCHEDULED_GROUP_INDENT}
+                      />
+                      {!(collapsedUnscheduledGroups[group.key] ?? true)
+                        ? group.unscheduledItems.map((item) => (
+                            <AgendaRow
+                              key={item.id}
+                              item={item}
+                              model={model}
+                              onWorkflowOpen={onWorkflowOpen}
+                              dragState={dragState}
+                              setDragState={setDragState}
+                              onDragFinish={handleBarPointerFinish}
+                              onExecutionDateChange={onExecutionDateChange}
+                              contentInset={UNSCHEDULED_ITEM_INDENT}
+                            />
+                          ))
+                        : null}
                     </>
-                  )
-                : null}
+                  ) : null}
+                </>
+              ) : null}
             </Box>
           );
         })}
