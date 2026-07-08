@@ -21,7 +21,7 @@ type FlowAgendaTimelineProps = {
 
 const LEFT_COLUMN_WIDTH = 360;
 const DAY_COLUMN_WIDTH = 68;
-const GROUP_ROW_HEIGHT = 42;
+const GROUP_ROW_HEIGHT = 58;
 const FLOW_ROW_HEIGHT = 50;
 const TIMELINE_MAX_HEIGHT = "calc(100vh - 250px)";
 const FLOW_INFO_GRID_TEMPLATE = "minmax(0, 1fr) 108px";
@@ -442,6 +442,7 @@ function ProjectHeaderLabel({
       sx={{
         width: "100%",
         display: "flex",
+        alignItems: "stretch",
         minHeight: GROUP_ROW_HEIGHT,
         height: GROUP_ROW_HEIGHT,
         justifyContent: "flex-start",
@@ -463,15 +464,19 @@ function ProjectHeaderLabel({
           }),
         }}
       />
-      <Typography variant="body2" sx={{ fontWeight: 700 }}>
-        {groupLabel}
-      </Typography>
-      <Typography variant="caption" color="text.secondary">
-        {flowCount} {flowCount === 1 ? "flow" : "flows"}
-      </Typography>
-      {unscheduledCount > 0 ? (
-        <Chip size="small" variant="outlined" color="warning" label={`${unscheduledCount} sin fecha`} />
-      ) : null}
+      <Stack spacing={0.25} sx={{ minWidth: 0, justifyContent: "center", py: 0.5 }}>
+        <Typography variant="body2" noWrap sx={{ fontWeight: 700 }}>
+          {groupLabel}
+        </Typography>
+        <Stack direction="row" spacing={0.8} sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 0.4 }}>
+          <Typography variant="caption" color="text.secondary">
+            {flowCount} {flowCount === 1 ? "flow" : "flows"}
+          </Typography>
+          {unscheduledCount > 0 ? (
+            <Chip size="small" variant="outlined" color="warning" label={`${unscheduledCount} sin fecha`} />
+          ) : null}
+        </Stack>
+      </Stack>
     </ButtonBase>
   );
 }
