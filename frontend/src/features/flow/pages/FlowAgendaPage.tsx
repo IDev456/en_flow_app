@@ -18,6 +18,7 @@ import { buildFlowRows, getLatestMovementAt, pickRelevantStep, type FlowTableIte
 import { buildFlowAgendaModel } from "../utils/flowAgenda";
 import {
   activeAmbitoOptions,
+  DEFAULT_ACTOR,
   getRelativeCalendarDateInput,
   getTodayLocalDateInput,
   getStoredActiveAmbito,
@@ -233,7 +234,10 @@ export function FlowAgendaPage() {
     });
 
     try {
-      await updateStepWaitingReminder(stepId, { fecha_recordatorio_espera: nextIsoValue });
+      await updateStepWaitingReminder(stepId, {
+        fecha_recordatorio_espera: nextIsoValue,
+        usuario: DEFAULT_ACTOR,
+      });
       showToast("Recordatorio de espera actualizado.", "success");
     } catch (err) {
       setWorkflowsById((current) => {
