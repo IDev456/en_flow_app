@@ -1,7 +1,21 @@
 {
   "permissions": {
     "allow": [
-      "Bash(docker exec *)"
+      "Bash(docker exec *)",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(find / -iname \"*chromium-cli*\" -not -path \"*/node_modules/*\" 2>/dev/null | head -20; echo \"---\"; ls /tmp/claude-1000/bundled-skills/2.1.202/ 2>/dev/null)",
+      "Read(//tmp/claude-1000/bundled-skills/2.1.202/**)",
+      "Bash(npm ls *)",
+      "Bash(docker restart *)",
+      "Bash(timeout 8 curl -sf -o /dev/null -w \"%{http_code}\\\\n\" https://pypi.org)",
+      "Bash(timeout 8 curl -sf -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:5173)",
+      "Bash(pip install *)",
+      "Bash(python3 -m playwright install --with-deps chromium)",
+      "Bash(python3 -m pip --version)",
+      "Bash(python3 -m ensurepip --version)",
+      "Bash(apt-get update *)",
+      "Bash(docker run *)"
     ]
   }
 }
