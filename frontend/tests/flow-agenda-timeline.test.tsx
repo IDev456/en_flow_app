@@ -20,7 +20,7 @@ function buildRow(overrides: Partial<FlowGridRow> = {}): FlowGridRow {
     primaryDateInput: overrides.primaryDateInput ?? overrides.executionDateInput ?? "",
     executionDateInput: overrides.executionDateInput ?? "",
     waitingReminderInput: overrides.waitingReminderInput ?? "",
-    waitingSinceInput: "",
+    waitingSinceInput: overrides.waitingSinceInput ?? "",
     completedAtInput: "",
     executionAt: 0,
     contextualDateInput: overrides.contextualDateInput ?? overrides.executionDateInput ?? "",
@@ -75,12 +75,15 @@ test("renderiza un único bloque por proyecto y alinea los flows con fecha como 
         model={model}
         onWorkflowOpen={() => {}}
         onExecutionDateChange={async () => {}}
+        onWaitingReminderChange={async () => {}}
       />
     </ThemeProvider>
   );
 
   assert.equal((html.match(/data-testid="agenda-project-group-/g) ?? []).length, 1);
   assert.match(html, /data-testid="agenda-row-workflow-1:active_execution"/);
+  assert.match(html, /data-agenda-tooltip="detailed"/);
+  assert.match(html, /Mover fecha del flow Flow con fecha/);
   assert.match(html, /data-content-inset="34"/);
   assert.match(html, /data-testid="agenda-body-scroll"/);
   assert.match(html, /data-testid="agenda-gantt-scroll"/);
@@ -139,12 +142,14 @@ test("renderiza campanas para waits con recordatorio y subgrupo propio para wait
         model={model}
         onWorkflowOpen={() => {}}
         onExecutionDateChange={async () => {}}
+        onWaitingReminderChange={async () => {}}
       />
     </ThemeProvider>
   );
 
   assert.match(html, /data-testid="agenda-waiting-reminder-workflow-waiting"/);
-  assert.doesNotMatch(html, /Mover fecha del flow Flow esperando respuesta/);
+  assert.match(html, /Mover recordatorio del flow Flow esperando respuesta/);
   assert.match(html, />En espera sin recordatorio</);
   assert.match(html, /1 espera sin recordatorio/);
+  assert.match(html, />Sin recordatorio</);
 });

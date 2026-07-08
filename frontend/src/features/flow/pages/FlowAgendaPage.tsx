@@ -10,7 +10,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import { useToastContext } from "../../../components/Toast";
 import { PageContainer } from "../../../components/layout/PageContainer";
-import { getWorkflow, listActiveWorkflows, listTriggers, updateStep } from "../api";
+import { getWorkflow, listActiveWorkflows, listTriggers, updateStep, updateStepWaitingReminder } from "../api";
 import { FlowAgendaTimeline } from "../components/FlowAgendaTimeline";
 import { navigateWithOrigin } from "../navigation";
 import type { TriggerDetail, WorkflowDetail } from "../types";
@@ -200,6 +200,66 @@ export function FlowAgendaPage() {
     }
   }
 
+  async function handleWaitingReminderChange(
+    workflowId: string,
+    stepId: string,
+    nextDateInput: string,
+    previousDateInput: string | null
+  ) {
+    const previousWorkflow = workflowsById[workflowId];
+    if (!previousWorkflow) {
+      throw new Error("No se encontró el flow para actualizar.");
+    }
+
+    const nextIsoValue = toCalendarDateUtcIso(nextDateInput);
+    const previousIsoValue = previousDateInput ? toCalendarDateUtcIso(previousDateInput) : null;
+
+    setWorkflowsById((current) => {
+      const workflow = current[workflowId];
+      if (!workflow) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [workflowId]: {
+          ...workflow,
+          fecha_recordatorio_actual: nextIsoValue,
+          steps: workflow.steps.map((step) =>
+            step.id === stepId ? { ...step, fecha_recordatorio_espera: nextIsoValue } : step
+          ),
+        },
+      };
+    });
+
+    try {
+      await updateStepWaitingReminder(stepId, { fecha_recordatorio_espera: nextIsoValue });
+      showToast("Recordatorio de espera actualizado.", "success");
+    } catch (err) {
+      setWorkflowsById((current) => {
+        const workflow = current[workflowId];
+        if (!workflow) {
+          return current;
+        }
+
+        return {
+          ...current,
+          [workflowId]: {
+            ...workflow,
+            fecha_recordatorio_actual: previousIsoValue,
+            steps: workflow.steps.map((step) =>
+              step.id === stepId ? { ...step, fecha_recordatorio_espera: previousIsoValue } : step
+            ),
+          },
+        };
+      });
+
+      const message = err instanceof Error ? err.message : "No se pudo actualizar el recordatorio de espera.";
+      showToast(message, "error");
+      throw err;
+    }
+  }
+
   const actions = (
     <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ width: "100%", alignItems: { xs: "stretch", md: "center" } }}>
       <Paper variant="outlined" sx={{ overflow: "hidden", width: { xs: "100%", sm: 260 } }}>
@@ -360,6 +420,7 @@ export function FlowAgendaPage() {
             model={agendaModel}
             onWorkflowOpen={handleWorkflowOpen}
             onExecutionDateChange={handleExecutionDateChange}
+            onWaitingReminderChange={handleWaitingReminderChange}
           />
         </Stack>
       )}

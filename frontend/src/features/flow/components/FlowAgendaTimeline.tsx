@@ -18,6 +18,12 @@ type FlowAgendaTimelineProps = {
     nextDateInput: string,
     previousDateInput: string | null
   ) => Promise<void>;
+  onWaitingReminderChange: (
+    workflowId: string,
+    stepId: string,
+    nextDateInput: string,
+    previousDateInput: string | null
+  ) => Promise<void>;
 };
 
 const LEFT_COLUMN_WIDTH = 360;
@@ -58,6 +64,7 @@ function getTodayGuideLeft(model: FlowAgendaModel) {
 
 type DragState = {
   itemId: string;
+  itemKind: FlowAgendaItem["kind"];
   workflowId: string;
   stepId: string;
   pointerId: number;
@@ -165,6 +172,44 @@ function TodayGuideOverlay({
   );
 }
 
+function buildAgendaTooltipLines(
+  item: FlowAgendaItem,
+  primaryDateLabel: string,
+  primaryDateInput: string | null
+) {
+  return [
+    { label: "Estado", value: item.kind === "waiting_reminder" ? "Esperando respuesta" : "En proceso" },
+    primaryDateInput ? { label: primaryDateLabel, value: formatCalendarDate(primaryDateInput) } : null,
+    item.row.waitingSinceInput ? { label: "Esperando desde", value: formatCalendarDate(item.row.waitingSinceInput) } : null,
+    item.row.movementLabel ? { label: "Último movimiento", value: item.row.movementLabel } : null,
+    item.row.lastRecord ? { label: "Último registro", value: item.row.lastRecord } : null,
+  ].filter((line): line is { label: string; value: string } => Boolean(line));
+}
+
+function AgendaTooltipContent({
+  item,
+  lines,
+}: {
+  item: FlowAgendaItem;
+  lines: Array<{ label: string; value: string }>;
+}) {
+  return (
+    <Stack spacing={0.45} sx={{ py: 0.2 }}>
+      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+        {item.row.taskName}
+      </Typography>
+      {lines.map((line) => (
+        <Typography key={line.label} variant="caption" sx={{ display: "block" }}>
+          <Box component="span" sx={{ fontWeight: 700 }}>
+            {line.label}:
+          </Box>{" "}
+          {line.value}
+        </Typography>
+      ))}
+    </Stack>
+  );
+}
+
 function AgendaTrack({
   item,
   model,
@@ -190,6 +235,7 @@ function AgendaTrack({
   const relativeLabel = formatRelativeCalendarDay(effectiveStartDateInput);
   const relativeLabelLeft = barLeft + barWidth + 8;
   const isDraggable = Boolean(item.row.stepId && item.startDateInput);
+  const tooltipLines = buildAgendaTooltipLines(item, "Fecha de ejecución", effectiveStartDateInput);
 
   return (
     <Box
@@ -204,102 +250,106 @@ function AgendaTrack({
     >
       <TimelineBackground columns={model.columns} height={FLOW_ROW_HEIGHT} />
 
-      <Box
-        role="button"
-        aria-label={`Mover fecha del flow ${item.row.taskName}`}
-        onPointerDown={(event) => {
-          if (!isDraggable || !item.row.stepId || !item.startDateInput) {
-            return;
-          }
-          const originalDay = toCalendarDayValue(item.startDateInput);
-          if (originalDay === null) {
-            return;
-          }
-          event.preventDefault();
-          event.stopPropagation();
-          event.currentTarget.setPointerCapture?.(event.pointerId);
-          const nextDragState: DragState = {
-            itemId: item.id,
-            workflowId: item.row.id,
-            stepId: item.row.stepId,
-            pointerId: event.pointerId,
-            startClientX: event.clientX,
-            originalDateInput: item.startDateInput,
-            originalDay,
-            previewDay: originalDay,
-          };
-          setDragState(nextDragState);
-        }}
-        sx={{
-          position: "absolute",
-          left: barLeft,
-          top: 9,
-          width: barWidth,
-          height: 30,
-          borderRadius: `${theme.appShape.md}px`,
-          border: "1px solid",
-          borderColor: item.isOverdue ? statusToken.accent : statusToken.border,
-          bgcolor:
-            activeDrag
-              ? alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.28 : 0.18)
-              : item.isOverdue
-                ? alpha(theme.palette.warning.main, theme.palette.mode === "dark" ? 0.28 : 0.18)
-                : statusToken.container,
-          color: item.isOverdue ? theme.palette.warning.dark : statusToken.onContainer,
-          boxShadow: item.isOverdue ? `inset 0 0 0 1px ${alpha(theme.palette.warning.main, 0.14)}` : "none",
-          cursor: isDraggable ? (activeDrag ? "grabbing" : "grab") : "default",
-          touchAction: "none",
-          userSelect: "none",
-          "&:hover": {
-            bgcolor: activeDrag
-              ? alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.32 : 0.22)
-              : item.isOverdue
-                ? alpha(theme.palette.warning.main, theme.palette.mode === "dark" ? 0.34 : 0.24)
-                : alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.2 : 0.12),
-          },
-        }}
-        onPointerMove={(event) => {
-          if (!isDraggable || !item.row.stepId || !item.startDateInput) {
-            return;
-          }
-          const currentDrag = dragState?.itemId === item.id ? dragState : null;
-          if (!currentDrag || currentDrag.pointerId !== event.pointerId) {
-            return;
-          }
-          event.preventDefault();
-          event.stopPropagation();
-          const deltaDays = Math.round((event.clientX - currentDrag.startClientX) / DAY_COLUMN_WIDTH);
-          const nextPreviewDay = Math.min(
-            model.visibleEndDay,
-            Math.max(model.visibleStartDay, currentDrag.originalDay + deltaDays)
-          );
-          if (nextPreviewDay === currentDrag.previewDay) {
-            return;
-          }
-          setDragState((previous) =>
-            previous && previous.itemId === item.id ? { ...previous, previewDay: nextPreviewDay } : previous
-          );
-        }}
-        onPointerUp={async (event) => {
-          const currentDrag = dragState?.itemId === item.id ? dragState : null;
-          if (!currentDrag || currentDrag.pointerId !== event.pointerId) {
-            return;
-          }
-          event.preventDefault();
-          event.stopPropagation();
-          event.currentTarget.releasePointerCapture?.(event.pointerId);
-          await onDragFinish(currentDrag, true);
-        }}
-        onPointerCancel={async (event) => {
-          const currentDrag = dragState?.itemId === item.id ? dragState : null;
-          if (!currentDrag || currentDrag.pointerId !== event.pointerId) {
-            return;
-          }
-          event.preventDefault();
-          event.stopPropagation();
-          await onDragFinish(currentDrag, false);
-        }}
-      />
+      <Tooltip title={<AgendaTooltipContent item={item} lines={tooltipLines} />}>
+        <Box
+          data-agenda-tooltip="detailed"
+          role="button"
+          aria-label={`Mover fecha del flow ${item.row.taskName}`}
+          onPointerDown={(event) => {
+            if (!isDraggable || !item.row.stepId || !item.startDateInput) {
+              return;
+            }
+            const originalDay = toCalendarDayValue(item.startDateInput);
+            if (originalDay === null) {
+              return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            event.currentTarget.setPointerCapture?.(event.pointerId);
+            const nextDragState: DragState = {
+              itemId: item.id,
+              itemKind: item.kind,
+              workflowId: item.row.id,
+              stepId: item.row.stepId,
+              pointerId: event.pointerId,
+              startClientX: event.clientX,
+              originalDateInput: item.startDateInput,
+              originalDay,
+              previewDay: originalDay,
+            };
+            setDragState(nextDragState);
+          }}
+          sx={{
+            position: "absolute",
+            left: barLeft,
+            top: 9,
+            width: barWidth,
+            height: 30,
+            borderRadius: `${theme.appShape.md}px`,
+            border: "1px solid",
+            borderColor: item.isOverdue ? statusToken.accent : statusToken.border,
+            bgcolor:
+              activeDrag
+                ? alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.28 : 0.18)
+                : item.isOverdue
+                  ? alpha(theme.palette.warning.main, theme.palette.mode === "dark" ? 0.28 : 0.18)
+                  : statusToken.container,
+            color: item.isOverdue ? theme.palette.warning.dark : statusToken.onContainer,
+            boxShadow: item.isOverdue ? `inset 0 0 0 1px ${alpha(theme.palette.warning.main, 0.14)}` : "none",
+            cursor: isDraggable ? (activeDrag ? "grabbing" : "grab") : "default",
+            touchAction: "none",
+            userSelect: "none",
+            "&:hover": {
+              bgcolor: activeDrag
+                ? alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.32 : 0.22)
+                : item.isOverdue
+                  ? alpha(theme.palette.warning.main, theme.palette.mode === "dark" ? 0.34 : 0.24)
+                  : alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.2 : 0.12),
+            },
+          }}
+          onPointerMove={(event) => {
+            if (!isDraggable || !item.row.stepId || !item.startDateInput) {
+              return;
+            }
+            const currentDrag = dragState?.itemId === item.id ? dragState : null;
+            if (!currentDrag || currentDrag.pointerId !== event.pointerId) {
+              return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            const deltaDays = Math.round((event.clientX - currentDrag.startClientX) / DAY_COLUMN_WIDTH);
+            const nextPreviewDay = Math.min(
+              model.visibleEndDay,
+              Math.max(model.visibleStartDay, currentDrag.originalDay + deltaDays)
+            );
+            if (nextPreviewDay === currentDrag.previewDay) {
+              return;
+            }
+            setDragState((previous) =>
+              previous && previous.itemId === item.id ? { ...previous, previewDay: nextPreviewDay } : previous
+            );
+          }}
+          onPointerUp={async (event) => {
+            const currentDrag = dragState?.itemId === item.id ? dragState : null;
+            if (!currentDrag || currentDrag.pointerId !== event.pointerId) {
+              return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            event.currentTarget.releasePointerCapture?.(event.pointerId);
+            await onDragFinish(currentDrag, true);
+          }}
+          onPointerCancel={async (event) => {
+            const currentDrag = dragState?.itemId === item.id ? dragState : null;
+            if (!currentDrag || currentDrag.pointerId !== event.pointerId) {
+              return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            await onDragFinish(currentDrag, false);
+          }}
+        />
+      </Tooltip>
 
       {relativeLabel ? (
         <Typography
@@ -461,11 +511,15 @@ function TimelineTextRow({
 function WaitingReminderMarker({
   item,
   model,
-  onWorkflowOpen,
+  dragState,
+  setDragState,
+  onDragFinish,
 }: {
   item: FlowAgendaItem;
   model: FlowAgendaModel;
-  onWorkflowOpen: (workflowId: string) => void;
+  dragState: DragState | null;
+  setDragState: Dispatch<SetStateAction<DragState | null>>;
+  onDragFinish: (dragState: DragState, commit: boolean) => Promise<void>;
 }) {
   const theme = useTheme();
   const timelineWidth = model.columns.length * DAY_COLUMN_WIDTH;
@@ -477,13 +531,12 @@ function WaitingReminderMarker({
   const markerCenter = (item.startDay - model.visibleStartDay) * DAY_COLUMN_WIDTH + DAY_COLUMN_WIDTH / 2;
   const relativeLabel = formatRelativeCalendarDay(item.startDateInput);
   const markerTone = item.isOverdue ? theme.palette.warning : theme.palette.primary;
-  const tooltipLines = [
-    { label: "Estado", value: "Esperando respuesta" },
-    { label: "Recordatorio", value: formatCalendarDate(item.startDateInput) },
-    item.row.waitingSinceInput ? { label: "Esperando desde", value: formatCalendarDate(item.row.waitingSinceInput) } : null,
-    item.row.movementLabel ? { label: "Último movimiento", value: item.row.movementLabel } : null,
-    item.row.lastRecord ? { label: "Último registro", value: item.row.lastRecord } : null,
-  ].filter((line): line is { label: string; value: string } => Boolean(line));
+  const activeDrag = dragState?.itemId === item.id ? dragState : null;
+  const effectiveStartDay = activeDrag?.previewDay ?? item.startDay;
+  const effectiveStartDateInput = effectiveStartDay === null ? item.startDateInput : formatCalendarDayInput(effectiveStartDay);
+  const effectiveMarkerCenter = (effectiveStartDay - model.visibleStartDay) * DAY_COLUMN_WIDTH + DAY_COLUMN_WIDTH / 2;
+  const isDraggable = Boolean(item.row.stepId && item.startDateInput);
+  const tooltipLines = buildAgendaTooltipLines(item, "Recordatorio", effectiveStartDateInput);
 
   return (
     <Box
@@ -498,29 +551,80 @@ function WaitingReminderMarker({
     >
       <TimelineBackground columns={model.columns} height={FLOW_ROW_HEIGHT} />
       <Tooltip
-        title={
-          <Stack spacing={0.45} sx={{ py: 0.2 }}>
-            <Typography variant="body2" sx={{ fontWeight: 700 }}>
-              {item.row.taskName}
-            </Typography>
-            {tooltipLines.map((line) => (
-              <Typography key={line.label} variant="caption" sx={{ display: "block" }}>
-                <Box component="span" sx={{ fontWeight: 700 }}>
-                  {line.label}:
-                </Box>{" "}
-                {line.value}
-              </Typography>
-            ))}
-          </Stack>
-        }
+        title={<AgendaTooltipContent item={item} lines={tooltipLines} />}
       >
         <ButtonBase
           data-testid={`agenda-waiting-reminder-${item.row.id}`}
-          aria-label={`Abrir recordatorio del flow ${item.row.taskName}`}
-          onClick={() => onWorkflowOpen(item.row.id)}
+          data-agenda-tooltip="detailed"
+          aria-label={`Mover recordatorio del flow ${item.row.taskName}`}
+          onPointerDown={(event) => {
+            if (!isDraggable || !item.row.stepId || !item.startDateInput) {
+              return;
+            }
+            const originalDay = toCalendarDayValue(item.startDateInput);
+            if (originalDay === null) {
+              return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            event.currentTarget.setPointerCapture?.(event.pointerId);
+            const nextDragState: DragState = {
+              itemId: item.id,
+              itemKind: item.kind,
+              workflowId: item.row.id,
+              stepId: item.row.stepId,
+              pointerId: event.pointerId,
+              startClientX: event.clientX,
+              originalDateInput: item.startDateInput,
+              originalDay,
+              previewDay: originalDay,
+            };
+            setDragState(nextDragState);
+          }}
+          onPointerMove={(event) => {
+            if (!isDraggable || !item.row.stepId || !item.startDateInput) {
+              return;
+            }
+            const currentDrag = dragState?.itemId === item.id ? dragState : null;
+            if (!currentDrag || currentDrag.pointerId !== event.pointerId) {
+              return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            const deltaDays = Math.round((event.clientX - currentDrag.startClientX) / DAY_COLUMN_WIDTH);
+            const nextPreviewDay = Math.min(
+              model.visibleEndDay,
+              Math.max(model.visibleStartDay, currentDrag.originalDay + deltaDays)
+            );
+            if (nextPreviewDay === currentDrag.previewDay) {
+              return;
+            }
+            setDragState((previous) =>
+              previous && previous.itemId === item.id ? { ...previous, previewDay: nextPreviewDay } : previous
+            );
+          }}
+          onPointerUp={async (event) => {
+            const currentDrag = dragState?.itemId === item.id ? dragState : null;
+            if (!currentDrag || currentDrag.pointerId !== event.pointerId) {
+              return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            event.currentTarget.releasePointerCapture?.(event.pointerId);
+            await onDragFinish(currentDrag, true);
+          }}
+          onPointerCancel={async (event) => {
+            const currentDrag = dragState?.itemId === item.id ? dragState : null;
+            if (!currentDrag || currentDrag.pointerId !== event.pointerId) {
+              return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            await onDragFinish(currentDrag, false);
+          }}
           sx={{
             position: "absolute",
-            left: markerCenter,
+            left: effectiveMarkerCenter,
             top: "50%",
             width: 28,
             height: 28,
@@ -528,9 +632,11 @@ function WaitingReminderMarker({
             borderRadius: "999px",
             border: "1px solid",
             borderColor: alpha(markerTone.main, 0.34),
-            bgcolor: alpha(markerTone.main, theme.palette.mode === "dark" ? 0.2 : 0.12),
+            bgcolor: alpha(markerTone.main, theme.palette.mode === "dark" ? (activeDrag ? 0.32 : 0.2) : activeDrag ? 0.2 : 0.12),
             color: markerTone.main,
             zIndex: 2,
+            cursor: isDraggable ? (activeDrag ? "grabbing" : "grab") : "pointer",
+            touchAction: "none",
             "&:hover": {
               bgcolor: alpha(markerTone.main, theme.palette.mode === "dark" ? 0.28 : 0.18),
             },
@@ -546,11 +652,11 @@ function WaitingReminderMarker({
           sx={{
             position: "absolute",
             top: "50%",
-            left: markerCenter + 20,
-            width: Math.max(0, timelineWidth - markerCenter - 28),
+            left: effectiveMarkerCenter + 20,
+            width: Math.max(0, timelineWidth - effectiveMarkerCenter - 28),
             transform: "translateY(-50%)",
             fontWeight: 700,
-            color: item.isOverdue ? "warning.dark" : "text.secondary",
+            color: activeDrag ? "primary.main" : item.isOverdue ? "warning.dark" : "text.secondary",
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -747,19 +853,43 @@ function AgendaRowTimeline({
   dragState,
   setDragState,
   onDragFinish,
-  onWorkflowOpen,
   onExecutionDateChange,
+  onWaitingReminderChange,
 }: {
   item: FlowAgendaItem;
   model: FlowAgendaModel;
   dragState: DragState | null;
   setDragState: Dispatch<SetStateAction<DragState | null>>;
   onDragFinish: (dragState: DragState, commit: boolean) => Promise<void>;
-  onWorkflowOpen: (workflowId: string) => void;
   onExecutionDateChange: (workflowId: string, stepId: string, nextDateInput: string, previousDateInput: string | null) => Promise<void>;
+  onWaitingReminderChange: (workflowId: string, stepId: string, nextDateInput: string, previousDateInput: string | null) => Promise<void>;
 }) {
   if (item.kind === "waiting_reminder") {
-    return <WaitingReminderMarker item={item} model={model} onWorkflowOpen={onWorkflowOpen} />;
+    if (item.isWithoutDate) {
+      return (
+        <TimelinePlaceholder
+          model={model}
+          label="Sin recordatorio"
+          stepId={item.row.stepId ?? null}
+          onAssign={(nextDateInput) => {
+            if (!item.row.stepId) {
+              return Promise.reject(new Error("no-step"));
+            }
+            return onWaitingReminderChange(item.row.id, item.row.stepId, nextDateInput, null);
+          }}
+        />
+      );
+    }
+
+    return (
+      <WaitingReminderMarker
+        item={item}
+        model={model}
+        dragState={dragState}
+        setDragState={setDragState}
+        onDragFinish={onDragFinish}
+      />
+    );
   }
 
   if (item.isWithoutDate) {
@@ -901,7 +1031,7 @@ function WaitingWithoutReminderGroupTimeline({ model }: { model: FlowAgendaModel
   return <TimelineTextRow model={model} label="Sin recordatorio" />;
 }
 
-export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChange }: FlowAgendaTimelineProps) {
+export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChange, onWaitingReminderChange }: FlowAgendaTimelineProps) {
   const theme = useTheme();
   const timelineWidth = model.columns.length * DAY_COLUMN_WIDTH;
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -1035,12 +1165,21 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
     }
 
     try {
-      await onExecutionDateChange(
-        nextDragState.workflowId,
-        nextDragState.stepId,
-        nextDateInput,
-        nextDragState.originalDateInput
-      );
+      if (nextDragState.itemKind === "waiting_reminder") {
+        await onWaitingReminderChange(
+          nextDragState.workflowId,
+          nextDragState.stepId,
+          nextDateInput,
+          nextDragState.originalDateInput
+        );
+      } else {
+        await onExecutionDateChange(
+          nextDragState.workflowId,
+          nextDragState.stepId,
+          nextDateInput,
+          nextDragState.originalDateInput
+        );
+      }
     } catch {
       // La página ya revierte el estado optimista y muestra feedback.
     } finally {
@@ -1371,8 +1510,8 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
                             dragState={dragState}
                             setDragState={setDragState}
                             onDragFinish={handleBarPointerFinish}
-                            onWorkflowOpen={onWorkflowOpen}
                             onExecutionDateChange={onExecutionDateChange}
+                            onWaitingReminderChange={onWaitingReminderChange}
                           />
                         ))}
                         {group.unscheduledItems.length > 0 ? (
@@ -1387,8 +1526,8 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
                                     dragState={dragState}
                                     setDragState={setDragState}
                                     onDragFinish={handleBarPointerFinish}
-                                    onWorkflowOpen={onWorkflowOpen}
                                     onExecutionDateChange={onExecutionDateChange}
+                                    onWaitingReminderChange={onWaitingReminderChange}
                                   />
                                 ))
                               : null}
@@ -1406,8 +1545,8 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
                                     dragState={dragState}
                                     setDragState={setDragState}
                                     onDragFinish={handleBarPointerFinish}
-                                    onWorkflowOpen={onWorkflowOpen}
                                     onExecutionDateChange={onExecutionDateChange}
+                                    onWaitingReminderChange={onWaitingReminderChange}
                                   />
                                 ))
                               : null}
