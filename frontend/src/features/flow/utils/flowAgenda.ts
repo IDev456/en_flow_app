@@ -225,6 +225,28 @@ function matchesAgendaQuickFilter(
   return true;
 }
 
+export type FlowAgendaQuickFilterCounts = Record<FlowAgendaQuickFilter, number>;
+
+export function countFlowAgendaQuickFilters(rows: FlowGridRow[], todayInput: string): FlowAgendaQuickFilterCounts {
+  const todayDay = toCalendarDayValue(todayInput);
+  if (todayDay === null) {
+    throw new Error(`Fecha actual inválida para Agenda: ${todayInput}`);
+  }
+
+  const items = rows
+    .filter((row) => matchesFlowStateFilter(row.status, "operational"))
+    .map((row) => buildAgendaItem(row, todayDay));
+
+  const counts: FlowAgendaQuickFilterCounts = { all: items.length, today: 0, this_week: 0, next_week: 0, without_date: 0 };
+  for (const item of items) {
+    if (matchesAgendaQuickFilter(item, todayDay, todayInput, "today")) counts.today += 1;
+    if (matchesAgendaQuickFilter(item, todayDay, todayInput, "this_week")) counts.this_week += 1;
+    if (matchesAgendaQuickFilter(item, todayDay, todayInput, "next_week")) counts.next_week += 1;
+    if (matchesAgendaQuickFilter(item, todayDay, todayInput, "without_date")) counts.without_date += 1;
+  }
+  return counts;
+}
+
 export function buildFlowAgendaModel(
   rows: FlowGridRow[],
   todayInput: string,

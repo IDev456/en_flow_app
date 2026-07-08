@@ -1,23 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import ArrowForwardRoundedIcon from "@mui/icons-material/ArrowForwardRounded";
+import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import PersonOutlineRoundedIcon from "@mui/icons-material/PersonOutlineRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
+import ScheduleRoundedIcon from "@mui/icons-material/ScheduleRounded";
 import WorkOutlineRoundedIcon from "@mui/icons-material/WorkOutlineRounded";
 import { alpha } from "@mui/material/styles";
 import {
   Alert,
-  Box,
   Button,
+  ButtonBase,
   Chip,
   CircularProgress,
   IconButton,
+  Menu,
+  MenuItem,
   Paper,
   Stack,
   Tab,
   Tabs,
-  ToggleButton,
-  ToggleButtonGroup,
   Typography,
 } from "@mui/material";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -29,7 +32,7 @@ import { FlowAgendaTimeline } from "../components/FlowAgendaTimeline";
 import { navigateWithOrigin } from "../navigation";
 import type { TriggerDetail, WorkflowDetail } from "../types";
 import { buildFlowRows, getLatestMovementAt, pickRelevantStep, type FlowTableItem } from "../utils/flowTable";
-import { buildFlowAgendaModel, type FlowAgendaQuickFilter } from "../utils/flowAgenda";
+import { buildFlowAgendaModel, countFlowAgendaQuickFilters, type FlowAgendaQuickFilter } from "../utils/flowAgenda";
 import {
   activeAmbitoOptions,
   DEFAULT_ACTOR,
@@ -58,9 +61,63 @@ const QUICK_FILTER_LABELS: Record<FlowAgendaQuickFilter, string> = Object.fromEn
   QUICK_FILTER_OPTIONS.map((option) => [option.value, option.label])
 ) as Record<FlowAgendaQuickFilter, string>;
 
+const AGENDA_TITLES: Record<FlowAgendaQuickFilter, string> = {
+  all: "Agenda",
+  today: "Agenda hoy",
+  this_week: "Agenda esta semana",
+  next_week: "Agenda semana próxima",
+  without_date: "Agenda sin fecha",
+};
+
+const AGENDA_SUBTITLE_PREFIX: Record<FlowAgendaQuickFilter, string> = {
+  all: "Activos y en espera",
+  today: "Activos y en espera",
+  this_week: "Activos y en espera",
+  next_week: "Activos y en espera",
+  without_date: "Flows activos sin fecha de ejecución y esperas sin recordatorio",
+};
+
+const AGENDA_EMPTY_STATE_MESSAGES: Record<FlowAgendaQuickFilter, string> = {
+  all: "No hay flows operativos para mostrar en Agenda con el ámbito seleccionado.",
+  today: "No hay flows en la agenda de hoy.",
+  this_week: "No hay flows en la agenda de esta semana.",
+  next_week: "No hay flows en la agenda de la semana próxima.",
+  without_date: "No hay flows sin fecha para mostrar.",
+};
+
 function getAmbitoModeIcon(ambito: ActiveAmbitoMode) {
   if (ambito === "laboral") return <WorkOutlineRoundedIcon sx={{ fontSize: 14 }} />;
   return <PersonOutlineRoundedIcon sx={{ fontSize: 14 }} />;
+}
+
+function renderAgendaQuickFilterOptionLabel(
+  option: { value: FlowAgendaQuickFilter; label: string },
+  count: number,
+  selected: boolean
+) {
+  const isDateHighlight = (option.value === "today" || option.value === "this_week" || option.value === "next_week") && count > 0;
+  const isWithoutDateHighlight = option.value === "without_date" && count > 0;
+
+  return (
+    <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+      <Typography variant="body2" sx={{ color: "text.primary", fontWeight: selected ? 500 : 400 }}>
+        {option.label}
+      </Typography>
+      <Typography
+        variant="body2"
+        sx={(theme) => ({
+          color: isWithoutDateHighlight
+            ? theme.palette.warning.main
+            : isDateHighlight
+              ? theme.palette.status.active.accent
+              : theme.palette.text.secondary,
+          fontWeight: isWithoutDateHighlight || isDateHighlight ? 700 : 500,
+        })}
+      >
+        ({count})
+      </Typography>
+    </Stack>
+  );
 }
 
 export function FlowAgendaPage() {
@@ -76,6 +133,7 @@ export function FlowAgendaPage() {
   const today = useMemo(() => getTodayLocalDateInput(), []);
   const [visibleStartDateInput, setVisibleStartDateInput] = useState(() => getRelativeCalendarDateInput(-7, getTodayLocalDateInput()));
   const [quickFilter, setQuickFilter] = useState<FlowAgendaQuickFilter>("all");
+  const [quickFilterAnchorEl, setQuickFilterAnchorEl] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
     void loadData();
@@ -146,6 +204,7 @@ export function FlowAgendaPage() {
       }),
     [flowRows, today, quickFilter, visibleStartDateInput]
   );
+  const quickFilterCounts = useMemo(() => countFlowAgendaQuickFilters(flowRows, today), [flowRows, today]);
 
   function handleWorkflowOpen(workflowId: string) {
     navigateWithOrigin(navigate, location, `/workflows/${workflowId}`, "/agenda");
@@ -366,6 +425,54 @@ export function FlowAgendaPage() {
         </Tabs>
       </Paper>
 
+      <Paper variant="outlined" sx={{ px: 0.75, py: 0.5, display: "flex", alignItems: "center", gap: 0.25 }}>
+        <ButtonBase
+          aria-label="Filtro rápido de agenda"
+          onClick={(event) => setQuickFilterAnchorEl(event.currentTarget)}
+          sx={{
+            px: 1,
+            py: 0.5,
+            borderRadius: (theme) => `${theme.appShape.sm}px`,
+            color: "text.secondary",
+            "&:hover": { backgroundColor: "action.hover" },
+          }}
+        >
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+            <ScheduleRoundedIcon fontSize="small" />
+            <Typography variant="body2" sx={{ whiteSpace: "nowrap" }}>
+              {QUICK_FILTER_LABELS[quickFilter]}
+            </Typography>
+            <ExpandMoreIcon fontSize="small" />
+          </Stack>
+        </ButtonBase>
+        {quickFilter !== "all" ? (
+          <IconButton
+            aria-label="Restablecer filtro rápido"
+            size="small"
+            onClick={() => {
+              handleQuickFilterChange("all");
+              setQuickFilterAnchorEl(null);
+            }}
+          >
+            <CancelOutlinedIcon fontSize="small" />
+          </IconButton>
+        ) : null}
+        <Menu anchorEl={quickFilterAnchorEl} open={Boolean(quickFilterAnchorEl)} onClose={() => setQuickFilterAnchorEl(null)}>
+          {QUICK_FILTER_OPTIONS.map((option) => (
+            <MenuItem
+              key={option.value}
+              selected={option.value === quickFilter}
+              onClick={() => {
+                handleQuickFilterChange(option.value);
+                setQuickFilterAnchorEl(null);
+              }}
+            >
+              {renderAgendaQuickFilterOptionLabel(option, quickFilterCounts[option.value] ?? 0, option.value === quickFilter)}
+            </MenuItem>
+          ))}
+        </Menu>
+      </Paper>
+
       <Paper
         variant="outlined"
         sx={{
@@ -388,8 +495,8 @@ export function FlowAgendaPage() {
 
   return (
     <PageContainer
-      title="Agenda"
-      subtitle="Vista temporal de ejecución, atrasos y recordatorios de flows."
+      title={AGENDA_TITLES[quickFilter]}
+      subtitle={`${AGENDA_SUBTITLE_PREFIX[quickFilter]} · ${agendaModel.items.length} ${agendaModel.items.length === 1 ? "flow visible" : "flows visibles"}`}
       actions={actions}
     >
       {loading ? (
@@ -410,39 +517,8 @@ export function FlowAgendaPage() {
         </Alert>
       ) : (
         <Stack spacing={1.25}>
-          <Paper
-            variant="outlined"
-            sx={{
-              px: 1.25,
-              py: 1,
-            }}
-          >
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between", alignItems: { xs: "stretch", sm: "center" } }}>
-              <Typography variant="body2" color="text.secondary">
-                Filtros rápidos
-              </Typography>
-              <ToggleButtonGroup
-                exclusive
-                size="small"
-                value={quickFilter}
-                onChange={(_, value: FlowAgendaQuickFilter | null) => handleQuickFilterChange(value)}
-                sx={{ flexWrap: "wrap" }}
-              >
-                {QUICK_FILTER_OPTIONS.map((option) => (
-                  <ToggleButton key={option.value} value={option.value}>
-                    {option.label}
-                  </ToggleButton>
-                ))}
-              </ToggleButtonGroup>
-            </Stack>
-          </Paper>
-
           {agendaModel.items.length === 0 ? (
-            <Alert severity="info">
-              {quickFilter === "all"
-                ? "No hay flows operativos para mostrar en Agenda con el ámbito seleccionado."
-                : "No hay flows para mostrar con el filtro seleccionado."}
-            </Alert>
+            <Alert severity="info">{AGENDA_EMPTY_STATE_MESSAGES[quickFilter]}</Alert>
           ) : (
             <>
               <Paper
@@ -454,19 +530,10 @@ export function FlowAgendaPage() {
                 }}
               >
                 <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", md: "center" } }}>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">
-                      {agendaModel.items.length} {agendaModel.items.length === 1 ? "flow visible" : "flows visibles"}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Rango visible: {agendaModel.visibleStartDateInput} a {agendaModel.visibleEndDateInput}
-                    </Typography>
-                  </Box>
-                  <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", flexWrap: "wrap" }}>
-                    <Chip label="Activos y en espera" color="primary" variant="outlined" />
-                    <Chip label={`Filtro: ${QUICK_FILTER_LABELS[quickFilter]}`} variant="outlined" />
-                    <Chip label={`Hoy · ${agendaModel.todayInput}`} color="primary" />
-                  </Stack>
+                  <Typography variant="caption" color="text.secondary">
+                    Rango visible: {agendaModel.visibleStartDateInput} a {agendaModel.visibleEndDateInput}
+                  </Typography>
+                  <Chip label={`Hoy · ${agendaModel.todayInput}`} color="primary" />
                 </Stack>
               </Paper>
 
