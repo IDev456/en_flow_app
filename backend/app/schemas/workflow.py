@@ -209,6 +209,35 @@ class WorkflowSummary(WorkflowInstanceBase):
     contexto_fecha_actual: WorkflowDateContext = WorkflowDateContext.SIN_FECHA
 
 
+class WorkflowListRequirement(BaseModel):
+    id: str
+    label: str
+
+
+class WorkflowListItem(BaseModel):
+    id: str
+    ambito: Ambito | None = None
+    estado_visible: str
+    objetivo_final: str | None = Field(default=None, max_length=200)
+    nombre_tarea: str
+    etiqueta_paso: str
+    step_id_relevante: str | None = None
+    fecha_inicio: datetime
+    contexto_fecha_actual: WorkflowDateContext = WorkflowDateContext.SIN_FECHA
+    fecha_ejecucion_actual: datetime | None = None
+    fecha_espera_desde: datetime | None = None
+    fecha_fin: datetime | None = None
+    fecha_recordatorio_actual: datetime | None = None
+    latest_movement_at: datetime | None = None
+    latest_meaningful_record: str = "Sin registros todavía"
+    linked_requirements: list[WorkflowListRequirement] = Field(default_factory=list)
+    requirements_count: int = Field(default=0, ge=0)
+    primary_requirement_label: str | None = None
+    can_cancel: bool = False
+    can_reactivate: bool = False
+    can_delete: bool = False
+
+
 class StepInstanceBase(BaseModel):
     codigo: str | None = Field(default=None, max_length=120)
     depends_on: list[str] = Field(default_factory=list)

@@ -67,7 +67,7 @@ import { DataGridEmptyState } from "../../../components/feedback/DataGridEmptySt
 import { PageContainer } from "../../../components/layout/PageContainer";
 import { useToastContext } from "../../../components/Toast";
 import { getStatusSemanticKey } from "../../../theme";
-import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, getWorkflow, linkWorkflowRequirement, listTriggers, listWorkflows, reactivateWorkflow, updateStep, updateTrigger, updateWorkflow } from "../api";
+import { cancelWorkflow, createTrigger, deleteTrigger, deleteWorkflow, linkWorkflowRequirement, listTriggers, listWorkflowListItems, reactivateWorkflow, updateStep, updateTrigger, updateWorkflow } from "../api";
 import {
   getNavigationLocationState,
   mergeNavigationState,
@@ -78,8 +78,8 @@ import { AmbitoChip } from "../components/AmbitoChip";
 import { FlowWorkspace, renderFlowQuickFilterOptionLabel, type FlowWorkspaceViewMeta } from "../components/FlowWorkspace";
 import { FlowStateFilterControl } from "../components/FlowStateFilterControl";
 import { StatusBadge } from "../components/StatusBadge";
-import type { Ambito, Step, TriggerDetail, WorkflowDetail } from "../types";
-import { groupFlowRowsByDate, matchesFlowQuickFilter } from "../utils/flowTable";
+import type { Ambito, TriggerDetail, WorkflowListItem } from "../types";
+import { buildFlowRows, getFlowCounts, type FlowGridRow } from "../utils/flowTable";
 import {
   activeAmbitoOptions,
   getStoredActiveAmbito,
@@ -92,15 +92,12 @@ import {
   getAmbitoLabel,
   humanizeStatus,
   getVisibleTriggerStatus,
-  getVisibleWorkflowStatus,
   isPastCalendarDateInput,
-  isNoisyAutomaticJournalText,
   matchesActiveAmbito,
   openNativeDateInputPicker,
   getStatusTone,
   setStoredActiveAmbito,
   getTodayLocalDateInput,
-  toCalendarDateInputValue,
   toCalendarDayValue,
   toCalendarDateUtcIso,
   type ActiveAmbitoMode,
@@ -138,58 +135,6 @@ type TriggerListRestoreState = {
   flowSortModel: GridSortModel;
   requirementSearchOpen: boolean;
   requirementSearchValue: string;
-};
-
-type FlowCardData = {
-  workflow: WorkflowDetail;
-  displayStatus: string;
-  relevantStep: Step | null;
-  latestMovementAt: string | null;
-  linkedRequirements: TriggerDetail[];
-};
-
-type LinkedRequirementRow = {
-  id: string;
-  label: string;
-};
-
-type FlowGridRow = {
-  id: string;
-  stepId: string | null;
-  ambito: Ambito;
-  status: string;
-  taskName: string;
-  stepLabel: string;
-  dateContext: WorkflowDetail["contexto_fecha_actual"];
-  primaryDateInput: string;
-  executionDateInput: string;
-  waitingSinceInput: string;
-  completedAtInput: string;
-  executionAt: number;
-  contextualDateInput: string;
-  contextualDateAt: number;
-  operationalSortValue: number;
-  lastRecord: string;
-  movementLabel: string;
-  movementAt: number;
-  movementDays: number | null;
-  isDueToday: boolean;
-  requirementsLabel: string;
-  primaryRequirementLabel: string;
-  extraRequirementCount: number;
-  requirementsCount: number;
-  linkedRequirements: LinkedRequirementRow[];
-  canCancel: boolean;
-  canReactivate: boolean;
-  canDelete: boolean;
-};
-
-type GroupedFlowSection = {
-  key: string;
-  dateInput: string | null;
-  label: string;
-  sortKey: number;
-  rows: FlowGridRow[];
 };
 
 type RequirementGridRow = {
@@ -537,107 +482,15 @@ function getDefaultFilterForView(view: ViewMode): FlowFilter {
   return view === "requirements" ? "operational" : "active";
 }
 
-function pickRelevantStep(workflow: WorkflowDetail): Step | null {
-  const byOrder = [...workflow.steps].sort((a, b) => a.orden - b.orden);
-
-  const active = byOrder.find((step) => step.estado === "activo");
-  if (active) return active;
-
-  const waitingExternal = byOrder.find((step) => step.estado === "esperando_respuesta");
-  if (waitingExternal) return waitingExternal;
-
-  const blocked = byOrder.find((step) => step.estado === "problema" || step.estado === "espera");
-  if (blocked) return blocked;
-
-  if (byOrder.length === 0) return null;
-
-  const byRecentState = [...workflow.steps].sort(
-    (a, b) => new Date(b.fecha_estado_actual).getTime() - new Date(a.fecha_estado_actual).getTime()
-  );
-  return byRecentState[0] ?? byOrder[0] ?? null;
-}
-
-function getLatestMovementAt(workflow: WorkflowDetail) {
-  return workflow.steps.reduce<string | null>((latest, step) => {
-    const commentAt = step.ultimo_comentario_fecha;
-    const stateAt = step.fecha_estado_actual;
-    const candidate =
-      commentAt && stateAt
-        ? (new Date(commentAt).getTime() > new Date(stateAt).getTime() ? commentAt : stateAt)
-        : (commentAt ?? stateAt);
-    if (!candidate) return latest;
-    if (!latest) return candidate;
-    return new Date(candidate).getTime() > new Date(latest).getTime() ? candidate : latest;
-  }, null);
-}
-
-function getLatestMeaningfulWorkflowRecord(workflow: WorkflowDetail) {
-  const latestByStep = workflow.steps
-    .map((step) => {
-      const text = step.ultimo_comentario?.trim() ?? "";
-      const timestamp = step.ultimo_comentario_fecha;
-      if (!text || !timestamp || isNoisyAutomaticJournalText(text)) {
-        return null;
-      }
-      const parsed = new Date(timestamp).getTime();
-      if (!Number.isFinite(parsed)) return null;
-      return { text, timestampMs: parsed };
-    })
-    .filter((item): item is { text: string; timestampMs: number } => Boolean(item));
-
-  if (latestByStep.length === 0) {
-    return "Sin registros todavÃ­a";
-  }
-
-  const latest = latestByStep.reduce((current, candidate) => (candidate.timestampMs > current.timestampMs ? candidate : current));
-  return latest.text;
-}
-
-function canCancelWorkflow(workflow: WorkflowDetail) {
-  const hasOperationalStep = workflow.steps.some((step) =>
-    ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado)
-  );
-
-  if (!workflow.steps.length) return false;
-  if (["en_proceso", "esperando_respuesta", "en_espera", "con_problema"].includes(workflow.estado)) return true;
-  if (workflow.estado === "pendiente") return hasOperationalStep;
-  return false;
-}
-
-function canReactivateWorkflow(workflow: WorkflowDetail) {
-  return workflow.estado === "cancelado";
-}
-
-function canDeleteWorkflow(workflow: WorkflowDetail) {
-  return ["cancelado", "finalizado"].includes(workflow.estado);
-}
-
 function getDateValue(value: string | null | undefined) {
   if (!value) return null;
   const parsed = new Date(value).getTime();
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function toDateInputValue(value: string | null | undefined) {
-  return toCalendarDateInputValue(value);
-}
-
 function toDateSortValue(dateInput: string) {
   const dayValue = toCalendarDayValue(dateInput);
   return dayValue ?? Number.MAX_SAFE_INTEGER;
-}
-
-function resolvePrimaryDateInput(workflow: WorkflowDetail, step: Step | null) {
-  if (workflow.contexto_fecha_actual === "espera") {
-    return toDateInputValue(workflow.fecha_espera_desde ?? step?.fecha_estado_actual);
-  }
-  if (workflow.contexto_fecha_actual === "activa") {
-    return toDateInputValue(workflow.fecha_ejecucion_actual ?? step?.fecha_ejecucion_estimada);
-  }
-  if (workflow.contexto_fecha_actual === "cerrado") {
-    return toDateInputValue(workflow.fecha_fin);
-  }
-  return "";
 }
 
 function getMovementHeatVisual(days: number | null) {
@@ -1146,7 +999,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       ? resolveInitialFlowQuickFilterByState(restoreState, storedFlowListFilters)
       : { ...DEFAULT_FLOW_QUICK_FILTER_BY_STATE };
   const [triggers, setTriggers] = useState<TriggerDetail[]>([]);
-  const [workflowsById, setWorkflowsById] = useState<Record<string, WorkflowDetail>>({});
+  const [workflowListItemsById, setWorkflowListItemsById] = useState<Record<string, WorkflowListItem>>({});
   const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode);
   const [stateFilter, setStateFilter] = useState<FlowFilter>(
     () =>
@@ -1343,12 +1196,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     try {
       setLoading(true);
       setError(null);
-      const [triggerData, workflowSummaries] = await Promise.all([listTriggers(), listWorkflows()]);
+      const [triggerData, workflowListItems] = await Promise.all([listTriggers(), listWorkflowListItems()]);
       setTriggers(triggerData);
-
-      const workflowIds = [...new Set(workflowSummaries.map((workflow) => workflow.id))];
-      const workflowDetails = await Promise.all(workflowIds.map((workflowId) => getWorkflow(workflowId)));
-      setWorkflowsById(Object.fromEntries(workflowDetails.map((workflow) => [workflow.id, workflow])));
+      setWorkflowListItemsById(Object.fromEntries(workflowListItems.map((workflow) => [workflow.id, workflow])));
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron cargar los datos");
     } finally {
@@ -1392,41 +1242,12 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     return map;
   }, [triggers]);
 
-  const allFlowCards = useMemo<FlowCardData[]>(() => {
-    return Object.values(workflowsById)
-      .map((workflow) => {
-        const linkedRequirements = requirementByWorkflowId[workflow.id] ?? [];
-        return {
-          workflow,
-          ambito: workflow.ambito,
-          displayStatus: getVisibleWorkflowStatus(workflow),
-          relevantStep: pickRelevantStep(workflow),
-          latestMovementAt: getLatestMovementAt(workflow),
-          linkedRequirements,
-        };
-      })
-      .filter((item) => matchesActiveAmbito(item.workflow.ambito, activeAmbito));
-  }, [activeAmbito, requirementByWorkflowId, workflowsById]);
-
-  const filteredFlowCards = useMemo(
-    () => allFlowCards.filter((item) => matchesFlowStateFilter(item.displayStatus, stateFilter)),
-    [allFlowCards, stateFilter]
+  const allFlowItems = useMemo(
+    () => Object.values(workflowListItemsById).filter((workflow) => matchesActiveAmbito(workflow.ambito, activeAmbito)),
+    [activeAmbito, workflowListItemsById]
   );
 
-  const flowCounts = useMemo(() => {
-    return Object.values(workflowsById)
-      .filter((workflow) => matchesActiveAmbito(workflow.ambito, activeAmbito))
-      .map((workflow) => getVisibleWorkflowStatus(workflow))
-      .reduce<Record<"active" | "waiting" | "cancelled" | "finalized", number>>(
-        (acc, status) => {
-          const filter = getFlowFilterFromStatus(status);
-          if (!filter) return acc;
-          acc[filter] += 1;
-          return acc;
-        },
-        { active: 0, waiting: 0, cancelled: 0, finalized: 0 }
-      );
-  }, [activeAmbito, workflowsById]);
+  const flowCounts = useMemo(() => getFlowCounts(allFlowItems), [allFlowItems]);
 
   const filteredRequirements = useMemo(
     () =>
@@ -1472,102 +1293,23 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   }, [triggers, linkProjectSearch, linkProjectDialog, activeAmbito, requirementByWorkflowId]);
   const unclassifiedWorkflowCards = useMemo(
     () =>
-      Object.values(workflowsById)
+      Object.values(workflowListItemsById)
         .filter((workflow) => workflow.ambito === null)
         .map((workflow) => ({
           workflow,
-          linkedRequirements: requirementByWorkflowId[workflow.id] ?? [],
+          linkedRequirements: workflow.linked_requirements,
         })),
-    [requirementByWorkflowId, workflowsById]
+    [workflowListItemsById]
   );
 
   const today = getTodayLocalDateInput();
-  const todaySortValue = toDateSortValue(today);
-  const flowSearchActive = flowSearchValue.trim().length > 0;
-  const activeFlowQuickFilterLabel =
-    flowQuickFilterOptions.find((option) => option.value === flowQuickFilter)?.label ?? "Filtro rápido";
-  const activeFlowFilterDescription = buildActiveFlowFilterDescription(stateFilter, flowQuickFilter);
-  const allowedFlowQuickFilterValues = useMemo(() => getAllowedFlowQuickFiltersForStateFilter(stateFilter), [stateFilter]);
-  useEffect(() => {
-    if (flowQuickFilter !== "none" && !allowedFlowQuickFilterValues.includes(flowQuickFilter)) {
-      handleFlowQuickFilterChange("none");
-      setFlowQuickFilterAnchorEl(null);
-    }
-  }, [allowedFlowQuickFilterValues, flowQuickFilter, activeFlowStateKey]);
   const resetFilterAction =
     stateFilter !== "active" ? (
       <Button size="small" variant="outlined" color="inherit" onClick={() => handleFlowStateFilterChange("active")}>
         Ver activos
       </Button>
     ) : undefined;
-  const flowRows = useMemo<FlowGridRow[]>(() => {
-    return allFlowCards.map((item) => {
-      const step = item.relevantStep;
-      const primaryDateInput = resolvePrimaryDateInput(item.workflow, step);
-      const executionDateInput = toDateInputValue(item.workflow.fecha_ejecucion_actual ?? step?.fecha_ejecucion_estimada);
-      const waitingSinceInput =
-        item.displayStatus === "esperando_respuesta" ? toDateInputValue(item.workflow.fecha_espera_desde ?? step?.fecha_estado_actual) : "";
-      const completedAtInput = toDateInputValue(item.workflow.fecha_fin);
-      const stepLabel =
-        step && ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado)
-          ? "Disparador"
-          : "Ãšltima tarea";
-      const movementAtValue = getDateValue(item.latestMovementAt);
-      const movementAt = movementAtValue ?? Number.MAX_SAFE_INTEGER;
-      const movementDateInput = movementAtValue === null ? null : formatLocalDateInput(new Date(movementAtValue));
-      const movementDayDiff = getCalendarDayDiff(movementDateInput, today);
-      const movementDays = movementDayDiff === null ? null : Math.max(0, -movementDayDiff);
-      const requirementLabels = item.linkedRequirements.map(
-        (requirement) => requirement.descripcion?.trim() || `Proyecto ${requirement.id.slice(0, 8)}`
-      );
-      const contextualDateInput = primaryDateInput || "";
-      const contextualDayValue = contextualDateInput ? toDateSortValue(contextualDateInput) : null;
-      const operationalSortValue =
-        contextualDayValue === null
-          ? 3_000_000_000
-          : contextualDateInput === today
-            ? contextualDayValue
-            : contextualDateInput < today
-              ? 1_000_000_000 + Math.max(0, todaySortValue - contextualDayValue)
-              : 2_000_000_000 + contextualDayValue;
-        return {
-          id: item.workflow.id,
-          stepId: step?.id ?? null,
-          ambito: item.workflow.ambito,
-          status: item.displayStatus,
-        taskName: step?.nombre ?? "Sin tarea registrada",
-        stepLabel,
-        dateContext: item.workflow.contexto_fecha_actual,
-        primaryDateInput,
-        executionDateInput,
-        waitingSinceInput,
-        completedAtInput,
-        executionAt: executionDateInput ? toDateSortValue(executionDateInput) : Number.MAX_SAFE_INTEGER,
-        contextualDateInput,
-        contextualDateAt: contextualDateInput ? toDateSortValue(contextualDateInput) : Number.MAX_SAFE_INTEGER,
-        operationalSortValue,
-        lastRecord: getLatestMeaningfulWorkflowRecord(item.workflow),
-        movementLabel: formatElapsedTime(item.latestMovementAt) ?? "Sin movimiento reciente",
-        movementAt,
-        movementDays,
-        isDueToday: executionDateInput === today,
-        requirementsLabel:
-          item.linkedRequirements.length === 0
-            ? "Sin proyectos"
-            : item.linkedRequirements.map((requirement) => requirement.descripcion?.trim() || `Proyecto ${requirement.id.slice(0, 8)}`).join(" Â· "),
-        requirementsCount: item.linkedRequirements.length,
-        primaryRequirementLabel: requirementLabels[0] ?? "Sin proyectos",
-        extraRequirementCount: Math.max(0, requirementLabels.length - 1),
-        linkedRequirements: item.linkedRequirements.map((requirement) => ({
-          id: requirement.id,
-          label: requirement.descripcion?.trim() || `Proyecto ${requirement.id.slice(0, 8)}`,
-        })),
-        canCancel: canCancelWorkflow(item.workflow),
-        canReactivate: canReactivateWorkflow(item.workflow),
-        canDelete: canDeleteWorkflow(item.workflow),
-      };
-    });
-  }, [allFlowCards, today]);
+  const flowRows = useMemo<FlowGridRow[]>(() => buildFlowRows(allFlowItems, today), [allFlowItems, today]);
 
   const setPendingDateInputRef = useCallback((rowId: string, input: HTMLInputElement | null) => {
     const inputRefs = pendingDateInputRefs.current;
@@ -1589,71 +1331,14 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
     openNativeDateInputPicker(pendingDateInputRefs.current.get(rowId) ?? null);
   }, []);
 
-  const stateFilteredFlowRows = useMemo(
-    () => flowRows.filter((row) => matchesFlowStateFilter(row.status, stateFilter)),
-    [flowRows, stateFilter]
-  );
-
-  const quickFilteredFlowRows = useMemo(
-    () => stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, flowQuickFilter, today)),
-    [flowQuickFilter, stateFilteredFlowRows, today]
-  );
-  const quickFilterCountsByValue = useMemo<Record<FlowQuickFilter, number>>(
-    () => ({
-      none: stateFilteredFlowRows.length,
-      today: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "today", today)).length,
-      this_week: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "this_week", today)).length,
-      past: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "past", today)).length,
-      future: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "future", today)).length,
-      without_project: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "without_project", today)).length,
-      without_date: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "without_date", today)).length,
-      waiting_today: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "waiting_today", today)).length,
-      waiting_days: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "waiting_days", today)).length,
-      waiting_week: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "waiting_week", today)).length,
-      waiting_15_plus: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "waiting_15_plus", today)).length,
-      waiting_month_plus: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "waiting_month_plus", today)).length,
-    }),
-    [stateFilteredFlowRows, today]
-  );
-
   useEffect(() => {
     if (stateFilter === "waiting") {
       setFlowSortModel([{ field: "movementAt", sort: "asc" }]);
     }
   }, [stateFilter]);
 
-  const searchedFlowRows = useMemo(() => {
-    const normalizedQuery = normalizeSearchText(flowSearchValue.trim());
-    if (!normalizedQuery) {
-      return quickFilteredFlowRows;
-    }
-
-    const searchTerms = normalizedQuery.split(/\s+/).filter(Boolean);
-    return quickFilteredFlowRows.filter((row) => {
-      const searchableContent = normalizeSearchText(
-        [
-          row.taskName,
-          row.stepLabel,
-          row.status,
-          row.requirementsLabel,
-          row.lastRecord,
-          row.ambito ?? "",
-          getAmbitoLabel(row.ambito),
-        ].join(" ")
-      );
-
-      return searchTerms.every((term) => searchableContent.includes(term));
-    });
-  }, [flowSearchValue, quickFilteredFlowRows]);
-
   const basePageTitle = title || (isFlowsView ? "Flows" : "Proyectos");
   const currentCounts = isFlowsView ? flowCounts : requirementCounts;
-  const visibleFlowRows = searchedFlowRows;
-  const shouldGroupVisibleFlowRows = isFlowsView && shouldGroupActiveFlowsByDate(stateFilter, flowQuickFilter);
-  const groupedVisibleFlowRows = useMemo<GroupedFlowSection[]>(
-    () => (shouldGroupVisibleFlowRows ? (groupFlowRowsByDate(visibleFlowRows, today) as GroupedFlowSection[]) : []),
-    [shouldGroupVisibleFlowRows, today, visibleFlowRows]
-  );
   const pageTitle = isFlowsView ? flowWorkspaceMeta.activeFlowFilterDescription || basePageTitle : basePageTitle;
   const pageSubtitle = isFlowsView
     ? `${basePageTitle} · ${flowWorkspaceMeta.visibleRowCount} ${flowWorkspaceMeta.visibleRowCount === 1 ? "resultado visible" : "resultados visibles"}`
@@ -1801,14 +1486,14 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
     try {
       await updateStep(row.stepId, { fecha_ejecucion_estimada: isoValue });
-      setWorkflowsById((previous) => {
+      setWorkflowListItemsById((previous) => {
         const workflow = previous[row.id];
         if (!workflow) return previous;
         return {
           ...previous,
           [row.id]: {
             ...workflow,
-            steps: workflow.steps.map((step) => (step.id === row.stepId ? { ...step, fecha_ejecucion_estimada: isoValue } : step)),
+            fecha_ejecucion_actual: workflow.step_id_relevante === row.stepId ? isoValue : workflow.fecha_ejecucion_actual,
           },
         };
       });
@@ -1833,25 +1518,25 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   const requirementRows = useMemo<RequirementGridRow[]>(() => {
     return filteredRequirements.map((trigger) => {
       const linkedWorkflows = trigger.workflow_ids
-        .map((workflowId) => workflowsById[workflowId])
-        .filter((workflow): workflow is WorkflowDetail => Boolean(workflow));
+        .map((workflowId) => workflowListItemsById[workflowId])
+        .filter((workflow): workflow is WorkflowListItem => Boolean(workflow));
       const latestWorkflow =
-        linkedWorkflows.reduce<WorkflowDetail | null>((latest, workflow) => {
+        linkedWorkflows.reduce<WorkflowListItem | null>((latest, workflow) => {
           if (!latest) return workflow;
-          const latestTimestamp = Date.parse(getLatestMovementAt(latest) ?? latest.fecha_inicio);
-          const workflowTimestamp = Date.parse(getLatestMovementAt(workflow) ?? workflow.fecha_inicio);
+          const latestTimestamp = Date.parse(latest.latest_movement_at ?? latest.fecha_inicio);
+          const workflowTimestamp = Date.parse(workflow.latest_movement_at ?? workflow.fecha_inicio);
           return workflowTimestamp > latestTimestamp ? workflow : latest;
         }, null) ?? null;
 
       const openCount = linkedWorkflows.filter((workflow) => {
-        const filter = getFlowFilterFromStatus(getVisibleWorkflowStatus(workflow));
+        const filter = getFlowFilterFromStatus(workflow.estado_visible);
         return filter === "active" || filter === "waiting";
       }).length;
 
       const waitingCount = linkedWorkflows.filter(
-        (workflow) => getFlowFilterFromStatus(getVisibleWorkflowStatus(workflow)) === "waiting"
+        (workflow) => getFlowFilterFromStatus(workflow.estado_visible) === "waiting"
       ).length;
-      const latestMovementAt = latestWorkflow ? getLatestMovementAt(latestWorkflow) ?? latestWorkflow.fecha_inicio : null;
+      const latestMovementAt = latestWorkflow ? (latestWorkflow.latest_movement_at ?? latestWorkflow.fecha_inicio) : null;
       const movementAtValue = getDateValue(latestMovementAt);
       const movementAt = movementAtValue ?? Number.MAX_SAFE_INTEGER;
       const movementDateInput = movementAtValue === null ? null : formatLocalDateInput(new Date(movementAtValue));
@@ -1861,7 +1546,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
       return {
         id: trigger.id,
         description: trigger.descripcion?.trim() || "Proyecto sin detalle",
-        lastRecord: latestWorkflow ? getLatestMeaningfulWorkflowRecord(latestWorkflow) : "Sin registros todavia",
+        lastRecord: latestWorkflow ? latestWorkflow.latest_meaningful_record : "Sin registros todavía",
         movementLabel: formatElapsedTime(latestMovementAt) ?? "Sin movimiento reciente",
         movementAt,
         movementDays,
@@ -1878,7 +1563,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
         canDelete: trigger.workflow_ids.length === 0,
       };
     });
-  }, [filteredRequirements, today, workflowsById]);
+  }, [filteredRequirements, today, workflowListItemsById]);
 
   async function handleDeleteTrigger(trigger: TriggerDetail) {
     const detail = trigger.descripcion?.trim() || "Proyecto sin detalle";
@@ -1979,9 +1664,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   }
 
   async function handleCancelFlowAction(workflowId: string) {
-    const workflow = workflowsById[workflowId];
-    if (!workflow || !canCancelWorkflow(workflow)) return;
-    const currentTask = pickRelevantStep(workflow)?.nombre?.trim() || workflow.objetivo_final?.trim() || "Flow sin tarea actual";
+    const workflow = workflowListItemsById[workflowId];
+    if (!workflow || !workflow.can_cancel) return;
+    const currentTask = workflow.nombre_tarea.trim() || workflow.objetivo_final?.trim() || "Flow sin tarea actual";
 
     const confirmed = window.confirm(
       `Â¿Cancelar este flow?\n\n${currentTask}\n\nEl flow saldra de la operacion activa y quedara en modo cancelado.\nNo se eliminaran tareas, comentarios ni proyectos vinculados.\nSi fue un error, luego podras reactivarlo.`
@@ -2003,9 +1688,9 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   }
 
   async function handleReactivateFlowAction(workflowId: string) {
-    const workflow = workflowsById[workflowId];
-    if (!workflow || !canReactivateWorkflow(workflow)) return;
-    const currentTask = pickRelevantStep(workflow)?.nombre?.trim() || workflow.objetivo_final?.trim() || "Flow sin tarea actual";
+    const workflow = workflowListItemsById[workflowId];
+    if (!workflow || !workflow.can_reactivate) return;
+    const currentTask = workflow.nombre_tarea.trim() || workflow.objetivo_final?.trim() || "Flow sin tarea actual";
 
     const confirmed = window.confirm(
       `Â¿Reactivar este flow?\n\n${currentTask}\n\nEl flow volvera a la operacion activa.\nNo se eliminaran tareas, comentarios ni proyectos vinculados.`
@@ -2027,8 +1712,8 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   }
 
   async function handleDeleteFlowAction(workflowId: string) {
-    const workflow = workflowsById[workflowId];
-    if (!workflow || !canDeleteWorkflow(workflow)) return;
+    const workflow = workflowListItemsById[workflowId];
+    if (!workflow || !workflow.can_delete) return;
 
     const confirmed = window.confirm(
       "Â¿Eliminar este flow?\n\nEsta acciÃ³n eliminarÃ¡ el flow, sus tareas, comentarios, historial, eventos externos y vÃ­nculos con proyectos.\n\nEsta acciÃ³n no se puede deshacer."
@@ -2056,14 +1741,14 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
   }
 
   function handleFlowWorkspaceDatePatched(workflowId: string, stepId: string, nextIsoValue: string | null) {
-    setWorkflowsById((previous) => {
+    setWorkflowListItemsById((previous) => {
       const workflow = previous[workflowId];
       if (!workflow) return previous;
       return {
         ...previous,
         [workflowId]: {
           ...workflow,
-          steps: workflow.steps.map((step) => (step.id === stepId ? { ...step, fecha_ejecucion_estimada: nextIsoValue } : step)),
+          fecha_ejecucion_actual: workflow.step_id_relevante === stepId ? nextIsoValue : workflow.fecha_ejecucion_actual,
         },
       };
     });
@@ -3160,7 +2845,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
                               <Typography variant="body2" color="text.secondary">
                                 {linkedRequirements.length > 0
                                   ? `Clasificar desde el proyecto asociado: ${linkedRequirements
-                                      .map((item) => item.descripcion?.trim() || `Proyecto ${item.id.slice(0, 8)}`)
+                                      .map((item) => item.label)
                                       .join(" Â· ")}`
                                   : "Sin proyecto asociado"}
                               </Typography>
@@ -3308,7 +2993,7 @@ export function TriggerListPage({ defaultView = "requirements", lockView = false
 
           {isFlowsView ? (
             <FlowWorkspace
-              items={allFlowCards}
+              rows={flowRows}
               stateFilter={stateFilter}
               onStateFilterChange={handleFlowStateFilterChange}
               currentCounts={flowCounts}

@@ -32,6 +32,7 @@ import { StatusBadge } from "./StatusBadge";
 import {
   buildActiveFlowFilterDescription,
   buildFlowRows,
+  countFlowQuickFilters,
   flowQuickFilterOptions,
   getFlowDateGroupSortKey,
   getAllowedFlowQuickFiltersForStateFilter,
@@ -52,6 +53,7 @@ import {
   type FlowQuickFilter,
   type FlowStatusPresentation,
   type FlowTableItem,
+  type FlowRowSource,
 } from "../utils/flowTable";
 import {
   formatCalendarDate,
@@ -72,7 +74,8 @@ export type FlowWorkspaceViewMeta = {
 };
 
 type FlowWorkspaceProps = {
-  items: FlowTableItem[];
+  items?: FlowRowSource[];
+  rows?: FlowGridRow[];
   stateFilter: FlowFilter;
   onStateFilterChange: (value: FlowFilter) => void;
   currentCounts?: FlowCountSummary;
@@ -233,6 +236,7 @@ export function renderFlowQuickFilterOptionLabel(
 
 export function FlowWorkspace({
   items,
+  rows,
   stateFilter,
   onStateFilterChange,
   currentCounts,
@@ -285,8 +289,9 @@ export function FlowWorkspace({
   const resolvedFlowSearchValue = flowSearchValue ?? internalFlowSearchValue;
   const resolvedFlowSortModel = flowSortModel ?? internalFlowSortModel;
   const today = getTodayLocalDateInput();
-  const flowRows = useMemo(() => buildFlowRows(items, today), [items, today]);
-  const resolvedCounts = useMemo(() => currentCounts ?? getFlowCounts(items), [currentCounts, items]);
+  const sourceItems = items ?? [];
+  const flowRows = useMemo(() => rows ?? buildFlowRows(sourceItems, today), [rows, sourceItems, today]);
+  const resolvedCounts = useMemo(() => currentCounts ?? getFlowCounts(sourceItems), [currentCounts, sourceItems]);
   const visibleStateFilter = normalizeStateFilter ? normalizeVisibleFlowFilter(stateFilter) : stateFilter;
 
   const setResolvedFlowQuickFilter = useCallback(
@@ -389,20 +394,7 @@ export function FlowWorkspace({
   );
 
   const quickFilterCountsByValue = useMemo<Record<FlowQuickFilter, number>>(
-    () => ({
-      none: stateFilteredFlowRows.length,
-      today: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "today", today)).length,
-      this_week: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "this_week", today)).length,
-      past: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "past", today)).length,
-      future: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "future", today)).length,
-      without_project: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "without_project", today)).length,
-      without_date: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "without_date", today)).length,
-      waiting_today: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "waiting_today", today)).length,
-      waiting_days: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "waiting_days", today)).length,
-      waiting_week: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "waiting_week", today)).length,
-      waiting_15_plus: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "waiting_15_plus", today)).length,
-      waiting_month_plus: stateFilteredFlowRows.filter((row) => matchesFlowQuickFilter(row, "waiting_month_plus", today)).length,
-    }),
+    () => countFlowQuickFilters(stateFilteredFlowRows, today),
     [stateFilteredFlowRows, today]
   );
 

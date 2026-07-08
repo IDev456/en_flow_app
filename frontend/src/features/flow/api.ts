@@ -23,6 +23,7 @@ import type {
   TriggerUpdateInput,
   WorkLogEntry,
   WorkflowDetail,
+  WorkflowListItem,
   WorkflowStartInput,
   WorkflowSummary,
   WorkflowUpdateInput,
@@ -58,6 +59,10 @@ export function listWorkflows() {
 
 export function listActiveWorkflows() {
   return apiGet<WorkflowSummary[]>("/dashboard/active-workflows");
+}
+
+export function listWorkflowListItems() {
+  return apiGet<WorkflowListItem[]>("/workflows/list-view");
 }
 
 export function listPendingSteps() {

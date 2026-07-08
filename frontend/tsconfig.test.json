@@ -11,9 +11,13 @@
   },
   "include": [
     "tests/**/*.ts",
+    "tests/**/*.tsx",
     "src/features/flow/types.ts",
     "src/features/flow/utils.ts",
     "src/features/flow/utils/flowTable.ts",
-    "src/features/flow/utils/flowAgenda.ts"
+    "src/features/flow/utils/flowAgenda.ts",
+    "src/features/flow/components/FlowAgendaTimeline.tsx",
+    "src/features/flow/components/StatusBadge.tsx",
+    "src/theme.ts"
   ]
 }

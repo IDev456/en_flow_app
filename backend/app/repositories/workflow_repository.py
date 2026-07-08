@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import unicodedata
 from uuid import uuid4
 
-from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from sqlalchemy import func, select
+from sqlalchemy.orm import load_only, selectinload
 
 from app.db.models import (
     DEFAULT_WORKFLOW_TEMPLATE_ID,
@@ -38,6 +39,8 @@ from app.schemas.workflow import (
     TriggerDetail,
     TriggerPublic,
     TriggerStatus,
+    WorkflowListItem,
+    WorkflowListRequirement,
     WorkflowDateContext,
     WorkflowDetail,
     WorkflowInstanceBase,
@@ -223,6 +226,171 @@ def _initial_template_steps(template: WorkflowTemplatePublic) -> list[StepTempla
     return initial_steps or normalized[:1]
 
 
+@dataclass(frozen=True)
+class StepListProjection:
+    id: str
+    nombre: str
+    orden: int
+    estado: StepStatus
+    fecha_estado_actual: datetime
+    fecha_vencimiento: datetime | None
+    fecha_recordatorio_espera: datetime | None
+    fecha_ejecucion_estimada: datetime | None
+    latest_snapshot_text: str | None
+    latest_snapshot_timestamp: datetime | None
+
+
+def _get_visible_workflow_status_value(status: str) -> str:
+    if status == WorkflowStatus.CANCELADO.value:
+        return WorkflowStatus.CANCELADO.value
+    if status in {WorkflowStatus.FINALIZADO.value, TriggerStatus.RESUELTO.value}:
+        return WorkflowStatus.FINALIZADO.value
+    if status in {
+        WorkflowStatus.ESPERANDO_RESPUESTA.value,
+        WorkflowStatus.EN_ESPERA.value,
+        StepStatus.ESPERA.value,
+    }:
+        return WorkflowStatus.ESPERANDO_RESPUESTA.value
+    return WorkflowStatus.EN_PROCESO.value
+
+
+def _get_visible_workflow_status(status: str, steps: list[StepListProjection]) -> str:
+    base_status = _get_visible_workflow_status_value(status)
+    if base_status != WorkflowStatus.EN_PROCESO.value:
+        return base_status
+
+    open_steps = [step for step in steps if step.estado not in {StepStatus.COMPLETADO, StepStatus.CANCELADA}]
+    if any(step.estado in {StepStatus.ESPERANDO_RESPUESTA, StepStatus.ESPERA} for step in open_steps):
+        return WorkflowStatus.ESPERANDO_RESPUESTA.value
+    return WorkflowStatus.EN_PROCESO.value
+
+
+def _pick_relevant_step_projection(steps: list[StepListProjection]) -> StepListProjection | None:
+    by_order = sorted(steps, key=lambda item: (item.orden, item.id))
+
+    active = next((step for step in by_order if step.estado == StepStatus.ACTIVO), None)
+    if active is not None:
+        return active
+
+    waiting_external = next((step for step in by_order if step.estado == StepStatus.ESPERANDO_RESPUESTA), None)
+    if waiting_external is not None:
+        return waiting_external
+
+    blocked = next((step for step in by_order if step.estado in {StepStatus.PROBLEMA, StepStatus.ESPERA}), None)
+    if blocked is not None:
+        return blocked
+
+    if not by_order:
+        return None
+
+    by_recent_state = sorted(steps, key=lambda item: item.fecha_estado_actual, reverse=True)
+    return by_recent_state[0] if by_recent_state else by_order[0]
+
+
+def _resolve_workflow_date_projection_from_projections(
+    workflow_status: str,
+    workflow_fecha_fin: datetime | None,
+    workflow_fecha_espera_desde: datetime | None,
+    steps: list[StepListProjection],
+) -> dict[str, object | None]:
+    active_step = next((step for step in sorted(steps, key=lambda item: (item.orden, item.id)) if step.estado == StepStatus.ACTIVO), None)
+    if active_step is not None:
+        return {
+            "fecha_ejecucion_actual": active_step.fecha_ejecucion_estimada,
+            "fecha_recordatorio_actual": active_step.fecha_vencimiento,
+            "fecha_espera_desde": None,
+            "contexto_fecha_actual": WorkflowDateContext.ACTIVA,
+        }
+
+    waiting_step = next(
+        (
+            step
+            for step in sorted(steps, key=lambda item: (item.orden, item.id))
+            if step.estado in {StepStatus.ESPERANDO_RESPUESTA, StepStatus.ESPERA}
+        ),
+        None,
+    )
+    if waiting_step is not None:
+        return {
+            "fecha_ejecucion_actual": None,
+            "fecha_recordatorio_actual": waiting_step.fecha_recordatorio_espera,
+            "fecha_espera_desde": workflow_fecha_espera_desde or waiting_step.fecha_estado_actual,
+            "contexto_fecha_actual": WorkflowDateContext.ESPERA,
+        }
+
+    if workflow_fecha_fin is not None or workflow_status == WorkflowStatus.FINALIZADO.value:
+        return {
+            "fecha_ejecucion_actual": None,
+            "fecha_recordatorio_actual": None,
+            "fecha_espera_desde": None,
+            "contexto_fecha_actual": WorkflowDateContext.CERRADO,
+        }
+
+    return {
+        "fecha_ejecucion_actual": None,
+        "fecha_recordatorio_actual": None,
+        "fecha_espera_desde": None,
+        "contexto_fecha_actual": WorkflowDateContext.SIN_FECHA,
+    }
+
+
+def _get_latest_movement_at(steps: list[StepListProjection]) -> datetime | None:
+    latest: datetime | None = None
+    for step in steps:
+        candidate = step.latest_snapshot_timestamp
+        if candidate is None or step.fecha_estado_actual > candidate:
+            candidate = step.fecha_estado_actual
+        if latest is None or candidate > latest:
+            latest = candidate
+    return latest
+
+
+def _get_latest_meaningful_record(steps: list[StepListProjection]) -> str:
+    latest_text: str | None = None
+    latest_timestamp: datetime | None = None
+    for step in steps:
+        text = _clean_text(step.latest_snapshot_text)
+        timestamp = step.latest_snapshot_timestamp
+        if text is None or timestamp is None or _is_noisy_automatic_journal_text(text):
+            continue
+        if latest_timestamp is None or timestamp > latest_timestamp:
+            latest_timestamp = timestamp
+            latest_text = text
+    return latest_text or "Sin registros todavía"
+
+
+def _format_requirement_label_from_parts(requirement_id: str, description: str | None) -> str:
+    detail = _clean_text(description)
+    return detail or f"Proyecto {requirement_id[:8]}"
+
+
+def _can_cancel_workflow(status: str, steps: list[StepListProjection]) -> bool:
+    has_operational_step = any(
+        step.estado in {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA, StepStatus.ESPERANDO_RESPUESTA}
+        for step in steps
+    )
+    if not steps:
+        return False
+    if status in {
+        WorkflowStatus.EN_PROCESO.value,
+        WorkflowStatus.ESPERANDO_RESPUESTA.value,
+        WorkflowStatus.EN_ESPERA.value,
+        WorkflowStatus.CON_PROBLEMA.value,
+    }:
+        return True
+    if status == WorkflowStatus.PENDIENTE.value:
+        return has_operational_step
+    return False
+
+
+def _can_reactivate_workflow(status: str) -> bool:
+    return status == WorkflowStatus.CANCELADO.value
+
+
+def _can_delete_workflow(status: str) -> bool:
+    return status in {WorkflowStatus.CANCELADO.value, WorkflowStatus.FINALIZADO.value}
+
+
 class WorkflowRepository(ABC):
     @abstractmethod
     def list_triggers(self) -> list[TriggerDetail]:
@@ -250,6 +418,10 @@ class WorkflowRepository(ABC):
 
     @abstractmethod
     def list_workflows(self) -> list[WorkflowSummary]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def list_workflow_list_items(self) -> list[WorkflowListItem]:
         raise NotImplementedError
 
     @abstractmethod
@@ -544,6 +716,66 @@ class InMemoryWorkflowRepository(WorkflowRepository):
                         "total_pasos": len(steps),
                         **_resolve_workflow_date_projection(workflow, steps),
                     }
+                )
+            )
+        return items
+
+    def list_workflow_list_items(self) -> list[WorkflowListItem]:
+        workflow_summaries = self.list_workflows()
+        items: list[WorkflowListItem] = []
+        for workflow in workflow_summaries:
+            steps = [
+                StepListProjection(
+                    id=step.id,
+                    nombre=step.nombre,
+                    orden=step.orden,
+                    estado=step.estado,
+                    fecha_estado_actual=step.fecha_estado_actual,
+                    fecha_vencimiento=step.fecha_vencimiento,
+                    fecha_recordatorio_espera=step.fecha_recordatorio_espera,
+                    fecha_ejecucion_estimada=step.fecha_ejecucion_estimada,
+                    latest_snapshot_text=step.ultimo_comentario,
+                    latest_snapshot_timestamp=step.ultimo_comentario_fecha,
+                )
+                for step in self.list_workflow_steps(workflow.id)
+            ]
+            relevant_step = _pick_relevant_step_projection(steps)
+            visible_status = _get_visible_workflow_status(workflow.estado.value, steps)
+            linked_requirements = [
+                WorkflowListRequirement(
+                    id=requirement_id,
+                    label=_format_requirement_label_from_parts(requirement_id, self._triggers.get(requirement_id).descripcion if self._triggers.get(requirement_id) else None),
+                )
+                for requirement_id in workflow.requirement_ids
+            ]
+            items.append(
+                WorkflowListItem(
+                    id=workflow.id,
+                    ambito=workflow.ambito,
+                    estado_visible=visible_status,
+                    objetivo_final=workflow.objetivo_final,
+                    nombre_tarea=relevant_step.nombre if relevant_step is not None else "Sin tarea registrada",
+                    etiqueta_paso=(
+                        "Disparador"
+                        if relevant_step is not None
+                        and relevant_step.estado in {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA, StepStatus.ESPERANDO_RESPUESTA}
+                        else "Última tarea"
+                    ),
+                    step_id_relevante=relevant_step.id if relevant_step is not None else None,
+                    fecha_inicio=workflow.fecha_inicio,
+                    contexto_fecha_actual=workflow.contexto_fecha_actual,
+                    fecha_ejecucion_actual=workflow.fecha_ejecucion_actual,
+                    fecha_espera_desde=workflow.fecha_espera_desde,
+                    fecha_fin=workflow.fecha_fin,
+                    fecha_recordatorio_actual=workflow.fecha_recordatorio_actual,
+                    latest_movement_at=_get_latest_movement_at(steps),
+                    latest_meaningful_record=_get_latest_meaningful_record(steps),
+                    linked_requirements=linked_requirements,
+                    requirements_count=len(linked_requirements),
+                    primary_requirement_label=linked_requirements[0].label if linked_requirements else None,
+                    can_cancel=_can_cancel_workflow(workflow.estado.value, steps),
+                    can_reactivate=_can_reactivate_workflow(workflow.estado.value),
+                    can_delete=_can_delete_workflow(workflow.estado.value),
                 )
             )
         return items
@@ -1171,6 +1403,189 @@ class PostgresWorkflowRepository(WorkflowRepository):
             session.refresh(existing)
             return self._trigger_to_public(existing)
 
+    def _load_latest_comment_snapshots(self, session, step_ids: list[str]) -> dict[str, dict[str, object | None]]:
+        if not step_ids:
+            return {}
+
+        latest_comments = (
+            select(
+                CommentModel.id.label("comment_id"),
+                CommentModel.step_instance_id.label("step_id"),
+                CommentModel.autor.label("autor"),
+                CommentModel.comentario.label("comentario"),
+                CommentModel.fecha_creacion.label("fecha_creacion"),
+                CommentModel.attachments.label("attachments"),
+                func.row_number().over(
+                    partition_by=CommentModel.step_instance_id,
+                    order_by=(CommentModel.fecha_creacion.desc(), CommentModel.id.desc()),
+                ).label("rn"),
+            )
+            .where(CommentModel.step_instance_id.in_(step_ids))
+            .subquery()
+        )
+
+        rows = session.execute(
+            select(
+                latest_comments.c.comment_id,
+                latest_comments.c.step_id,
+                latest_comments.c.autor,
+                latest_comments.c.comentario,
+                latest_comments.c.fecha_creacion,
+                latest_comments.c.attachments,
+            ).where(latest_comments.c.rn == 1)
+        ).all()
+
+        snapshots: dict[str, dict[str, object | None]] = {}
+        for row in rows:
+            snapshots[row.step_id] = self._build_latest_snapshot_from_comment(
+                CommentPublic(
+                    id=row.comment_id,
+                    step_instance_id=row.step_id,
+                    autor=row.autor,
+                    comentario=row.comentario,
+                    fecha_creacion=row.fecha_creacion,
+                    attachments=self._deserialize_attachments(row.attachments),
+                )
+            )
+        return snapshots
+
+    def _load_latest_history_snapshots(self, session, step_ids: list[str]) -> dict[str, dict[str, object | None]]:
+        if not step_ids:
+            return {}
+
+        latest_history = (
+            select(
+                StepHistoryModel.id.label("history_id"),
+                StepHistoryModel.step_instance_id.label("step_id"),
+                StepHistoryModel.campo.label("campo"),
+                StepHistoryModel.valor_anterior.label("valor_anterior"),
+                StepHistoryModel.valor_nuevo.label("valor_nuevo"),
+                StepHistoryModel.usuario.label("usuario"),
+                StepHistoryModel.fecha.label("fecha"),
+                StepHistoryModel.nota.label("nota"),
+                StepHistoryModel.attachments.label("attachments"),
+                func.row_number().over(
+                    partition_by=StepHistoryModel.step_instance_id,
+                    order_by=(StepHistoryModel.fecha.desc(), StepHistoryModel.id.desc()),
+                ).label("rn"),
+            )
+            .where(StepHistoryModel.step_instance_id.in_(step_ids))
+            .subquery()
+        )
+
+        rows = session.execute(
+            select(
+                latest_history.c.history_id,
+                latest_history.c.step_id,
+                latest_history.c.campo,
+                latest_history.c.valor_anterior,
+                latest_history.c.valor_nuevo,
+                latest_history.c.usuario,
+                latest_history.c.fecha,
+                latest_history.c.nota,
+                latest_history.c.attachments,
+            ).where(latest_history.c.rn == 1)
+        ).all()
+
+        snapshots: dict[str, dict[str, object | None]] = {}
+        for row in rows:
+            snapshots[row.step_id] = self._build_latest_snapshot_from_history(
+                StepHistoryPublic(
+                    id=row.history_id,
+                    step_instance_id=row.step_id,
+                    campo=row.campo,
+                    valor_anterior=row.valor_anterior,
+                    valor_nuevo=row.valor_nuevo,
+                    usuario=row.usuario,
+                    fecha=row.fecha,
+                    nota=row.nota,
+                    attachments=self._deserialize_attachments(row.attachments),
+                )
+            )
+        return snapshots
+
+    def _build_step_list_projections(self, session, workflows: list[WorkflowModel]) -> dict[str, list[StepListProjection]]:
+        step_ids = [step.id for workflow in workflows for step in workflow.steps]
+        comment_snapshots = self._load_latest_comment_snapshots(session, step_ids)
+        history_snapshots = self._load_latest_history_snapshots(session, step_ids)
+        steps_by_workflow: dict[str, list[StepListProjection]] = {}
+
+        for workflow in workflows:
+            projections: list[StepListProjection] = []
+            for step in workflow.steps:
+                latest_snapshot = comment_snapshots.get(step.id, self._empty_latest_snapshot())
+                history_snapshot = history_snapshots.get(step.id, self._empty_latest_snapshot())
+                if history_snapshot.get("timestamp") and (
+                    latest_snapshot.get("timestamp") is None
+                    or history_snapshot["timestamp"] > latest_snapshot["timestamp"]
+                ):
+                    latest_snapshot = history_snapshot
+
+                projections.append(
+                    StepListProjection(
+                        id=step.id,
+                        nombre=step.nombre,
+                        orden=step.orden,
+                        estado=StepStatus(step.estado),
+                        fecha_estado_actual=step.fecha_estado_actual,
+                        fecha_vencimiento=step.fecha_vencimiento,
+                        fecha_recordatorio_espera=step.fecha_recordatorio_espera,
+                        fecha_ejecucion_estimada=step.fecha_ejecucion_estimada,
+                        latest_snapshot_text=latest_snapshot.get("text"),
+                        latest_snapshot_timestamp=latest_snapshot.get("timestamp"),
+                    )
+                )
+            steps_by_workflow[workflow.id] = projections
+
+        return steps_by_workflow
+
+    def _workflow_model_to_list_item(
+        self,
+        workflow: WorkflowModel,
+        steps: list[StepListProjection],
+    ) -> WorkflowListItem:
+        date_projection = _resolve_workflow_date_projection_from_projections(
+            workflow.estado,
+            workflow.fecha_fin,
+            workflow.fecha_espera_desde,
+            steps,
+        )
+        visible_status = _get_visible_workflow_status(workflow.estado, steps)
+        relevant_step = _pick_relevant_step_projection(steps)
+        linked_requirements = [
+            WorkflowListRequirement(
+                id=requirement.id,
+                label=_format_requirement_label_from_parts(requirement.id, requirement.descripcion),
+            )
+            for requirement in sorted(workflow.requirements, key=lambda item: item.fecha_creacion)
+        ]
+
+        return WorkflowListItem(
+            id=workflow.id,
+            ambito=Ambito(workflow.ambito) if workflow.ambito else None,
+            estado_visible=visible_status,
+            objetivo_final=workflow.objetivo_final,
+            nombre_tarea=relevant_step.nombre if relevant_step is not None else "Sin tarea registrada",
+            etiqueta_paso=(
+                "Disparador"
+                if relevant_step is not None
+                and relevant_step.estado in {StepStatus.ACTIVO, StepStatus.ESPERA, StepStatus.PROBLEMA, StepStatus.ESPERANDO_RESPUESTA}
+                else "Última tarea"
+            ),
+            step_id_relevante=relevant_step.id if relevant_step is not None else None,
+            fecha_inicio=workflow.fecha_inicio,
+            fecha_fin=workflow.fecha_fin,
+            latest_movement_at=_get_latest_movement_at(steps),
+            latest_meaningful_record=_get_latest_meaningful_record(steps),
+            linked_requirements=linked_requirements,
+            requirements_count=len(linked_requirements),
+            primary_requirement_label=linked_requirements[0].label if linked_requirements else None,
+            can_cancel=_can_cancel_workflow(workflow.estado, steps),
+            can_reactivate=_can_reactivate_workflow(workflow.estado),
+            can_delete=_can_delete_workflow(workflow.estado),
+            **date_projection,
+        )
+
     def list_workflows(self) -> list[WorkflowSummary]:
         with session_scope() as session:
             workflows = session.scalars(
@@ -1179,6 +1594,45 @@ class PostgresWorkflowRepository(WorkflowRepository):
                 .order_by(WorkflowModel.fecha_inicio.desc())
             ).all()
             return [self._workflow_to_summary(workflow) for workflow in workflows]
+
+    def list_workflow_list_items(self) -> list[WorkflowListItem]:
+        with session_scope() as session:
+            workflows = session.scalars(
+                select(WorkflowModel)
+                .options(
+                    load_only(
+                        WorkflowModel.id,
+                        WorkflowModel.estado,
+                        WorkflowModel.fecha_inicio,
+                        WorkflowModel.fecha_fin,
+                        WorkflowModel.fecha_espera_desde,
+                        WorkflowModel.objetivo_final,
+                        WorkflowModel.ambito,
+                    ),
+                    selectinload(WorkflowModel.requirements).load_only(
+                        TriggerModel.id,
+                        TriggerModel.descripcion,
+                        TriggerModel.fecha_creacion,
+                    ),
+                    selectinload(WorkflowModel.steps).load_only(
+                        StepModel.id,
+                        StepModel.workflow_id,
+                        StepModel.nombre,
+                        StepModel.orden,
+                        StepModel.estado,
+                        StepModel.fecha_estado_actual,
+                        StepModel.fecha_vencimiento,
+                        StepModel.fecha_recordatorio_espera,
+                        StepModel.fecha_ejecucion_estimada,
+                    ),
+                )
+                .order_by(WorkflowModel.fecha_inicio.desc())
+            ).all()
+            steps_by_workflow = self._build_step_list_projections(session, workflows)
+            return [
+                self._workflow_model_to_list_item(workflow, steps_by_workflow.get(workflow.id, []))
+                for workflow in workflows
+            ]
 
     def get_workflow(self, workflow_id: str) -> WorkflowDetail | None:
         with session_scope() as session:

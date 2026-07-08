@@ -27,6 +27,7 @@ const TIMELINE_MAX_HEIGHT = "calc(100vh - 250px)";
 const FLOW_INFO_GRID_TEMPLATE = "minmax(0, 1fr) 108px";
 const UNSCHEDULED_GROUP_INDENT = 18;
 const UNSCHEDULED_ITEM_INDENT = 34;
+const PROJECT_CHILD_INDENT = UNSCHEDULED_ITEM_INDENT;
 
 function formatAgendaColumnLabel(value: string) {
   const date = new Date(`${value}T00:00:00Z`);
@@ -97,7 +98,13 @@ function TimelineBackground({ columns, height }: { columns: FlowAgendaColumn[]; 
   );
 }
 
-function TodayGuide({ model, zIndex = 6 }: { model: FlowAgendaModel; zIndex?: number }) {
+function TodayGuideOverlay({
+  model,
+  horizontalScrollLeft,
+}: {
+  model: FlowAgendaModel;
+  horizontalScrollLeft: number;
+}) {
   const theme = useTheme();
   const todayGuideLeft = getTodayGuideLeft(model);
 
@@ -107,20 +114,53 @@ function TodayGuide({ model, zIndex = 6 }: { model: FlowAgendaModel; zIndex?: nu
 
   return (
     <Box
+      data-testid="agenda-today-guide-overlay"
       aria-hidden
       sx={{
         position: "absolute",
         top: 0,
+        right: 0,
         bottom: 0,
-        left: todayGuideLeft,
-        width: 2,
-        transform: "translateX(-50%)",
-        bgcolor: alpha(theme.palette.primary.main, 0.65),
-        boxShadow: `0 0 0 1px ${alpha(theme.palette.primary.main, 0.12)}`,
+        left: `${LEFT_COLUMN_WIDTH}px`,
+        overflow: "hidden",
         pointerEvents: "none",
-        zIndex,
+        zIndex: 8,
       }}
-    />
+    >
+      <Box
+        sx={{
+          position: "absolute",
+          top: 0,
+          bottom: 0,
+          left: todayGuideLeft - horizontalScrollLeft,
+          width: 2,
+          transform: "translateX(-50%)",
+          bgcolor: alpha(theme.palette.primary.main, 0.65),
+          boxShadow: `0 0 0 1px ${alpha(theme.palette.primary.main, 0.12)}`,
+        }}
+      />
+      <Chip
+        data-testid="agenda-today-chip"
+        data-today-chip-style="custom"
+        label="Hoy"
+        size="small"
+        sx={{
+          position: "absolute",
+          top: 10,
+          left: todayGuideLeft - horizontalScrollLeft,
+          height: 20,
+          transform: "translateX(-50%)",
+          bgcolor: alpha(theme.palette.background.paper, 0.96),
+          color: theme.palette.primary.dark,
+          border: `1px solid ${alpha(theme.palette.primary.main, 0.28)}`,
+          boxShadow: `0 1px 2px ${alpha(theme.palette.primary.main, 0.1)}`,
+          "& .MuiChip-label": {
+            px: 0.75,
+            fontWeight: 700,
+          },
+        }}
+      />
+    </Box>
   );
 }
 
@@ -152,18 +192,16 @@ function AgendaTrack({
 
   return (
     <Box
+      data-row-divider="none"
       sx={{
         position: "relative",
         minWidth: timelineWidth,
         width: timelineWidth,
         height: FLOW_ROW_HEIGHT,
-        borderBottom: "1px solid",
-        borderColor: "divider",
         overflow: "hidden",
       }}
     >
       <TimelineBackground columns={model.columns} height={FLOW_ROW_HEIGHT} />
-      <TodayGuide model={model} zIndex={1} />
 
       <Box
         role="button"
@@ -215,8 +253,8 @@ function AgendaTrack({
             bgcolor: activeDrag
               ? alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.32 : 0.22)
               : item.isOverdue
-              ? alpha(theme.palette.warning.main, theme.palette.mode === "dark" ? 0.34 : 0.24)
-              : alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.2 : 0.12),
+                ? alpha(theme.palette.warning.main, theme.palette.mode === "dark" ? 0.34 : 0.24)
+                : alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.2 : 0.12),
           },
         }}
         onPointerMove={(event) => {
@@ -304,18 +342,16 @@ function TimelinePlaceholder({
 
   return (
     <Box
+      data-row-divider="none"
       sx={{
         position: "relative",
         minWidth: timelineWidth,
         width: timelineWidth,
         height: FLOW_ROW_HEIGHT,
-        borderBottom: "1px solid",
-        borderColor: "divider",
         overflow: "hidden",
       }}
     >
       <TimelineBackground columns={model.columns} height={FLOW_ROW_HEIGHT} />
-      <TodayGuide model={model} />
 
       <Box
         onMouseMove={(event) => {
@@ -369,7 +405,7 @@ function TimelinePlaceholder({
               left: hoverColumnIndex * DAY_COLUMN_WIDTH,
               width: DAY_COLUMN_WIDTH,
               height: "100%",
-              bgcolor: (theme) => alpha(theme.palette.primary.main, 0.12),
+              bgcolor: (currentTheme) => alpha(currentTheme.palette.primary.main, 0.12),
               pointerEvents: "none",
               borderRadius: `${theme.appShape.sm}px`,
             }}
@@ -383,43 +419,85 @@ function TimelinePlaceholder({
   );
 }
 
-function AgendaGroupTimeline({ model }: { model: FlowAgendaModel }) {
-  const timelineWidth = model.columns.length * DAY_COLUMN_WIDTH;
+function ProjectHeaderLabel({
+  groupLabel,
+  flowCount,
+  unscheduledCount,
+  expanded,
+  onToggle,
+}: {
+  groupLabel: string;
+  flowCount: number;
+  unscheduledCount: number;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const theme = useTheme();
 
   return (
-    <Box
+    <ButtonBase
+      data-project-header-style="flat"
+      data-project-header-width="full"
+      onClick={onToggle}
       sx={{
-        position: "relative",
-        minWidth: timelineWidth,
-        width: timelineWidth,
+        width: "100%",
+        display: "flex",
+        minHeight: GROUP_ROW_HEIGHT,
         height: GROUP_ROW_HEIGHT,
-        borderBottom: "1px solid",
-        borderColor: "divider",
+        justifyContent: "flex-start",
+        textAlign: "left",
+        borderRadius: 0,
+        bgcolor: (resolvedTheme) =>
+          alpha(resolvedTheme.palette.text.primary, resolvedTheme.palette.mode === "dark" ? 0.08 : 0.035),
+        px: 1.1,
+        gap: 0.8,
       }}
     >
-      <TimelineBackground columns={model.columns} height={GROUP_ROW_HEIGHT} />
-      <TodayGuide model={model} zIndex={1} />
-    </Box>
+      <ExpandMoreRoundedIcon
+        sx={{
+          fontSize: 18,
+          color: "text.secondary",
+          transform: expanded ? "rotate(0deg)" : "rotate(-90deg)",
+          transition: theme.transitions.create("transform", {
+            duration: theme.appMotion.short,
+          }),
+        }}
+      />
+      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+        {groupLabel}
+      </Typography>
+      <Typography variant="caption" color="text.secondary">
+        {flowCount} {flowCount === 1 ? "flow" : "flows"}
+      </Typography>
+      {unscheduledCount > 0 ? (
+        <Chip size="small" variant="outlined" color="warning" label={`${unscheduledCount} sin fecha`} />
+      ) : null}
+    </ButtonBase>
   );
 }
 
-function AgendaRow({
+function ProjectHeaderFill() {
+  return (
+    <Box
+      data-project-header-style="flat"
+      sx={{
+        width: "100%",
+        minWidth: 0,
+        height: GROUP_ROW_HEIGHT,
+        bgcolor: (resolvedTheme) =>
+          alpha(resolvedTheme.palette.text.primary, resolvedTheme.palette.mode === "dark" ? 0.08 : 0.035),
+      }}
+    />
+  );
+}
+
+function AgendaRowLabel({
   item,
-  model,
   onWorkflowOpen,
-  dragState,
-  setDragState,
-  onDragFinish,
-  onExecutionDateChange,
   contentInset = 0,
 }: {
   item: FlowAgendaItem;
-  model: FlowAgendaModel;
   onWorkflowOpen: (workflowId: string) => void;
-  dragState: DragState | null;
-  setDragState: Dispatch<SetStateAction<DragState | null>>;
-  onDragFinish: (dragState: DragState, commit: boolean) => Promise<void>;
-  onExecutionDateChange: (workflowId: string, stepId: string, nextDateInput: string, previousDateInput: string | null) => Promise<void>;
   contentInset?: number;
 }) {
   const theme = useTheme();
@@ -428,119 +506,125 @@ function AgendaRow({
 
   return (
     <Box
+      data-testid={`agenda-row-${item.id}`}
+      data-row-divider="none"
       sx={{
-        display: "grid",
-        gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)`,
-        alignItems: "center",
+        minHeight: FLOW_ROW_HEIGHT,
+        height: FLOW_ROW_HEIGHT,
+        bgcolor: "background.paper",
+        px: 1.2,
+        py: 0,
+        borderRight: "1px solid",
+        borderColor: "divider",
       }}
     >
       <Box
+        data-content-inset={contentInset}
         sx={{
+          display: "grid",
+          gridTemplateColumns: FLOW_INFO_GRID_TEMPLATE,
+          columnGap: 1,
+          alignItems: "center",
           width: "100%",
-          position: "sticky",
-          left: 0,
-          zIndex: 30,
-          minHeight: FLOW_ROW_HEIGHT,
-          height: FLOW_ROW_HEIGHT,
-          borderRadius: 0,
-          borderColor: "divider",
-          borderBottom: "1px solid",
-          borderRight: "1px solid",
-          borderTop: "none",
-          borderLeft: "none",
-          bgcolor: "background.paper",
-          px: 1.2,
-          py: 0,
+          minWidth: 0,
+          height: "100%",
+          pl: `${contentInset}px`,
         }}
       >
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: FLOW_INFO_GRID_TEMPLATE,
-            columnGap: 1,
-            alignItems: "center",
-            width: "100%",
-            minWidth: 0,
-            pl: `${contentInset}px`,
-          }}
-        >
-          <Stack spacing={0.35} sx={{ minWidth: 0 }}>
-            <Stack direction="row" spacing={0.65} sx={{ alignItems: "center", minWidth: 0 }}>
-              <Tooltip title={item.row.taskName}>
-                <ButtonBase
-                  onClick={() => onWorkflowOpen(item.row.id)}
+        <Stack spacing={0.35} sx={{ minWidth: 0 }}>
+          <Stack direction="row" spacing={0.65} sx={{ alignItems: "center", minWidth: 0 }}>
+            <Tooltip title={item.row.taskName}>
+              <ButtonBase
+                onClick={() => onWorkflowOpen(item.row.id)}
+                sx={{
+                  flex: 1,
+                  minWidth: 0,
+                  justifyContent: "flex-start",
+                  textAlign: "left",
+                  borderRadius: `${theme.appShape.sm}px`,
+                  px: 0.2,
+                  "&:hover": {
+                    bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.12 : 0.05),
+                  },
+                }}
+              >
+                <Typography
+                  variant="body2"
+                  noWrap
                   sx={{
-                    flex: 1,
+                    fontWeight: 700,
+                    color: "text.primary",
                     minWidth: 0,
-                    justifyContent: "flex-start",
-                    textAlign: "left",
-                    borderRadius: `${theme.appShape.sm}px`,
-                    px: 0.2,
-                    "&:hover": {
-                      bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.12 : 0.05),
-                    },
                   }}
                 >
-                  <Typography
-                    variant="body2"
-                    noWrap
-                    sx={{
-                      fontWeight: 700,
-                      color: "text.primary",
-                      minWidth: 0,
-                    }}
-                  >
-                    {item.row.taskName}
-                  </Typography>
-                </ButtonBase>
-              </Tooltip>
-              {item.row.extraRequirementCount > 0 ? <Chip size="small" variant="outlined" label={`+${item.row.extraRequirementCount}`} /> : null}
-            </Stack>
-            {secondaryLabel ? (
-              <Typography variant="caption" color="text.secondary" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {secondaryLabel}
-              </Typography>
-            ) : null}
+                  {item.row.taskName}
+                </Typography>
+              </ButtonBase>
+            </Tooltip>
+            {item.row.extraRequirementCount > 0 ? <Chip size="small" variant="outlined" label={`+${item.row.extraRequirementCount}`} /> : null}
           </Stack>
+          {secondaryLabel ? (
+            <Typography variant="caption" color="text.secondary" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {secondaryLabel}
+            </Typography>
+          ) : null}
+        </Stack>
 
-          <StatusBadge value={item.row.status} />
-        </Box>
+        <StatusBadge value={item.row.status} />
       </Box>
-
-      {item.isWithoutDate ? (
-        <TimelinePlaceholder
-          model={model}
-          label="Sin fecha"
-          stepId={item.row.stepId ?? null}
-          onAssign={(nextDateInput) => {
-            if (!item.row.stepId) {
-              return Promise.reject(new Error("no-step"));
-            }
-            return onExecutionDateChange(item.row.id, item.row.stepId, nextDateInput, null);
-          }}
-        />
-      ) : (
-        <AgendaTrack
-          item={item}
-          model={model}
-          dragState={dragState}
-          setDragState={setDragState}
-          onDragFinish={onDragFinish}
-        />
-      )}
     </Box>
   );
 }
 
-function UnscheduledGroupRow({
-  count,
+function AgendaRowTimeline({
+  item,
   model,
+  dragState,
+  setDragState,
+  onDragFinish,
+  onExecutionDateChange,
+}: {
+  item: FlowAgendaItem;
+  model: FlowAgendaModel;
+  dragState: DragState | null;
+  setDragState: Dispatch<SetStateAction<DragState | null>>;
+  onDragFinish: (dragState: DragState, commit: boolean) => Promise<void>;
+  onExecutionDateChange: (workflowId: string, stepId: string, nextDateInput: string, previousDateInput: string | null) => Promise<void>;
+}) {
+  if (item.isWithoutDate) {
+    return (
+      <TimelinePlaceholder
+        model={model}
+        label="Sin fecha"
+        stepId={item.row.stepId ?? null}
+        onAssign={(nextDateInput) => {
+          if (!item.row.stepId) {
+            return Promise.reject(new Error("no-step"));
+          }
+          return onExecutionDateChange(item.row.id, item.row.stepId, nextDateInput, null);
+        }}
+      />
+    );
+  }
+
+  return (
+    <AgendaTrack
+      item={item}
+      model={model}
+      dragState={dragState}
+      setDragState={setDragState}
+      onDragFinish={onDragFinish}
+    />
+  );
+}
+
+function UnscheduledGroupLabel({
+  count,
   expanded,
   onToggle,
   contentInset = UNSCHEDULED_GROUP_INDENT,
 }: {
   count: number;
-  model: FlowAgendaModel;
   expanded: boolean;
   onToggle: () => void;
   contentInset?: number;
@@ -548,54 +632,46 @@ function UnscheduledGroupRow({
   const theme = useTheme();
 
   return (
-    <Box
+    <ButtonBase
+      data-testid="agenda-unscheduled-group-row"
+      data-row-divider="none"
+      onClick={onToggle}
       sx={{
-        display: "grid",
-        gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)`,
-        alignItems: "center",
+        minHeight: FLOW_ROW_HEIGHT,
+        height: FLOW_ROW_HEIGHT,
+        justifyContent: "flex-start",
+        textAlign: "left",
+        borderRadius: 0,
+        bgcolor: alpha(theme.palette.warning.main, theme.palette.mode === "dark" ? 0.09 : 0.05),
+        px: 1.2,
+        borderRight: "1px solid",
+        borderColor: "divider",
       }}
     >
-      <ButtonBase
-        onClick={onToggle}
-        sx={{
-          position: "sticky",
-          left: 0,
-          zIndex: 30,
-          minHeight: FLOW_ROW_HEIGHT,
-          height: FLOW_ROW_HEIGHT,
-          justifyContent: "flex-start",
-          textAlign: "left",
-          borderRadius: 0,
-          borderBottom: "1px solid",
-          borderRight: "1px solid",
-          borderColor: "divider",
-          bgcolor: alpha(theme.palette.warning.main, theme.palette.mode === "dark" ? 0.09 : 0.05),
-          px: 1.2,
-        }}
-      >
-        <Stack direction="row" spacing={0.8} sx={{ alignItems: "center", pl: `${contentInset}px`, minWidth: 0 }}>
-          <ExpandMoreRoundedIcon
-            sx={{
-              fontSize: 18,
-              color: "text.secondary",
-              transform: expanded ? "rotate(0deg)" : "rotate(-90deg)",
-              transition: theme.transitions.create("transform", {
-                duration: theme.appMotion.short,
-              }),
-            }}
-          />
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            Sin fecha de ejecución
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {count} {count === 1 ? "flow" : "flows"}
-          </Typography>
-        </Stack>
-      </ButtonBase>
-
-      <TimelinePlaceholder model={model} label="Sin fecha" />
-    </Box>
+      <Stack direction="row" spacing={0.8} sx={{ alignItems: "center", pl: `${contentInset}px`, minWidth: 0 }}>
+        <ExpandMoreRoundedIcon
+          sx={{
+            fontSize: 18,
+            color: "text.secondary",
+            transform: expanded ? "rotate(0deg)" : "rotate(-90deg)",
+            transition: theme.transitions.create("transform", {
+              duration: theme.appMotion.short,
+            }),
+          }}
+        />
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+          Sin fecha de ejecución
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {count} {count === 1 ? "flow" : "flows"}
+        </Typography>
+      </Stack>
+    </ButtonBase>
   );
+}
+
+function UnscheduledGroupTimeline({ model }: { model: FlowAgendaModel }) {
+  return <TimelinePlaceholder model={model} label="Sin fecha" />;
 }
 
 export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChange }: FlowAgendaTimelineProps) {
@@ -604,6 +680,7 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [collapsedUnscheduledGroups, setCollapsedUnscheduledGroups] = useState<Record<string, boolean>>({});
   const [dragState, setDragState] = useState<DragState | null>(null);
+  const [horizontalScrollLeft, setHorizontalScrollLeft] = useState(0);
 
   useEffect(() => {
     setCollapsedGroups((current) => {
@@ -653,6 +730,26 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
     return segments;
   }, [model.columns]);
 
+  const visibleGroups = useMemo(
+    () =>
+      model.groups.map((group) => {
+        const isCollapsed = collapsedGroups[group.key] ?? false;
+        const isUnscheduledCollapsed = collapsedUnscheduledGroups[group.key] ?? true;
+        const showGroupChildren = !isCollapsed;
+        const showUnscheduledItems = showGroupChildren && group.unscheduledItems.length > 0 && !isUnscheduledCollapsed;
+
+        return {
+          group,
+          isCollapsed,
+          isUnscheduledCollapsed,
+          showGroupChildren,
+          showUnscheduledItems,
+          hasVisibleChildren: showGroupChildren && (group.scheduledItems.length > 0 || group.unscheduledItems.length > 0),
+        };
+      }),
+    [collapsedGroups, collapsedUnscheduledGroups, model.groups]
+  );
+
   function handleToggleGroup(groupKey: string) {
     setCollapsedGroups((current) => ({
       ...current,
@@ -696,67 +793,69 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
   return (
     <Box
       sx={{
-        overflow: "auto",
-        maxHeight: { xs: "none", md: TIMELINE_MAX_HEIGHT },
+        position: "relative",
         border: "1px solid",
         borderColor: "divider",
-        borderRadius: (resolvedTheme) => resolvedTheme.appShape.md,
+        borderRadius: `${theme.appShape.md}px`,
         bgcolor: "background.paper",
+        overflow: "hidden",
       }}
     >
-      <Box sx={{ position: "relative", minWidth: LEFT_COLUMN_WIDTH + timelineWidth }}>
+      <TodayGuideOverlay model={model} horizontalScrollLeft={horizontalScrollLeft} />
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)`,
+          alignItems: "stretch",
+          borderBottom: "1px solid",
+          borderColor: "divider",
+        }}
+      >
         <Box
           sx={{
-            position: "sticky",
-            top: 0,
-            zIndex: 20,
-            display: "grid",
-            gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)`,
-            alignItems: "stretch",
-            borderBottom: "1px solid",
+            bgcolor: "background.paper",
+            borderRight: "1px solid",
             borderColor: "divider",
+            px: 1.2,
+            py: 1,
+            display: "grid",
+            gridTemplateRows: "28px 36px",
+          }}
+        >
+          <Typography variant="caption" color="text.secondary" sx={{ display: "flex", alignItems: "center" }}>
+            Flows activos
+          </Typography>
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: FLOW_INFO_GRID_TEMPLATE,
+              columnGap: 1,
+              alignItems: "center",
+            }}
+          >
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+              Flow / tarea actual
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+              Estado
+            </Typography>
+          </Box>
+        </Box>
+
+        <Box
+          data-testid="agenda-gantt-header-viewport"
+          sx={{
+            position: "relative",
+            minWidth: 0,
+            overflow: "hidden",
+            bgcolor: "background.paper",
           }}
         >
           <Box
             sx={{
-              position: "sticky",
-              left: 0,
-              zIndex: 22,
-              bgcolor: "background.paper",
-              borderRight: "1px solid",
-              borderColor: "divider",
-              px: 1.2,
-              py: 1,
-              display: "grid",
-              gridTemplateRows: "28px 36px",
-            }}
-          >
-            <Typography variant="caption" color="text.secondary" sx={{ display: "flex", alignItems: "center" }}>
-              Flows activos
-            </Typography>
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: FLOW_INFO_GRID_TEMPLATE,
-                columnGap: 1,
-                alignItems: "center",
-              }}
-            >
-              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
-                Flow / tarea actual
-              </Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
-                Estado
-              </Typography>
-            </Box>
-          </Box>
-
-          <Box
-            sx={{
-              position: "relative",
-              minWidth: timelineWidth,
               width: timelineWidth,
-              bgcolor: "background.paper",
+              minWidth: timelineWidth,
+              transform: `translateX(-${horizontalScrollLeft}px)`,
             }}
           >
             <Box
@@ -801,25 +900,6 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
               }}
             >
               <TimelineBackground columns={model.columns} height={36} />
-              {model.isTodayVisible && model.todayColumnIndex !== null ? (
-                <Chip
-                  label="Hoy"
-                  size="small"
-                  color="primary"
-                  sx={{
-                    position: "absolute",
-                    top: -18,
-                    left: getTodayGuideLeft(model) ?? 0,
-                    height: 20,
-                    zIndex: 10,
-                    transform: "translateX(-50%)",
-                    pointerEvents: "none",
-                    "& .MuiChip-label": {
-                      px: 0.75,
-                    },
-                  }}
-                />
-              ) : null}
               <Box
                 sx={{
                   position: "absolute",
@@ -860,108 +940,170 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
             </Box>
           </Box>
         </Box>
+      </Box>
 
-        {model.groups.map((group) => {
-          const isCollapsed = collapsedGroups[group.key] ?? false;
-
-          return (
-            <Box key={group.key}>
+      <Box
+        data-testid="agenda-body-scroll"
+        data-scroll-axis="y"
+        sx={{
+          maxHeight: { xs: "none", md: TIMELINE_MAX_HEIGHT },
+          overflowY: "auto",
+          overflowX: "hidden",
+          scrollbarGutter: "stable",
+        }}
+      >
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)`,
+            alignItems: "start",
+          }}
+        >
+          <Box sx={{ minWidth: LEFT_COLUMN_WIDTH, bgcolor: "background.paper" }}>
+            {visibleGroups.map(({ group, isCollapsed, isUnscheduledCollapsed, showGroupChildren, showUnscheduledItems, hasVisibleChildren }) => (
               <Box
+                key={group.key}
+                data-testid={`agenda-project-group-${group.key}`}
                 sx={{
-                  display: "grid",
-                  gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)`,
-                  alignItems: "center",
+                  ml: 1,
+                  mr: 0,
+                  my: 0.9,
+                  border: "1px solid",
+                  borderRight: "none",
+                  borderColor: alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.34 : 0.32),
+                  borderRadius: `${theme.appShape.md}px 0 0 ${theme.appShape.md}px`,
+                  overflow: "hidden",
+                  bgcolor: "background.paper",
                 }}
               >
-                <ButtonBase
-                  onClick={() => handleToggleGroup(group.key)}
+                <Box
                   sx={{
-                    position: "sticky",
-                    left: 0,
-                    zIndex: 30,
-                    minHeight: GROUP_ROW_HEIGHT,
-                    height: GROUP_ROW_HEIGHT,
-                    justifyContent: "flex-start",
-                    textAlign: "left",
-                    borderRadius: 0,
-                    borderBottom: "1px solid",
-                    borderRight: "1px solid",
+                    borderBottom: hasVisibleChildren ? "1px solid" : "none",
                     borderColor: "divider",
-                    bgcolor: (resolvedTheme) =>
-                      alpha(resolvedTheme.palette.text.primary, resolvedTheme.palette.mode === "dark" ? 0.08 : 0.035),
-                    px: 1.1,
-                    gap: 0.8,
                   }}
                 >
-                  <ExpandMoreRoundedIcon
-                    sx={{
-                      fontSize: 18,
-                      color: "text.secondary",
-                      transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)",
-                      transition: theme.transitions.create("transform", {
-                        duration: theme.appMotion.short,
-                      }),
-                    }}
+                  <ProjectHeaderLabel
+                    groupLabel={group.label}
+                    flowCount={group.items.length}
+                    unscheduledCount={group.unscheduledItems.length}
+                    expanded={!isCollapsed}
+                    onToggle={() => handleToggleGroup(group.key)}
                   />
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                    {group.label}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {group.items.length} {group.items.length === 1 ? "flow" : "flows"}
-                  </Typography>
-                  {group.unscheduledItems.length > 0 ? (
-                    <Chip size="small" variant="outlined" color="warning" label={`${group.unscheduledItems.length} sin fecha`} />
-                  ) : null}
-                </ButtonBase>
+                </Box>
 
-                <AgendaGroupTimeline model={model} />
-              </Box>
-
-              {!isCollapsed ? (
-                <>
-                  {group.scheduledItems.map((item) => (
-                    <AgendaRow
-                      key={item.id}
-                      item={item}
-                      model={model}
-                      onWorkflowOpen={onWorkflowOpen}
-                      dragState={dragState}
-                      setDragState={setDragState}
-                      onDragFinish={handleBarPointerFinish}
-                      onExecutionDateChange={onExecutionDateChange}
-                    />
-                  ))}
-                  {group.unscheduledItems.length > 0 ? (
-                    <>
-                      <UnscheduledGroupRow
-                        count={group.unscheduledItems.length}
-                        model={model}
-                        expanded={!(collapsedUnscheduledGroups[group.key] ?? true)}
-                        onToggle={() => handleToggleUnscheduledGroup(group.key)}
-                        contentInset={UNSCHEDULED_GROUP_INDENT}
+                {showGroupChildren ? (
+                  <>
+                    {group.scheduledItems.map((item) => (
+                      <AgendaRowLabel
+                        key={item.id}
+                        item={item}
+                        onWorkflowOpen={onWorkflowOpen}
+                        contentInset={PROJECT_CHILD_INDENT}
                       />
-                      {!(collapsedUnscheduledGroups[group.key] ?? true)
-                        ? group.unscheduledItems.map((item) => (
-                            <AgendaRow
-                              key={item.id}
-                              item={item}
-                              model={model}
-                              onWorkflowOpen={onWorkflowOpen}
-                              dragState={dragState}
-                              setDragState={setDragState}
-                              onDragFinish={handleBarPointerFinish}
-                              onExecutionDateChange={onExecutionDateChange}
-                              contentInset={UNSCHEDULED_ITEM_INDENT}
-                            />
-                          ))
-                        : null}
-                    </>
-                  ) : null}
-                </>
-              ) : null}
+                    ))}
+                    {group.unscheduledItems.length > 0 ? (
+                      <>
+                        <UnscheduledGroupLabel
+                          count={group.unscheduledItems.length}
+                          expanded={!isUnscheduledCollapsed}
+                          onToggle={() => handleToggleUnscheduledGroup(group.key)}
+                          contentInset={UNSCHEDULED_GROUP_INDENT}
+                        />
+                        {showUnscheduledItems
+                          ? group.unscheduledItems.map((item) => (
+                              <AgendaRowLabel
+                                key={item.id}
+                                item={item}
+                                onWorkflowOpen={onWorkflowOpen}
+                                contentInset={UNSCHEDULED_ITEM_INDENT}
+                              />
+                            ))
+                          : null}
+                      </>
+                    ) : null}
+                  </>
+                ) : null}
+              </Box>
+            ))}
+          </Box>
+
+          <Box sx={{ minWidth: 0 }}>
+            <Box
+              data-testid="agenda-gantt-scroll"
+              data-scroll-axis="x"
+              onScroll={(event) => setHorizontalScrollLeft(event.currentTarget.scrollLeft)}
+              sx={{
+                minWidth: 0,
+                overflowX: "auto",
+                overflowY: "hidden",
+                scrollbarGutter: "stable",
+              }}
+            >
+              <Box sx={{ width: timelineWidth, minWidth: timelineWidth }}>
+                {visibleGroups.map(({ group, isCollapsed, isUnscheduledCollapsed, showGroupChildren, showUnscheduledItems, hasVisibleChildren }) => (
+                  <Box
+                    key={group.key}
+                sx={{
+                  ml: 0,
+                  mr: 1,
+                  my: 0.9,
+                  border: "1px solid",
+                  borderLeft: "none",
+                  borderColor: alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.34 : 0.32),
+                  borderRadius: `0 ${theme.appShape.md}px ${theme.appShape.md}px 0`,
+                  overflow: "hidden",
+                  bgcolor: (resolvedTheme) =>
+                    alpha(resolvedTheme.palette.text.primary, resolvedTheme.palette.mode === "dark" ? 0.08 : 0.035),
+                }}
+              >
+                    <Box
+                      sx={{
+                        borderBottom: hasVisibleChildren ? "1px solid" : "none",
+                        borderColor: "divider",
+                      }}
+                    >
+                      <ProjectHeaderFill />
+                    </Box>
+
+                    {showGroupChildren ? (
+                      <>
+                        {group.scheduledItems.map((item) => (
+                          <AgendaRowTimeline
+                            key={item.id}
+                            item={item}
+                            model={model}
+                            dragState={dragState}
+                            setDragState={setDragState}
+                            onDragFinish={handleBarPointerFinish}
+                            onExecutionDateChange={onExecutionDateChange}
+                          />
+                        ))}
+                        {group.unscheduledItems.length > 0 ? (
+                          <>
+                            <UnscheduledGroupTimeline model={model} />
+                            {showUnscheduledItems
+                              ? group.unscheduledItems.map((item) => (
+                                  <AgendaRowTimeline
+                                    key={item.id}
+                                    item={item}
+                                    model={model}
+                                    dragState={dragState}
+                                    setDragState={setDragState}
+                                    onDragFinish={handleBarPointerFinish}
+                                    onExecutionDateChange={onExecutionDateChange}
+                                  />
+                                ))
+                              : null}
+                          </>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </Box>
+                ))}
+              </Box>
             </Box>
-          );
-        })}
+          </Box>
+        </Box>
       </Box>
     </Box>
   );

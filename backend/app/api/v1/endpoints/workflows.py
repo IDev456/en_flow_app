@@ -11,6 +11,7 @@ from app.schemas.workflow import (
     StepInstancePublic,
     TriggerDetail,
     WorkflowDetail,
+    WorkflowListItem,
     WorkflowSummary,
     WorkflowTemplatePublic,
     WorkflowUpdate,
@@ -23,6 +24,11 @@ router = APIRouter()
 @router.get("/", response_model=list[WorkflowSummary])
 def list_workflows(service: WorkflowService = Depends(get_workflow_service)) -> list[WorkflowSummary]:
     return service.list_workflows()
+
+
+@router.get("/list-view", response_model=list[WorkflowListItem])
+def list_workflow_list_items(service: WorkflowService = Depends(get_workflow_service)) -> list[WorkflowListItem]:
+    return service.list_workflow_list_items()
 
 
 @router.post("/quick-capture", response_model=WorkflowDetail, status_code=status.HTTP_201_CREATED)

@@ -36,6 +36,7 @@ from app.schemas.workflow import (
     TriggerUpdate,
     TriggerStatus,
     WorkflowDetail,
+    WorkflowListItem,
     WorkflowStartMode,
     WorkflowStartRequest,
     WorkflowStatus,
@@ -315,6 +316,9 @@ class WorkflowService:
 
     def list_workflows(self) -> list[WorkflowSummary]:
         return self.repository.list_workflows()
+
+    def list_workflow_list_items(self) -> list[WorkflowListItem]:
+        return self.repository.list_workflow_list_items()
 
     def list_active_workflows(self) -> list[WorkflowSummary]:
         return self.repository.list_active_workflows()

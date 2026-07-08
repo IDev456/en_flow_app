@@ -66,6 +66,35 @@ export type WorkflowSummary = {
   resolucion_esperada: string | null;
 };
 
+export type WorkflowListRequirement = {
+  id: string;
+  label: string;
+};
+
+export type WorkflowListItem = {
+  id: string;
+  ambito: Ambito;
+  estado_visible: TriggerStatus | WorkflowStatus;
+  objetivo_final: string | null;
+  nombre_tarea: string;
+  etiqueta_paso: string;
+  step_id_relevante: string | null;
+  fecha_inicio: string;
+  contexto_fecha_actual: WorkflowDateContext;
+  fecha_ejecucion_actual: string | null;
+  fecha_espera_desde: string | null;
+  fecha_fin: string | null;
+  fecha_recordatorio_actual: string | null;
+  latest_movement_at: string | null;
+  latest_meaningful_record: string;
+  linked_requirements: WorkflowListRequirement[];
+  requirements_count: number;
+  primary_requirement_label: string | null;
+  can_cancel: boolean;
+  can_reactivate: boolean;
+  can_delete: boolean;
+};
+
 export type Step = {
   id: string;
   workflow_id: string;

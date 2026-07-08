@@ -7,7 +7,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "npx tsc -b && npx vite build",
     "preview": "vite preview",
-    "test": "npx tsc -p tsconfig.test.json && node --test ../.frontend-test-dist/tests/*.test.js"
+    "test": "NODE_PATH=./node_modules npx tsc -p tsconfig.test.json && NODE_PATH=./node_modules node --test ../.frontend-test-dist/tests/*.test.js"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

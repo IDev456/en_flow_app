@@ -1,4 +1,4 @@
-import type { Step, TriggerDetail, WorkflowDetail } from "../types";
+import type { Step, TriggerDetail, WorkflowDetail, WorkflowListItem } from "../types";
 import {
   formatElapsedTime,
   getAmbitoLabel,
@@ -43,6 +43,8 @@ export type FlowTableItem = {
   latestMovementAt?: string | null;
 };
 
+export type FlowRowSource = FlowTableItem | WorkflowListItem;
+
 export type FlowGridRow = {
   id: string;
   stepId: string | null;
@@ -69,6 +71,9 @@ export type FlowGridRow = {
   extraRequirementCount: number;
   requirementsCount: number;
   linkedRequirements: LinkedRequirementRow[];
+  canCancel?: boolean;
+  canReactivate?: boolean;
+  canDelete?: boolean;
 };
 
 export type FlowCountSummary = Record<"active" | "waiting" | "cancelled" | "finalized", number>;
@@ -156,6 +161,23 @@ function resolvePrimaryDateInput(workflow: WorkflowDetail, step: Step | null) {
     return toCalendarDateInputValue(workflow.fecha_fin);
   }
   return "";
+}
+
+function resolvePrimaryDateInputFromListItem(item: WorkflowListItem) {
+  if (item.contexto_fecha_actual === "espera") {
+    return toCalendarDateInputValue(item.fecha_espera_desde);
+  }
+  if (item.contexto_fecha_actual === "activa") {
+    return toCalendarDateInputValue(item.fecha_ejecucion_actual);
+  }
+  if (item.contexto_fecha_actual === "cerrado") {
+    return toCalendarDateInputValue(item.fecha_fin);
+  }
+  return "";
+}
+
+function isWorkflowListItemSource(item: FlowRowSource): item is WorkflowListItem {
+  return "estado_visible" in item;
 }
 
 export function pickRelevantStep(workflow: WorkflowDetail): Step | null {
@@ -382,10 +404,67 @@ export function matchesFlowQuickFilter(row: FlowGridRow, filter: FlowQuickFilter
   return true;
 }
 
-export function buildFlowRows(items: FlowTableItem[], today: string = getTodayLocalDateInput()): FlowGridRow[] {
+export function buildFlowRows(items: FlowRowSource[], today: string = getTodayLocalDateInput()): FlowGridRow[] {
   const todaySortValue = toDateSortValue(today);
 
   return items.map((item) => {
+    if (isWorkflowListItemSource(item)) {
+      const primaryDateInput = resolvePrimaryDateInputFromListItem(item);
+      const executionDateInput = toCalendarDateInputValue(item.fecha_ejecucion_actual);
+      const waitingSinceInput = item.estado_visible === "esperando_respuesta" ? toCalendarDateInputValue(item.fecha_espera_desde) : "";
+      const completedAtInput = toCalendarDateInputValue(item.fecha_fin);
+      const movementAtValue = getDateValue(item.latest_movement_at);
+      const movementAt = movementAtValue ?? Number.MAX_SAFE_INTEGER;
+      const movementDateInput = movementAtValue === null ? null : new Date(movementAtValue).toISOString();
+      const movementDayDiff = getCalendarDayDiff(toCalendarDateInputValue(movementDateInput), today);
+      const movementDays = movementDayDiff === null ? null : Math.max(0, -movementDayDiff);
+      const contextualDateInput = primaryDateInput || "";
+      const contextualDayValue = contextualDateInput ? toDateSortValue(contextualDateInput) : null;
+      const operationalSortValue =
+        contextualDayValue === null
+          ? 3_000_000_000
+          : contextualDateInput === today
+            ? contextualDayValue
+            : contextualDateInput < today
+              ? 1_000_000_000 + Math.max(0, todaySortValue - contextualDayValue)
+              : 2_000_000_000 + contextualDayValue;
+      const requirementLabels = item.linked_requirements.map((requirement) => requirement.label);
+
+      return {
+        id: item.id,
+        stepId: item.step_id_relevante,
+        ambito: item.ambito,
+        status: item.estado_visible,
+        taskName: item.nombre_tarea || "Sin tarea registrada",
+        stepLabel: item.etiqueta_paso || "Última tarea",
+        dateContext: item.contexto_fecha_actual,
+        primaryDateInput,
+        executionDateInput,
+        waitingSinceInput,
+        completedAtInput,
+        executionAt: executionDateInput ? toDateSortValue(executionDateInput) : Number.MAX_SAFE_INTEGER,
+        contextualDateInput,
+        contextualDateAt: contextualDateInput ? toDateSortValue(contextualDateInput) : Number.MAX_SAFE_INTEGER,
+        operationalSortValue,
+        lastRecord: item.latest_meaningful_record || "Sin registros todavía",
+        movementLabel: formatElapsedTime(item.latest_movement_at) ?? "Sin movimiento reciente",
+        movementAt,
+        movementDays,
+        isDueToday: executionDateInput === today,
+        requirementsLabel: requirementLabels.length === 0 ? "Sin proyectos" : requirementLabels.join(" · "),
+        requirementsCount: item.requirements_count,
+        primaryRequirementLabel: item.primary_requirement_label ?? "Sin proyectos",
+        extraRequirementCount: Math.max(0, requirementLabels.length - 1),
+        linkedRequirements: item.linked_requirements.map((requirement) => ({
+          id: requirement.id,
+          label: requirement.label,
+        })),
+        canCancel: item.can_cancel,
+        canReactivate: item.can_reactivate,
+        canDelete: item.can_delete,
+      };
+    }
+
     const workflow = item.workflow;
     const linkedRequirements = item.linkedRequirements ?? [];
     const step = item.relevantStep ?? pickRelevantStep(workflow);
@@ -457,9 +536,11 @@ export function buildFlowRows(items: FlowTableItem[], today: string = getTodayLo
   });
 }
 
-export function getFlowCounts(items: FlowTableItem[]): FlowCountSummary {
+export function getFlowCounts(items: FlowRowSource[]): FlowCountSummary {
   return items
-    .map((item) => item.displayStatus ?? getVisibleWorkflowStatus(item.workflow))
+    .map((item) =>
+      isWorkflowListItemSource(item) ? item.estado_visible : (item.displayStatus ?? getVisibleWorkflowStatus(item.workflow))
+    )
     .reduce<FlowCountSummary>(
       (acc, status) => {
         const filter = getFlowFilterFromStatus(status);
@@ -469,6 +550,39 @@ export function getFlowCounts(items: FlowTableItem[]): FlowCountSummary {
       },
       { active: 0, waiting: 0, cancelled: 0, finalized: 0 }
     );
+}
+
+export function countFlowQuickFilters(rows: FlowGridRow[], today: string): Record<FlowQuickFilter, number> {
+  const counts: Record<FlowQuickFilter, number> = {
+    none: rows.length,
+    today: 0,
+    this_week: 0,
+    past: 0,
+    future: 0,
+    without_project: 0,
+    without_date: 0,
+    waiting_today: 0,
+    waiting_days: 0,
+    waiting_week: 0,
+    waiting_15_plus: 0,
+    waiting_month_plus: 0,
+  };
+
+  for (const row of rows) {
+    if (matchesFlowQuickFilter(row, "today", today)) counts.today += 1;
+    if (matchesFlowQuickFilter(row, "this_week", today)) counts.this_week += 1;
+    if (matchesFlowQuickFilter(row, "past", today)) counts.past += 1;
+    if (matchesFlowQuickFilter(row, "future", today)) counts.future += 1;
+    if (matchesFlowQuickFilter(row, "without_project", today)) counts.without_project += 1;
+    if (matchesFlowQuickFilter(row, "without_date", today)) counts.without_date += 1;
+    if (matchesFlowQuickFilter(row, "waiting_today", today)) counts.waiting_today += 1;
+    if (matchesFlowQuickFilter(row, "waiting_days", today)) counts.waiting_days += 1;
+    if (matchesFlowQuickFilter(row, "waiting_week", today)) counts.waiting_week += 1;
+    if (matchesFlowQuickFilter(row, "waiting_15_plus", today)) counts.waiting_15_plus += 1;
+    if (matchesFlowQuickFilter(row, "waiting_month_plus", today)) counts.waiting_month_plus += 1;
+  }
+
+  return counts;
 }
 
 export function buildFlowDateGroupLabel(dateInput: string | null, todayInput: string) {

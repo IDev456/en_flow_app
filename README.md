@@ -160,6 +160,12 @@ npm install
 npm run dev
 ```
 
+### Validación frontend sin npm local
+
+```bash
+./scripts/frontend-test.sh
+```
+
 ## ⚙️ Variables de entorno
 
 Ejemplos base disponibles en:

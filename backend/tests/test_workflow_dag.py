@@ -52,6 +52,7 @@ from app.schemas.workflow import (
     WorkLogEntryType,
     WorkflowStartMode,
     WorkflowStartRequest,
+    WorkflowDateContext,
     WorkflowStatus,
     WorkflowTemplatePublic,
     WorkflowUpdate,
@@ -1689,6 +1690,127 @@ class WorkflowDagTestCase(unittest.TestCase):
             self.assertEqual(trigger.workflow_ids, [])
             self.assertEqual(trigger.estado_general, TriggerStatus.SIN_FLOWS)
 
+    def test_list_workflow_list_items_in_memory(self) -> None:
+        template = build_linear_template()
+        self.repository._workflow_templates = {template.id: template}  # type: ignore[attr-defined]
+
+        active_trigger = self.service.create_trigger(
+            TriggerCreate(
+                solicitante="QA",
+                descripcion="Proyecto activo",
+                tipo="requerimiento",
+                ambito=Ambito.LABORAL,
+                creado_por="tester",
+                metadata=None,
+            )
+        )
+        active_workflow = self.service.start_workflow(
+            active_trigger.id,
+            WorkflowStartRequest(
+                workflow_template_id=template.id,
+                primer_paso=InitialStepOverride(nombre="Paso activo"),
+            ),
+        )
+        active_step = next(step for step in active_workflow.steps if step.estado == StepStatus.ACTIVO)
+        self.service.add_comment(
+            active_step.id,
+            CommentCreate(
+                autor="tester",
+                comentario="Seguimiento manual",
+                attachments=[],
+            ),
+        )
+        extra_trigger = self.service.create_trigger(
+            TriggerCreate(
+                solicitante="QA",
+                descripcion="Proyecto vinculado",
+                tipo="requerimiento",
+                ambito=Ambito.LABORAL,
+                creado_por="tester",
+                metadata=None,
+            )
+        )
+        self.service.link_workflow_to_requirement(active_workflow.id, extra_trigger.id)
+
+        waiting_trigger = self.service.create_trigger(
+            TriggerCreate(
+                solicitante="QA",
+                descripcion="Proyecto en espera",
+                tipo="requerimiento",
+                ambito=Ambito.LABORAL,
+                creado_por="tester",
+                metadata=None,
+            )
+        )
+        waiting_workflow = self.service.start_workflow(
+            waiting_trigger.id,
+            WorkflowStartRequest(
+                workflow_template_id=template.id,
+                modo_inicio=WorkflowStartMode.ESPERANDO,
+                espera_inicial=WaitingStartInput(que_se_espera="Esperando respuesta externa"),
+            ),
+        )
+
+        finished_trigger = self.service.create_trigger(
+            TriggerCreate(
+                solicitante="QA",
+                descripcion="Proyecto finalizado",
+                tipo="requerimiento",
+                ambito=Ambito.LABORAL,
+                creado_por="tester",
+                metadata=None,
+            )
+        )
+        finished_workflow = self.service.start_workflow(
+            finished_trigger.id,
+            WorkflowStartRequest(
+                workflow_template_id=template.id,
+                primer_paso=InitialStepOverride(nombre="Paso cierre"),
+            ),
+        )
+        finished_step = finished_workflow.steps[0]
+        self.repository.add_history(
+            StepHistoryPublic(
+                id=str(uuid4()),
+                step_instance_id=finished_step.id,
+                campo="estado",
+                valor_anterior="activo",
+                valor_nuevo="completado",
+                usuario="tester",
+                fecha=datetime.now(timezone.utc),
+                nota="Cierre manual",
+                attachments=[],
+            )
+        )
+        self.repository.save_workflow(
+            self.service.get_workflow(finished_workflow.id).model_copy(
+                update={"estado": WorkflowStatus.FINALIZADO, "fecha_fin": datetime.now(timezone.utc)}
+            )
+        )
+
+        items = {item.id: item for item in self.service.list_workflow_list_items()}
+
+        active_item = items[active_workflow.id]
+        self.assertEqual(active_item.estado_visible, WorkflowStatus.EN_PROCESO.value)
+        self.assertEqual(active_item.nombre_tarea, "Paso activo")
+        self.assertEqual(active_item.latest_meaningful_record, "Seguimiento manual")
+        self.assertEqual(active_item.requirements_count, 2)
+        self.assertEqual(active_item.primary_requirement_label, "Proyecto activo")
+        self.assertTrue(active_item.can_cancel)
+        self.assertFalse(active_item.can_delete)
+
+        waiting_item = items[waiting_workflow.id]
+        self.assertEqual(waiting_item.estado_visible, WorkflowStatus.ESPERANDO_RESPUESTA.value)
+        self.assertEqual(waiting_item.contexto_fecha_actual, WorkflowDateContext.ESPERA)
+        self.assertTrue(waiting_item.can_cancel)
+        self.assertFalse(waiting_item.can_delete)
+
+        finished_item = items[finished_workflow.id]
+        self.assertEqual(finished_item.estado_visible, WorkflowStatus.FINALIZADO.value)
+        self.assertEqual(finished_item.latest_meaningful_record, "Cierre manual")
+        self.assertTrue(finished_item.can_delete)
+        self.assertFalse(finished_item.can_cancel)
+
     def test_postgres_delete_workflow_cascades(self) -> None:
         engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
 
@@ -1842,6 +1964,120 @@ class WorkflowDagTestCase(unittest.TestCase):
                     session.scalars(select(ExternalEventModel).where(ExternalEventModel.step_id == step.id)).all(),
                     [],
                 )
+        finally:
+            repo_mod.session_scope = original_session_scope
+
+    def test_postgres_list_workflow_list_items(self) -> None:
+        engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+
+        @event.listens_for(engine, "connect")
+        def _enable_sqlite_foreign_keys(dbapi_connection, connection_record):
+            dbapi_connection.execute("PRAGMA foreign_keys=ON")
+
+        Base.metadata.create_all(bind=engine)
+        SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, expire_on_commit=False, class_=Session)
+
+        @contextmanager
+        def sqlite_session_scope():
+            session = SessionLocal()
+            try:
+                yield session
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
+            finally:
+                session.close()
+
+        original_session_scope = repo_mod.session_scope
+        repo_mod.session_scope = sqlite_session_scope
+        try:
+            repo = repo_mod.PostgresWorkflowRepository()
+            trigger = repo.create_trigger(
+                TriggerCreate(
+                    solicitante="QA",
+                    descripcion="Trigger SQL list view",
+                    tipo="requerimiento",
+                    ambito=Ambito.LABORAL,
+                    creado_por="tester",
+                    metadata=None,
+                )
+            )
+            template = build_linear_template()
+            with sqlite_session_scope() as session:
+                session.add(
+                    WorkflowTemplateModel(
+                        id=template.id,
+                        nombre=template.nombre,
+                        descripcion=template.descripcion,
+                        steps=[
+                            WorkflowTemplateStepModel(
+                                id=step.id,
+                                workflow_template_id=template.id,
+                                codigo=step.codigo,
+                                depends_on=step.depends_on,
+                                nombre=step.nombre,
+                                descripcion=step.descripcion,
+                                orden=step.orden,
+                                tipo=step.tipo,
+                                requiere_aprobacion=step.requiere_aprobacion,
+                                puede_tener_comentarios=step.puede_tener_comentarios,
+                                condicion_para_activarse=step.condicion_para_activarse,
+                                condicion_para_cerrarse=step.condicion_para_cerrarse,
+                                action_type=step.action_type,
+                                action_config=step.action_config,
+                                action_label=step.action_label,
+                                waits_for_external_response=step.waits_for_external_response,
+                                expected_external_event=step.expected_external_event,
+                                external_wait_reason=step.external_wait_reason,
+                                external_reference=step.external_reference,
+                            )
+                            for step in template.steps
+                        ],
+                    )
+                )
+
+            workflow = repo.create_workflow(
+                trigger.id,
+                template,
+                WorkflowStartRequest(
+                    workflow_template_id=template.id,
+                    primer_paso=InitialStepOverride(nombre="Paso SQL"),
+                ),
+            )
+            step = repo.list_workflow_steps(workflow.id)[0]
+            repo.add_history(
+                StepHistoryPublic(
+                    id=str(uuid4()),
+                    step_instance_id=step.id,
+                    campo="estado",
+                    valor_anterior="activo",
+                    valor_nuevo="activo",
+                    usuario="tester",
+                    fecha=datetime.now(timezone.utc),
+                    nota="Historial manual",
+                    attachments=[],
+                )
+            )
+            repo.add_comment(
+                step.id,
+                CommentCreate(
+                    autor="tester",
+                    comentario="Comentario más reciente",
+                    attachments=[],
+                ),
+            )
+
+            items = repo.list_workflow_list_items()
+            item = next(entry for entry in items if entry.id == workflow.id)
+
+            self.assertEqual(item.nombre_tarea, "Paso SQL")
+            self.assertEqual(item.estado_visible, WorkflowStatus.EN_PROCESO.value)
+            self.assertEqual(item.contexto_fecha_actual, WorkflowDateContext.ACTIVA)
+            self.assertEqual(item.latest_meaningful_record, "Comentario más reciente")
+            self.assertEqual(item.linked_requirements[0].label, "Trigger SQL list view")
+            self.assertTrue(item.can_cancel)
+            self.assertFalse(item.can_delete)
         finally:
             repo_mod.session_scope = original_session_scope
 
