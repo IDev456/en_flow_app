@@ -106,6 +106,27 @@ function TimelineBackground({ columns, height }: { columns: FlowAgendaColumn[]; 
   );
 }
 
+function RowHoverOverlay({ hovered }: { hovered: boolean }) {
+  const theme = useTheme();
+
+  if (!hovered) {
+    return null;
+  }
+
+  return (
+    <Box
+      aria-hidden
+      sx={{
+        position: "absolute",
+        inset: 0,
+        bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.16 : 0.07),
+        pointerEvents: "none",
+        zIndex: 1,
+      }}
+    />
+  );
+}
+
 function TodayGuideOverlay({
   model,
   horizontalScrollLeft,
@@ -216,12 +237,18 @@ function AgendaTrack({
   dragState,
   setDragState,
   onDragFinish,
+  hovered,
+  onHoverStart,
+  onHoverEnd,
 }: {
   item: FlowAgendaItem;
   model: FlowAgendaModel;
   dragState: DragState | null;
   setDragState: Dispatch<SetStateAction<DragState | null>>;
   onDragFinish: (dragState: DragState, commit: boolean) => Promise<void>;
+  hovered: boolean;
+  onHoverStart: () => void;
+  onHoverEnd: () => void;
 }) {
   const theme = useTheme();
   const timelineWidth = model.columns.length * DAY_COLUMN_WIDTH;
@@ -241,6 +268,8 @@ function AgendaTrack({
   return (
     <Box
       data-row-divider="none"
+      onMouseEnter={onHoverStart}
+      onMouseLeave={onHoverEnd}
       sx={{
         position: "relative",
         minWidth: timelineWidth,
@@ -250,6 +279,7 @@ function AgendaTrack({
       }}
     >
       <TimelineBackground columns={model.columns} height={FLOW_ROW_HEIGHT} />
+      <RowHoverOverlay hovered={hovered} />
 
       <Tooltip title={<AgendaTooltipContent item={item} lines={tooltipLines} />}>
         <Box
@@ -286,6 +316,7 @@ function AgendaTrack({
             top: 9,
             width: barWidth,
             height: 30,
+            zIndex: 2,
             borderRadius: `${theme.appShape.md}px`,
             border: "1px solid",
             borderColor: isDanger ? statusToken.accent : statusToken.border,
@@ -382,11 +413,17 @@ function TimelinePlaceholder({
   label = "Sin fecha",
   onAssign,
   stepId,
+  hovered = false,
+  onHoverStart,
+  onHoverEnd,
 }: {
   model: FlowAgendaModel;
   label?: string;
   onAssign?: (nextDateInput: string) => Promise<void>;
   stepId?: string | null;
+  hovered?: boolean;
+  onHoverStart?: () => void;
+  onHoverEnd?: () => void;
 }) {
   const theme = useTheme();
   const timelineWidth = model.columns.length * DAY_COLUMN_WIDTH;
@@ -395,6 +432,8 @@ function TimelinePlaceholder({
   return (
     <Box
       data-row-divider="none"
+      onMouseEnter={onHoverStart}
+      onMouseLeave={onHoverEnd}
       sx={{
         position: "relative",
         minWidth: timelineWidth,
@@ -404,6 +443,7 @@ function TimelinePlaceholder({
       }}
     >
       <TimelineBackground columns={model.columns} height={FLOW_ROW_HEIGHT} />
+      <RowHoverOverlay hovered={hovered} />
 
       <Box
         onMouseMove={(event) => {
@@ -438,6 +478,7 @@ function TimelinePlaceholder({
           right: 8,
           bottom: 10,
           left: 12,
+          zIndex: 2,
           display: "flex",
           alignItems: "center",
           px: 1.2,
@@ -471,18 +512,26 @@ function TimelinePlaceholder({
   );
 }
 
-function TimelineTextRow({
+function GroupTimelineRow({
   model,
   label,
+  hovered = false,
+  onHoverStart,
+  onHoverEnd,
 }: {
   model: FlowAgendaModel;
-  label: string;
+  label?: string;
+  hovered?: boolean;
+  onHoverStart?: () => void;
+  onHoverEnd?: () => void;
 }) {
   const timelineWidth = model.columns.length * DAY_COLUMN_WIDTH;
 
   return (
     <Box
       data-row-divider="none"
+      onMouseEnter={onHoverStart}
+      onMouseLeave={onHoverEnd}
       sx={{
         position: "relative",
         minWidth: timelineWidth,
@@ -492,19 +541,23 @@ function TimelineTextRow({
       }}
     >
       <TimelineBackground columns={model.columns} height={FLOW_ROW_HEIGHT} />
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        sx={{
-          position: "absolute",
-          top: "50%",
-          left: 12,
-          transform: "translateY(-50%)",
-          fontWeight: 600,
-        }}
-      >
-        {label}
-      </Typography>
+      <RowHoverOverlay hovered={hovered} />
+      {label ? (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{
+            position: "absolute",
+            top: "50%",
+            left: 12,
+            transform: "translateY(-50%)",
+            fontWeight: 600,
+            pointerEvents: "none",
+          }}
+        >
+          {label}
+        </Typography>
+      ) : null}
     </Box>
   );
 }
@@ -515,18 +568,26 @@ function WaitingReminderMarker({
   dragState,
   setDragState,
   onDragFinish,
+  hovered,
+  onHoverStart,
+  onHoverEnd,
 }: {
   item: FlowAgendaItem;
   model: FlowAgendaModel;
   dragState: DragState | null;
   setDragState: Dispatch<SetStateAction<DragState | null>>;
   onDragFinish: (dragState: DragState, commit: boolean) => Promise<void>;
+  hovered: boolean;
+  onHoverStart: () => void;
+  onHoverEnd: () => void;
 }) {
   const theme = useTheme();
   const timelineWidth = model.columns.length * DAY_COLUMN_WIDTH;
 
   if (item.startDay === null || item.startDateInput === null) {
-    return <TimelineTextRow model={model} label="Sin recordatorio" />;
+    return (
+      <GroupTimelineRow model={model} label="Sin recordatorio" hovered={hovered} onHoverStart={onHoverStart} onHoverEnd={onHoverEnd} />
+    );
   }
 
   const markerCenter = (item.startDay - model.visibleStartDay) * DAY_COLUMN_WIDTH + DAY_COLUMN_WIDTH / 2;
@@ -543,6 +604,8 @@ function WaitingReminderMarker({
   return (
     <Box
       data-row-divider="none"
+      onMouseEnter={onHoverStart}
+      onMouseLeave={onHoverEnd}
       sx={{
         position: "relative",
         minWidth: timelineWidth,
@@ -552,6 +615,7 @@ function WaitingReminderMarker({
       }}
     >
       <TimelineBackground columns={model.columns} height={FLOW_ROW_HEIGHT} />
+      <RowHoverOverlay hovered={hovered} />
       <Tooltip
         title={<AgendaTooltipContent item={item} lines={tooltipLines} />}
       >
@@ -764,10 +828,16 @@ function AgendaRowLabel({
   item,
   onWorkflowOpen,
   contentInset = 0,
+  hovered,
+  onHoverStart,
+  onHoverEnd,
 }: {
   item: FlowAgendaItem;
   onWorkflowOpen: (workflowId: string) => void;
   contentInset?: number;
+  hovered: boolean;
+  onHoverStart: () => void;
+  onHoverEnd: () => void;
 }) {
   const theme = useTheme();
   const secondaryLabel =
@@ -777,10 +847,12 @@ function AgendaRowLabel({
     <Box
       data-testid={`agenda-row-${item.id}`}
       data-row-divider="none"
+      onMouseEnter={onHoverStart}
+      onMouseLeave={onHoverEnd}
       sx={{
         minHeight: FLOW_ROW_HEIGHT,
         height: FLOW_ROW_HEIGHT,
-        bgcolor: "background.paper",
+        bgcolor: hovered ? alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.16 : 0.07) : "background.paper",
         px: 1.2,
         py: 0,
         borderRight: "1px solid",
@@ -853,6 +925,9 @@ function AgendaRowTimeline({
   onDragFinish,
   onExecutionDateChange,
   onWaitingReminderChange,
+  hovered,
+  onHoverStart,
+  onHoverEnd,
 }: {
   item: FlowAgendaItem;
   model: FlowAgendaModel;
@@ -861,6 +936,9 @@ function AgendaRowTimeline({
   onDragFinish: (dragState: DragState, commit: boolean) => Promise<void>;
   onExecutionDateChange: (workflowId: string, stepId: string, nextDateInput: string, previousDateInput: string | null) => Promise<void>;
   onWaitingReminderChange: (workflowId: string, stepId: string, nextDateInput: string, previousDateInput: string | null) => Promise<void>;
+  hovered: boolean;
+  onHoverStart: () => void;
+  onHoverEnd: () => void;
 }) {
   if (item.kind === "waiting_reminder") {
     if (item.isWithoutDate) {
@@ -869,6 +947,9 @@ function AgendaRowTimeline({
           model={model}
           label="Sin recordatorio"
           stepId={item.row.stepId ?? null}
+          hovered={hovered}
+          onHoverStart={onHoverStart}
+          onHoverEnd={onHoverEnd}
           onAssign={(nextDateInput) => {
             if (!item.row.stepId) {
               return Promise.reject(new Error("no-step"));
@@ -886,6 +967,9 @@ function AgendaRowTimeline({
         dragState={dragState}
         setDragState={setDragState}
         onDragFinish={onDragFinish}
+        hovered={hovered}
+        onHoverStart={onHoverStart}
+        onHoverEnd={onHoverEnd}
       />
     );
   }
@@ -896,6 +980,9 @@ function AgendaRowTimeline({
         model={model}
         label="Sin fecha"
         stepId={item.row.stepId ?? null}
+        hovered={hovered}
+        onHoverStart={onHoverStart}
+        onHoverEnd={onHoverEnd}
         onAssign={(nextDateInput) => {
           if (!item.row.stepId) {
             return Promise.reject(new Error("no-step"));
@@ -913,6 +1000,9 @@ function AgendaRowTimeline({
       dragState={dragState}
       setDragState={setDragState}
       onDragFinish={onDragFinish}
+      hovered={hovered}
+      onHoverStart={onHoverStart}
+      onHoverEnd={onHoverEnd}
     />
   );
 }
@@ -922,11 +1012,17 @@ function UnscheduledGroupLabel({
   expanded,
   onToggle,
   contentInset = UNSCHEDULED_GROUP_INDENT,
+  hovered,
+  onHoverStart,
+  onHoverEnd,
 }: {
   count: number;
   expanded: boolean;
   onToggle: () => void;
   contentInset?: number;
+  hovered: boolean;
+  onHoverStart: () => void;
+  onHoverEnd: () => void;
 }) {
   const theme = useTheme();
 
@@ -935,13 +1031,17 @@ function UnscheduledGroupLabel({
       data-testid="agenda-unscheduled-group-row"
       data-row-divider="none"
       onClick={onToggle}
+      onMouseEnter={onHoverStart}
+      onMouseLeave={onHoverEnd}
       sx={{
         minHeight: FLOW_ROW_HEIGHT,
         height: FLOW_ROW_HEIGHT,
         justifyContent: "flex-start",
         textAlign: "left",
         borderRadius: 0,
-        bgcolor: alpha(theme.palette.warning.main, theme.palette.mode === "dark" ? 0.09 : 0.05),
+        bgcolor: hovered
+          ? alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.16 : 0.07)
+          : alpha(theme.palette.warning.main, theme.palette.mode === "dark" ? 0.06 : 0.03),
         px: 1.2,
         borderRight: "1px solid",
         borderColor: "divider",
@@ -969,8 +1069,18 @@ function UnscheduledGroupLabel({
   );
 }
 
-function UnscheduledGroupTimeline({ model }: { model: FlowAgendaModel }) {
-  return <TimelinePlaceholder model={model} label="Sin fecha" />;
+function UnscheduledGroupTimeline({
+  model,
+  hovered,
+  onHoverStart,
+  onHoverEnd,
+}: {
+  model: FlowAgendaModel;
+  hovered: boolean;
+  onHoverStart: () => void;
+  onHoverEnd: () => void;
+}) {
+  return <GroupTimelineRow model={model} label="Sin fecha" hovered={hovered} onHoverStart={onHoverStart} onHoverEnd={onHoverEnd} />;
 }
 
 function WaitingWithoutReminderGroupLabel({
@@ -978,11 +1088,17 @@ function WaitingWithoutReminderGroupLabel({
   expanded,
   onToggle,
   contentInset = UNSCHEDULED_GROUP_INDENT,
+  hovered,
+  onHoverStart,
+  onHoverEnd,
 }: {
   count: number;
   expanded: boolean;
   onToggle: () => void;
   contentInset?: number;
+  hovered: boolean;
+  onHoverStart: () => void;
+  onHoverEnd: () => void;
 }) {
   const theme = useTheme();
 
@@ -991,13 +1107,17 @@ function WaitingWithoutReminderGroupLabel({
       data-testid="agenda-waiting-without-reminder-group-row"
       data-row-divider="none"
       onClick={onToggle}
+      onMouseEnter={onHoverStart}
+      onMouseLeave={onHoverEnd}
       sx={{
         minHeight: FLOW_ROW_HEIGHT,
         height: FLOW_ROW_HEIGHT,
         justifyContent: "flex-start",
         textAlign: "left",
         borderRadius: 0,
-        bgcolor: alpha(theme.palette.warning.main, theme.palette.mode === "dark" ? 0.09 : 0.05),
+        bgcolor: hovered
+          ? alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.16 : 0.07)
+          : alpha(theme.palette.warning.main, theme.palette.mode === "dark" ? 0.06 : 0.03),
         px: 1.2,
         borderRight: "1px solid",
         borderColor: "divider",
@@ -1025,8 +1145,20 @@ function WaitingWithoutReminderGroupLabel({
   );
 }
 
-function WaitingWithoutReminderGroupTimeline({ model }: { model: FlowAgendaModel }) {
-  return <TimelineTextRow model={model} label="Sin recordatorio" />;
+function WaitingWithoutReminderGroupTimeline({
+  model,
+  hovered,
+  onHoverStart,
+  onHoverEnd,
+}: {
+  model: FlowAgendaModel;
+  hovered: boolean;
+  onHoverStart: () => void;
+  onHoverEnd: () => void;
+}) {
+  return (
+    <GroupTimelineRow model={model} label="Sin recordatorio" hovered={hovered} onHoverStart={onHoverStart} onHoverEnd={onHoverEnd} />
+  );
 }
 
 export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChange, onWaitingReminderChange }: FlowAgendaTimelineProps) {
@@ -1037,6 +1169,19 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
   const [collapsedWaitingWithoutReminderGroups, setCollapsedWaitingWithoutReminderGroups] = useState<Record<string, boolean>>({});
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [horizontalScrollLeft, setHorizontalScrollLeft] = useState(0);
+  const [hoveredRowKey, setHoveredRowKey] = useState<string | null>(null);
+
+  function isRowHovered(rowKey: string) {
+    return hoveredRowKey === rowKey;
+  }
+
+  function handleRowHoverStart(rowKey: string) {
+    setHoveredRowKey(rowKey);
+  }
+
+  function handleRowHoverEnd(rowKey: string) {
+    setHoveredRowKey((current) => (current === rowKey ? null : current));
+  }
 
   useEffect(() => {
     setCollapsedGroups((current) => {
@@ -1405,6 +1550,9 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
                         item={item}
                         onWorkflowOpen={onWorkflowOpen}
                         contentInset={PROJECT_CHILD_INDENT}
+                        hovered={isRowHovered(item.id)}
+                        onHoverStart={() => handleRowHoverStart(item.id)}
+                        onHoverEnd={() => handleRowHoverEnd(item.id)}
                       />
                     ))}
                     {group.unscheduledItems.length > 0 ? (
@@ -1414,6 +1562,9 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
                           expanded={!isUnscheduledCollapsed}
                           onToggle={() => handleToggleUnscheduledGroup(group.key)}
                           contentInset={UNSCHEDULED_GROUP_INDENT}
+                          hovered={isRowHovered(`${group.key}:unscheduled-group`)}
+                          onHoverStart={() => handleRowHoverStart(`${group.key}:unscheduled-group`)}
+                          onHoverEnd={() => handleRowHoverEnd(`${group.key}:unscheduled-group`)}
                         />
                         {showUnscheduledItems
                           ? group.unscheduledItems.map((item) => (
@@ -1422,6 +1573,9 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
                                 item={item}
                                 onWorkflowOpen={onWorkflowOpen}
                                 contentInset={UNSCHEDULED_ITEM_INDENT}
+                                hovered={isRowHovered(item.id)}
+                                onHoverStart={() => handleRowHoverStart(item.id)}
+                                onHoverEnd={() => handleRowHoverEnd(item.id)}
                               />
                             ))
                           : null}
@@ -1434,6 +1588,9 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
                           expanded={!isWaitingWithoutReminderCollapsed}
                           onToggle={() => handleToggleWaitingWithoutReminderGroup(group.key)}
                           contentInset={UNSCHEDULED_GROUP_INDENT}
+                          hovered={isRowHovered(`${group.key}:waiting-without-reminder-group`)}
+                          onHoverStart={() => handleRowHoverStart(`${group.key}:waiting-without-reminder-group`)}
+                          onHoverEnd={() => handleRowHoverEnd(`${group.key}:waiting-without-reminder-group`)}
                         />
                         {showWaitingWithoutReminderItems
                           ? group.waitingWithoutReminderItems.map((item) => (
@@ -1442,6 +1599,9 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
                                 item={item}
                                 onWorkflowOpen={onWorkflowOpen}
                                 contentInset={UNSCHEDULED_ITEM_INDENT}
+                                hovered={isRowHovered(item.id)}
+                                onHoverStart={() => handleRowHoverStart(item.id)}
+                                onHoverEnd={() => handleRowHoverEnd(item.id)}
                               />
                             ))
                           : null}
@@ -1510,11 +1670,19 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
                             onDragFinish={handleBarPointerFinish}
                             onExecutionDateChange={onExecutionDateChange}
                             onWaitingReminderChange={onWaitingReminderChange}
+                            hovered={isRowHovered(item.id)}
+                            onHoverStart={() => handleRowHoverStart(item.id)}
+                            onHoverEnd={() => handleRowHoverEnd(item.id)}
                           />
                         ))}
                         {group.unscheduledItems.length > 0 ? (
                           <>
-                            <UnscheduledGroupTimeline model={model} />
+                            <UnscheduledGroupTimeline
+                              model={model}
+                              hovered={isRowHovered(`${group.key}:unscheduled-group`)}
+                              onHoverStart={() => handleRowHoverStart(`${group.key}:unscheduled-group`)}
+                              onHoverEnd={() => handleRowHoverEnd(`${group.key}:unscheduled-group`)}
+                            />
                             {showUnscheduledItems
                               ? group.unscheduledItems.map((item) => (
                                   <AgendaRowTimeline
@@ -1526,6 +1694,9 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
                                     onDragFinish={handleBarPointerFinish}
                                     onExecutionDateChange={onExecutionDateChange}
                                     onWaitingReminderChange={onWaitingReminderChange}
+                                    hovered={isRowHovered(item.id)}
+                                    onHoverStart={() => handleRowHoverStart(item.id)}
+                                    onHoverEnd={() => handleRowHoverEnd(item.id)}
                                   />
                                 ))
                               : null}
@@ -1533,7 +1704,12 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
                         ) : null}
                         {group.waitingWithoutReminderItems.length > 0 ? (
                           <>
-                            <WaitingWithoutReminderGroupTimeline model={model} />
+                            <WaitingWithoutReminderGroupTimeline
+                              model={model}
+                              hovered={isRowHovered(`${group.key}:waiting-without-reminder-group`)}
+                              onHoverStart={() => handleRowHoverStart(`${group.key}:waiting-without-reminder-group`)}
+                              onHoverEnd={() => handleRowHoverEnd(`${group.key}:waiting-without-reminder-group`)}
+                            />
                             {showWaitingWithoutReminderItems
                               ? group.waitingWithoutReminderItems.map((item) => (
                                   <AgendaRowTimeline
@@ -1545,6 +1721,9 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
                                     onDragFinish={handleBarPointerFinish}
                                     onExecutionDateChange={onExecutionDateChange}
                                     onWaitingReminderChange={onWaitingReminderChange}
+                                    hovered={isRowHovered(item.id)}
+                                    onHoverStart={() => handleRowHoverStart(item.id)}
+                                    onHoverEnd={() => handleRowHoverEnd(item.id)}
                                   />
                                 ))
                               : null}
