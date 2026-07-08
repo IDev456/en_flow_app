@@ -258,6 +258,18 @@ export function getCalendarDayDiff(targetValue: string | null, baseValue: string
   return targetDay - baseDay;
 }
 
+function resolveStartOfWeekDay(resolvedToday: string): number | null {
+  const todayDay = toCalendarDayValue(resolvedToday);
+  if (todayDay === null) {
+    return null;
+  }
+
+  const todayDate = new Date(`${resolvedToday}T00:00:00`);
+  const dayOfWeek = todayDate.getDay();
+  const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  return todayDay - daysSinceMonday;
+}
+
 export function isDayInCurrentWeek(value: string | null | undefined, todayValue: string | null = null) {
   const targetDay = toCalendarDayValue(value ?? null);
   if (targetDay === null) {
@@ -265,17 +277,37 @@ export function isDayInCurrentWeek(value: string | null | undefined, todayValue:
   }
 
   const resolvedToday = todayValue ?? getTodayLocalDateInput();
-  const todayDay = toCalendarDayValue(resolvedToday);
-  if (todayDay === null) {
+  const startOfWeekDay = resolveStartOfWeekDay(resolvedToday);
+  if (startOfWeekDay === null) {
     return false;
   }
 
-  const todayDate = new Date(`${resolvedToday}T00:00:00`);
-  const dayOfWeek = todayDate.getDay();
-  const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-  const startOfWeekDay = todayDay - daysSinceMonday;
-  const endOfWeekDay = startOfWeekDay + 6;
-  return targetDay >= startOfWeekDay && targetDay <= endOfWeekDay;
+  return targetDay >= startOfWeekDay && targetDay <= startOfWeekDay + 6;
+}
+
+export function isDayInNextWeek(value: string | null | undefined, todayValue: string | null = null) {
+  const targetDay = toCalendarDayValue(value ?? null);
+  if (targetDay === null) {
+    return false;
+  }
+
+  const resolvedToday = todayValue ?? getTodayLocalDateInput();
+  const startOfWeekDay = resolveStartOfWeekDay(resolvedToday);
+  if (startOfWeekDay === null) {
+    return false;
+  }
+
+  const startOfNextWeekDay = startOfWeekDay + 7;
+  return targetDay >= startOfNextWeekDay && targetDay <= startOfNextWeekDay + 6;
+}
+
+export function getStartOfWeekDateInput(weekOffset: number = 0, todayValue: string | null = null): string {
+  const resolvedToday = todayValue ?? getTodayLocalDateInput();
+  const startOfWeekDay = resolveStartOfWeekDay(resolvedToday);
+  if (startOfWeekDay === null) {
+    return resolvedToday;
+  }
+  return formatCalendarDayInput(startOfWeekDay + weekOffset * 7);
 }
 
 export function formatRelativeCalendarDay(value: string | null) {

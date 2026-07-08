@@ -26,7 +26,7 @@ type FlowAgendaTimelineProps = {
   ) => Promise<void>;
 };
 
-const LEFT_COLUMN_WIDTH = 360;
+const LEFT_COLUMN_WIDTH = 460;
 const DAY_COLUMN_WIDTH = 68;
 const GROUP_ROW_HEIGHT = 58;
 const FLOW_ROW_HEIGHT = 50;
@@ -226,6 +226,7 @@ function AgendaTrack({
   const theme = useTheme();
   const timelineWidth = model.columns.length * DAY_COLUMN_WIDTH;
   const statusToken = getStatusToken(theme, getStatusTone(item.row.status));
+  const isDanger = item.isOverdue || Boolean(item.row.hasProblem);
   const activeDrag = dragState?.itemId === item.id ? dragState : null;
   const effectiveStartDay = activeDrag?.previewDay ?? item.startDay;
   const effectiveStartDateInput = effectiveStartDay === null ? item.startDateInput : formatCalendarDayInput(effectiveStartDay);
@@ -287,23 +288,23 @@ function AgendaTrack({
             height: 30,
             borderRadius: `${theme.appShape.md}px`,
             border: "1px solid",
-            borderColor: item.isOverdue ? statusToken.accent : statusToken.border,
+            borderColor: isDanger ? statusToken.accent : statusToken.border,
             bgcolor:
               activeDrag
                 ? alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.28 : 0.18)
-                : item.isOverdue
-                  ? alpha(theme.palette.warning.main, theme.palette.mode === "dark" ? 0.28 : 0.18)
+                : isDanger
+                  ? alpha(theme.palette.error.main, theme.palette.mode === "dark" ? 0.28 : 0.18)
                   : statusToken.container,
-            color: item.isOverdue ? theme.palette.warning.dark : statusToken.onContainer,
-            boxShadow: item.isOverdue ? `inset 0 0 0 1px ${alpha(theme.palette.warning.main, 0.14)}` : "none",
+            color: isDanger ? theme.palette.error.dark : statusToken.onContainer,
+            boxShadow: isDanger ? `inset 0 0 0 1px ${alpha(theme.palette.error.main, 0.14)}` : "none",
             cursor: isDraggable ? (activeDrag ? "grabbing" : "grab") : "default",
             touchAction: "none",
             userSelect: "none",
             "&:hover": {
               bgcolor: activeDrag
                 ? alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.32 : 0.22)
-                : item.isOverdue
-                  ? alpha(theme.palette.warning.main, theme.palette.mode === "dark" ? 0.34 : 0.24)
+                : isDanger
+                  ? alpha(theme.palette.error.main, theme.palette.mode === "dark" ? 0.34 : 0.24)
                   : alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.2 : 0.12),
             },
           }}
@@ -361,7 +362,7 @@ function AgendaTrack({
             width: Math.max(0, timelineWidth - relativeLabelLeft - 8),
             transform: "translateY(-50%)",
             fontWeight: activeDrag ? 700 : 600,
-            color: activeDrag ? "primary.main" : item.isOverdue ? "warning.dark" : "text.secondary",
+            color: activeDrag ? "primary.main" : isDanger ? "error.dark" : "text.secondary",
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -530,7 +531,8 @@ function WaitingReminderMarker({
 
   const markerCenter = (item.startDay - model.visibleStartDay) * DAY_COLUMN_WIDTH + DAY_COLUMN_WIDTH / 2;
   const relativeLabel = formatRelativeCalendarDay(item.startDateInput);
-  const markerTone = item.isOverdue ? theme.palette.warning : theme.palette.primary;
+  const isDanger = item.isOverdue || Boolean(item.row.hasProblem);
+  const markerTone = isDanger ? theme.palette.error : theme.palette.warning;
   const activeDrag = dragState?.itemId === item.id ? dragState : null;
   const effectiveStartDay = activeDrag?.previewDay ?? item.startDay;
   const effectiveStartDateInput = effectiveStartDay === null ? item.startDateInput : formatCalendarDayInput(effectiveStartDay);
@@ -656,7 +658,7 @@ function WaitingReminderMarker({
             width: Math.max(0, timelineWidth - effectiveMarkerCenter - 28),
             transform: "translateY(-50%)",
             fontWeight: 700,
-            color: activeDrag ? "primary.main" : item.isOverdue ? "warning.dark" : "text.secondary",
+            color: activeDrag ? "primary.main" : isDanger ? "error.dark" : "text.secondary",
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -733,12 +735,8 @@ function ProjectHeaderLabel({
             <Chip
               size="small"
               variant="outlined"
+              color="warning"
               label={`${waitingWithoutReminderCount} espera sin recordatorio`}
-              sx={{
-                borderColor: alpha(theme.palette.info.main, 0.28),
-                color: "info.dark",
-                bgcolor: alpha(theme.palette.info.main, theme.palette.mode === "dark" ? 0.16 : 0.06),
-              }}
             />
           ) : null}
         </Stack>
@@ -823,7 +821,7 @@ function AgendaRowLabel({
                   variant="body2"
                   noWrap
                   sx={{
-                    fontWeight: 700,
+                    fontWeight: 500,
                     color: "text.primary",
                     minWidth: 0,
                   }}
@@ -999,7 +997,7 @@ function WaitingWithoutReminderGroupLabel({
         justifyContent: "flex-start",
         textAlign: "left",
         borderRadius: 0,
-        bgcolor: alpha(theme.palette.info.main, theme.palette.mode === "dark" ? 0.08 : 0.04),
+        bgcolor: alpha(theme.palette.warning.main, theme.palette.mode === "dark" ? 0.09 : 0.05),
         px: 1.2,
         borderRight: "1px solid",
         borderColor: "divider",

@@ -75,6 +75,7 @@ export type FlowGridRow = {
   canCancel?: boolean;
   canReactivate?: boolean;
   canDelete?: boolean;
+  hasProblem?: boolean;
 };
 
 export type FlowCountSummary = Record<"active" | "waiting" | "cancelled" | "finalized", number>;
@@ -487,6 +488,7 @@ export function buildFlowRows(items: FlowRowSource[], today: string = getTodayLo
       step && ["activo", "espera", "problema", "esperando_respuesta"].includes(step.estado)
         ? "Disparador"
         : "Última tarea";
+    const hasProblem = step?.estado === "problema";
     const movementAtValue = getDateValue(latestMovementAt);
     const movementAt = movementAtValue ?? Number.MAX_SAFE_INTEGER;
     const movementDateInput = movementAtValue === null ? null : new Date(movementAtValue).toISOString();
@@ -541,6 +543,7 @@ export function buildFlowRows(items: FlowRowSource[], today: string = getTodayLo
         id: requirement.id,
         label: requirement.descripcion?.trim() || `Proyecto ${requirement.id.slice(0, 8)}`,
       })),
+      hasProblem,
     };
   });
 }

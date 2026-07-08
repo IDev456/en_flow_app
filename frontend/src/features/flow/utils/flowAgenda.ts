@@ -1,8 +1,15 @@
 import type { FlowGridRow } from "./flowTable";
-import { formatCalendarDayInput, getRelativeCalendarDateInput, toCalendarDayValue } from "../utils";
+import {
+  formatCalendarDayInput,
+  getRelativeCalendarDateInput,
+  isDayInCurrentWeek,
+  isDayInNextWeek,
+  toCalendarDayValue,
+} from "../utils";
 import { getFlowFilterFromStatus, matchesFlowStateFilter } from "./flowTable";
 
 export type FlowAgendaFilter = "active" | "waiting" | "all";
+export type FlowAgendaQuickFilter = "all" | "today" | "this_week" | "next_week" | "without_date";
 export type FlowAgendaItemKind = "active_execution" | "waiting_reminder" | "waiting_since";
 
 export type FlowAgendaItem = {
@@ -43,6 +50,7 @@ export type FlowAgendaColumn = {
 
 export type FlowAgendaModel = {
   filter: FlowAgendaFilter;
+  quickFilter: FlowAgendaQuickFilter;
   groups: FlowAgendaGroup[];
   columns: FlowAgendaColumn[];
   items: FlowAgendaItem[];
@@ -66,6 +74,7 @@ export type FlowAgendaModel = {
 
 export type BuildFlowAgendaModelOptions = {
   filter?: FlowAgendaFilter;
+  quickFilter?: FlowAgendaQuickFilter;
   horizonDays?: number;
   visibleStartDateInput?: string;
   visibleDays?: number;
@@ -202,12 +211,27 @@ function buildAgendaItem(row: FlowGridRow, todayDay: number): FlowAgendaItem {
   };
 }
 
+function matchesAgendaQuickFilter(
+  item: FlowAgendaItem,
+  todayDay: number,
+  todayInput: string,
+  quickFilter: FlowAgendaQuickFilter
+): boolean {
+  if (quickFilter === "all") return true;
+  if (quickFilter === "without_date") return item.isWithoutDate;
+  if (quickFilter === "today") return item.startDay !== null && item.startDay === todayDay;
+  if (quickFilter === "this_week") return isDayInCurrentWeek(item.startDateInput, todayInput);
+  if (quickFilter === "next_week") return isDayInNextWeek(item.startDateInput, todayInput);
+  return true;
+}
+
 export function buildFlowAgendaModel(
   rows: FlowGridRow[],
   todayInput: string,
   options: BuildFlowAgendaModelOptions = {}
 ): FlowAgendaModel {
   const filter = options.filter ?? "all";
+  const quickFilter = options.quickFilter ?? "all";
   const horizonDays = options.horizonDays ?? DEFAULT_HORIZON_DAYS;
   const requestedVisibleDays = options.visibleDays ?? 0;
   const todayDay = toCalendarDayValue(todayInput);
@@ -221,11 +245,12 @@ export function buildFlowAgendaModel(
       ? rows.filter((row) => matchesFlowStateFilter(row.status, "operational"))
       : rows.filter((row) => matchesFlowStateFilter(row.status, filter === "waiting" ? "waiting" : "active"));
   const items = filteredRows.map((row) => buildAgendaItem(row, todayDay));
-  const scheduledItems = items.filter((item) => !item.isWithoutDate).sort(compareAgendaItemOrder);
-  const unscheduledItems = items
+  const quickFilteredItems = items.filter((item) => matchesAgendaQuickFilter(item, todayDay, todayInput, quickFilter));
+  const scheduledItems = quickFilteredItems.filter((item) => !item.isWithoutDate).sort(compareAgendaItemOrder);
+  const unscheduledItems = quickFilteredItems
     .filter((item) => item.isWithoutDate && item.kind === "active_execution")
     .sort(compareAgendaItemOrder);
-  const waitingWithoutReminderItems = items
+  const waitingWithoutReminderItems = quickFilteredItems
     .filter((item) => item.isWithoutDate && item.kind === "waiting_reminder")
     .sort(compareAgendaItemOrder);
 
@@ -303,9 +328,10 @@ export function buildFlowAgendaModel(
 
   return {
     filter,
+    quickFilter,
     groups,
     columns,
-    items,
+    items: quickFilteredItems,
     scheduledItems,
     unscheduledItems,
     waitingWithoutReminderItems,

@@ -5,7 +5,21 @@ import PersonOutlineRoundedIcon from "@mui/icons-material/PersonOutlineRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import WorkOutlineRoundedIcon from "@mui/icons-material/WorkOutlineRounded";
 import { alpha } from "@mui/material/styles";
-import { Alert, Box, Button, Chip, CircularProgress, IconButton, Paper, Stack, Tab, Tabs, Typography } from "@mui/material";
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  IconButton,
+  Paper,
+  Stack,
+  Tab,
+  Tabs,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
+} from "@mui/material";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { useToastContext } from "../../../components/Toast";
@@ -15,11 +29,12 @@ import { FlowAgendaTimeline } from "../components/FlowAgendaTimeline";
 import { navigateWithOrigin } from "../navigation";
 import type { TriggerDetail, WorkflowDetail } from "../types";
 import { buildFlowRows, getLatestMovementAt, pickRelevantStep, type FlowTableItem } from "../utils/flowTable";
-import { buildFlowAgendaModel } from "../utils/flowAgenda";
+import { buildFlowAgendaModel, type FlowAgendaQuickFilter } from "../utils/flowAgenda";
 import {
   activeAmbitoOptions,
   DEFAULT_ACTOR,
   getRelativeCalendarDateInput,
+  getStartOfWeekDateInput,
   getTodayLocalDateInput,
   getStoredActiveAmbito,
   getVisibleWorkflowStatus,
@@ -30,6 +45,18 @@ import {
 } from "../utils";
 
 const DEFAULT_VISIBLE_DAYS = 21;
+
+const QUICK_FILTER_OPTIONS: Array<{ value: FlowAgendaQuickFilter; label: string }> = [
+  { value: "all", label: "Todos" },
+  { value: "today", label: "Hoy" },
+  { value: "this_week", label: "Esta semana" },
+  { value: "next_week", label: "Semana próxima" },
+  { value: "without_date", label: "Sin fecha" },
+];
+
+const QUICK_FILTER_LABELS: Record<FlowAgendaQuickFilter, string> = Object.fromEntries(
+  QUICK_FILTER_OPTIONS.map((option) => [option.value, option.label])
+) as Record<FlowAgendaQuickFilter, string>;
 
 function getAmbitoModeIcon(ambito: ActiveAmbitoMode) {
   if (ambito === "laboral") return <WorkOutlineRoundedIcon sx={{ fontSize: 14 }} />;
@@ -48,6 +75,7 @@ export function FlowAgendaPage() {
   const [error, setError] = useState<string | null>(null);
   const today = useMemo(() => getTodayLocalDateInput(), []);
   const [visibleStartDateInput, setVisibleStartDateInput] = useState(() => getRelativeCalendarDateInput(-7, getTodayLocalDateInput()));
+  const [quickFilter, setQuickFilter] = useState<FlowAgendaQuickFilter>("all");
 
   useEffect(() => {
     void loadData();
@@ -112,10 +140,11 @@ export function FlowAgendaPage() {
     () =>
       buildFlowAgendaModel(flowRows, today, {
         filter: "all",
+        quickFilter,
         visibleStartDateInput,
         visibleDays: DEFAULT_VISIBLE_DAYS,
       }),
-    [flowRows, today, visibleStartDateInput]
+    [flowRows, today, quickFilter, visibleStartDateInput]
   );
 
   function handleWorkflowOpen(workflowId: string) {
@@ -139,6 +168,18 @@ export function FlowAgendaPage() {
 
   function handleShowTodayRange() {
     setVisibleStartDateInput(getRelativeCalendarDateInput(-7, today));
+  }
+
+  function handleQuickFilterChange(next: FlowAgendaQuickFilter | null) {
+    if (!next) return;
+    setQuickFilter(next);
+    if (next === "today") {
+      setVisibleStartDateInput(getRelativeCalendarDateInput(-7, today));
+    } else if (next === "this_week") {
+      setVisibleStartDateInput(getStartOfWeekDateInput(0, today));
+    } else if (next === "next_week") {
+      setVisibleStartDateInput(getStartOfWeekDateInput(1, today));
+    }
   }
 
   async function handleExecutionDateChange(
@@ -367,34 +408,8 @@ export function FlowAgendaPage() {
         >
           {error}
         </Alert>
-      ) : agendaModel.items.length === 0 ? (
-        <Alert severity="info">No hay flows operativos para mostrar en Agenda con el ámbito seleccionado.</Alert>
       ) : (
         <Stack spacing={1.25}>
-          <Paper
-            variant="outlined"
-            sx={{
-              px: 1.35,
-              py: 1,
-              bgcolor: (theme) => theme.palette.surfaceContainerLow,
-            }}
-          >
-            <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", md: "center" } }}>
-              <Box>
-                <Typography variant="body2" color="text.secondary">
-                  {agendaModel.items.length} {agendaModel.items.length === 1 ? "flow visible" : "flows visibles"}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Rango visible: {agendaModel.visibleStartDateInput} a {agendaModel.visibleEndDateInput}
-                </Typography>
-              </Box>
-              <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", flexWrap: "wrap" }}>
-                <Chip label="Activos y en espera" color="primary" variant="outlined" />
-                <Chip label={`Hoy · ${agendaModel.todayInput}`} color="primary" />
-              </Stack>
-            </Stack>
-          </Paper>
-
           <Paper
             variant="outlined"
             sx={{
@@ -404,28 +419,90 @@ export function FlowAgendaPage() {
           >
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between", alignItems: { xs: "stretch", sm: "center" } }}>
               <Typography variant="body2" color="text.secondary">
-                Navegación temporal
+                Filtros rápidos
               </Typography>
-              <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap" }}>
-                <Button size="small" variant="outlined" color="inherit" startIcon={<ArrowBackRoundedIcon />} onClick={handleShowPreviousRange}>
-                  Semana anterior
-                </Button>
-                <Button size="small" variant="outlined" onClick={handleShowTodayRange}>
-                  Hoy
-                </Button>
-                <Button size="small" variant="outlined" color="inherit" endIcon={<ArrowForwardRoundedIcon />} onClick={handleShowNextRange}>
-                  Semana siguiente
-                </Button>
-              </Stack>
+              <ToggleButtonGroup
+                exclusive
+                size="small"
+                value={quickFilter}
+                onChange={(_, value: FlowAgendaQuickFilter | null) => handleQuickFilterChange(value)}
+                sx={{ flexWrap: "wrap" }}
+              >
+                {QUICK_FILTER_OPTIONS.map((option) => (
+                  <ToggleButton key={option.value} value={option.value}>
+                    {option.label}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
             </Stack>
           </Paper>
 
-          <FlowAgendaTimeline
-            model={agendaModel}
-            onWorkflowOpen={handleWorkflowOpen}
-            onExecutionDateChange={handleExecutionDateChange}
-            onWaitingReminderChange={handleWaitingReminderChange}
-          />
+          {agendaModel.items.length === 0 ? (
+            <Alert severity="info">
+              {quickFilter === "all"
+                ? "No hay flows operativos para mostrar en Agenda con el ámbito seleccionado."
+                : "No hay flows para mostrar con el filtro seleccionado."}
+            </Alert>
+          ) : (
+            <>
+              <Paper
+                variant="outlined"
+                sx={{
+                  px: 1.35,
+                  py: 1,
+                  bgcolor: (theme) => theme.palette.surfaceContainerLow,
+                }}
+              >
+                <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", md: "center" } }}>
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">
+                      {agendaModel.items.length} {agendaModel.items.length === 1 ? "flow visible" : "flows visibles"}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Rango visible: {agendaModel.visibleStartDateInput} a {agendaModel.visibleEndDateInput}
+                    </Typography>
+                  </Box>
+                  <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", flexWrap: "wrap" }}>
+                    <Chip label="Activos y en espera" color="primary" variant="outlined" />
+                    <Chip label={`Filtro: ${QUICK_FILTER_LABELS[quickFilter]}`} variant="outlined" />
+                    <Chip label={`Hoy · ${agendaModel.todayInput}`} color="primary" />
+                  </Stack>
+                </Stack>
+              </Paper>
+
+              <Paper
+                variant="outlined"
+                sx={{
+                  px: 1.25,
+                  py: 1,
+                }}
+              >
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between", alignItems: { xs: "stretch", sm: "center" } }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Navegación temporal
+                  </Typography>
+                  <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap" }}>
+                    <Button size="small" variant="outlined" color="inherit" startIcon={<ArrowBackRoundedIcon />} onClick={handleShowPreviousRange}>
+                      Semana anterior
+                    </Button>
+                    <Button size="small" variant="outlined" onClick={handleShowTodayRange}>
+                      Hoy
+                    </Button>
+                    <Button size="small" variant="outlined" color="inherit" endIcon={<ArrowForwardRoundedIcon />} onClick={handleShowNextRange}>
+                      Semana siguiente
+                    </Button>
+                  </Stack>
+                </Stack>
+              </Paper>
+
+              <FlowAgendaTimeline
+                model={agendaModel}
+                onWorkflowOpen={handleWorkflowOpen}
+                onExecutionDateChange={handleExecutionDateChange}
+                onWaitingReminderChange={handleWaitingReminderChange}
+              />
+            </>
+          )}
         </Stack>
       )}
     </PageContainer>
