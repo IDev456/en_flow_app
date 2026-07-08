@@ -110,6 +110,7 @@ export function FlowAgendaPage() {
   const agendaModel = useMemo(
     () =>
       buildFlowAgendaModel(flowRows, today, {
+        filter: "all",
         visibleStartDateInput,
         visibleDays: DEFAULT_VISIBLE_DAYS,
       }),
@@ -272,7 +273,7 @@ export function FlowAgendaPage() {
           minWidth: { xs: "100%", md: 180 },
         }}
       >
-        <Chip label="Activos" color="primary" variant="outlined" />
+        <Chip label="Activos y en espera" color="primary" variant="outlined" />
         <IconButton color="inherit" aria-label="Refrescar agenda" onClick={() => void loadData({ silent: true })} disabled={refreshing}>
           {refreshing ? <CircularProgress size={18} /> : <RefreshRoundedIcon fontSize="small" />}
         </IconButton>
@@ -303,7 +304,7 @@ export function FlowAgendaPage() {
           {error}
         </Alert>
       ) : agendaModel.items.length === 0 ? (
-        <Alert severity="info">No hay flows activos para mostrar en Agenda con el ámbito seleccionado.</Alert>
+        <Alert severity="info">No hay flows operativos para mostrar en Agenda con el ámbito seleccionado.</Alert>
       ) : (
         <Stack spacing={1.25}>
           <Paper
@@ -324,7 +325,7 @@ export function FlowAgendaPage() {
                 </Typography>
               </Box>
               <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", flexWrap: "wrap" }}>
-                <Chip label="Activos" color="primary" variant="outlined" />
+                <Chip label="Activos y en espera" color="primary" variant="outlined" />
                 <Chip label={`Hoy · ${agendaModel.todayInput}`} color="primary" />
               </Stack>
             </Stack>

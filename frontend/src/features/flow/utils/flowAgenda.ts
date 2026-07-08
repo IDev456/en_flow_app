@@ -1,6 +1,6 @@
 import type { FlowGridRow } from "./flowTable";
 import { formatCalendarDayInput, getRelativeCalendarDateInput, toCalendarDayValue } from "../utils";
-import { matchesFlowStateFilter } from "./flowTable";
+import { getFlowFilterFromStatus, matchesFlowStateFilter } from "./flowTable";
 
 export type FlowAgendaFilter = "active" | "waiting" | "all";
 export type FlowAgendaItemKind = "active_execution" | "waiting_reminder" | "waiting_since";
@@ -28,6 +28,7 @@ export type FlowAgendaGroup = {
   items: FlowAgendaItem[];
   scheduledItems: FlowAgendaItem[];
   unscheduledItems: FlowAgendaItem[];
+  waitingWithoutReminderItems: FlowAgendaItem[];
 };
 
 export type FlowAgendaColumn = {
@@ -47,6 +48,7 @@ export type FlowAgendaModel = {
   items: FlowAgendaItem[];
   scheduledItems: FlowAgendaItem[];
   unscheduledItems: FlowAgendaItem[];
+  waitingWithoutReminderItems: FlowAgendaItem[];
   todayInput: string;
   todayDay: number;
   rangeStartDay: number;
@@ -115,8 +117,49 @@ function resolveAgendaGroup(row: FlowGridRow) {
 
 function buildAgendaItem(row: FlowGridRow, todayDay: number): FlowAgendaItem {
   const group = resolveAgendaGroup(row);
-  const startDay = toCalendarDayValue(row.executionDateInput || null);
+  const stateFilter = getFlowFilterFromStatus(row.status);
+  const isWaiting = stateFilter === "waiting";
+  const startDateInput = isWaiting ? row.waitingReminderInput : row.executionDateInput;
+  const startDay = toCalendarDayValue(startDateInput || null);
   const isWithoutDate = startDay === null;
+
+  if (isWaiting) {
+    if (isWithoutDate) {
+      return {
+        id: `${row.id}:waiting_reminder`,
+        kind: "waiting_reminder",
+        row,
+        groupKey: group.key,
+        groupLabel: group.label,
+        startDateInput: null,
+        startDay: null,
+        plannedEndDateInput: null,
+        plannedEndDay: null,
+        endDateInput: null,
+        endDay: null,
+        spanDays: 0,
+        isWithoutDate: true,
+        isOverdue: false,
+      };
+    }
+
+    return {
+      id: `${row.id}:waiting_reminder`,
+      kind: "waiting_reminder",
+      row,
+      groupKey: group.key,
+      groupLabel: group.label,
+      startDateInput: formatCalendarDayInput(startDay),
+      startDay,
+      plannedEndDateInput: formatCalendarDayInput(startDay),
+      plannedEndDay: startDay,
+      endDateInput: formatCalendarDayInput(startDay),
+      endDay: startDay,
+      spanDays: 1,
+      isWithoutDate: false,
+      isOverdue: startDay < todayDay,
+    };
+  }
 
   if (isWithoutDate) {
     return {
@@ -164,7 +207,7 @@ export function buildFlowAgendaModel(
   todayInput: string,
   options: BuildFlowAgendaModelOptions = {}
 ): FlowAgendaModel {
-  const filter = options.filter ?? "active";
+  const filter = options.filter ?? "all";
   const horizonDays = options.horizonDays ?? DEFAULT_HORIZON_DAYS;
   const requestedVisibleDays = options.visibleDays ?? 0;
   const todayDay = toCalendarDayValue(todayInput);
@@ -174,10 +217,17 @@ export function buildFlowAgendaModel(
   }
 
   const filteredRows =
-    filter === "all" ? rows : rows.filter((row) => matchesFlowStateFilter(row.status, filter === "waiting" ? "waiting" : "active"));
+    filter === "all"
+      ? rows.filter((row) => matchesFlowStateFilter(row.status, "operational"))
+      : rows.filter((row) => matchesFlowStateFilter(row.status, filter === "waiting" ? "waiting" : "active"));
   const items = filteredRows.map((row) => buildAgendaItem(row, todayDay));
   const scheduledItems = items.filter((item) => !item.isWithoutDate).sort(compareAgendaItemOrder);
-  const unscheduledItems = items.filter((item) => item.isWithoutDate).sort(compareAgendaItemOrder);
+  const unscheduledItems = items
+    .filter((item) => item.isWithoutDate && item.kind === "active_execution")
+    .sort(compareAgendaItemOrder);
+  const waitingWithoutReminderItems = items
+    .filter((item) => item.isWithoutDate && item.kind === "waiting_reminder")
+    .sort(compareAgendaItemOrder);
 
   const scheduledStartDays = scheduledItems.map((item) => item.startDay).filter((day): day is number => day !== null);
   const scheduledEndDays = scheduledItems.map((item) => item.endDay).filter((day): day is number => day !== null);
@@ -217,11 +267,13 @@ export function buildFlowAgendaModel(
   }
 
   const groupsByKey = new Map<string, FlowAgendaGroup>();
-  for (const item of [...scheduledItems, ...unscheduledItems]) {
+  for (const item of [...scheduledItems, ...unscheduledItems, ...waitingWithoutReminderItems]) {
     const existing = groupsByKey.get(item.groupKey);
     if (existing) {
       existing.items.push(item);
-      if (item.isWithoutDate) {
+      if (item.kind === "waiting_reminder" && item.isWithoutDate) {
+        existing.waitingWithoutReminderItems.push(item);
+      } else if (item.isWithoutDate) {
         existing.unscheduledItems.push(item);
       } else {
         existing.scheduledItems.push(item);
@@ -234,7 +286,8 @@ export function buildFlowAgendaModel(
       label: item.groupLabel,
       items: [item],
       scheduledItems: item.isWithoutDate ? [] : [item],
-      unscheduledItems: item.isWithoutDate ? [item] : [],
+      unscheduledItems: item.kind === "active_execution" && item.isWithoutDate ? [item] : [],
+      waitingWithoutReminderItems: item.kind === "waiting_reminder" && item.isWithoutDate ? [item] : [],
     });
   }
 
@@ -243,6 +296,7 @@ export function buildFlowAgendaModel(
       ...group,
       scheduledItems: [...group.scheduledItems].sort(compareAgendaItemOrder),
       unscheduledItems: [...group.unscheduledItems].sort(compareAgendaItemOrder),
+      waitingWithoutReminderItems: [...group.waitingWithoutReminderItems].sort(compareAgendaItemOrder),
       items: [...group.items].sort(compareAgendaItemOrder),
     }))
     .sort(compareAgendaGroupOrder);
@@ -254,6 +308,7 @@ export function buildFlowAgendaModel(
     items,
     scheduledItems,
     unscheduledItems,
+    waitingWithoutReminderItems,
     todayInput,
     todayDay,
     rangeStartDay,

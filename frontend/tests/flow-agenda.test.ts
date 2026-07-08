@@ -16,6 +16,7 @@ function buildRow(overrides: Partial<FlowGridRow> = {}): FlowGridRow {
     dateContext: "activa",
     primaryDateInput: overrides.primaryDateInput ?? overrides.executionDateInput ?? "",
     executionDateInput: overrides.executionDateInput ?? "",
+    waitingReminderInput: overrides.waitingReminderInput ?? "",
     waitingSinceInput: "",
     completedAtInput: "",
     executionAt: 0,
@@ -83,6 +84,98 @@ test("flow activo sin fecha queda en la sección sin fecha de ejecución", () =>
   assert.equal(model.scheduledItems.length, 0);
   assert.equal(model.unscheduledItems.length, 1);
   assert.equal(model.groups[0]?.unscheduledItems[0]?.row.id, "workflow-1");
+});
+
+test("flow en espera con recordatorio genera marcador puntual de un día", () => {
+  const model = buildFlowAgendaModel(
+    [
+      buildRow({
+        id: "workflow-waiting",
+        status: "esperando_respuesta",
+        executionDateInput: "",
+        waitingReminderInput: "2026-07-08",
+        waitingSinceInput: "2026-07-05",
+        primaryDateInput: "2026-07-05",
+        contextualDateInput: "2026-07-05",
+      }),
+    ],
+    "2026-07-06"
+  );
+
+  const item = getSingleScheduledItem(model);
+  assert.equal(item.kind, "waiting_reminder");
+  assert.equal(item.startDateInput, "2026-07-08");
+  assert.equal(item.endDateInput, "2026-07-08");
+  assert.equal(item.spanDays, 1);
+  assert.equal(item.isOverdue, false);
+});
+
+test("flow en espera con recordatorio vencido marca atraso", () => {
+  const model = buildFlowAgendaModel(
+    [
+      buildRow({
+        id: "workflow-waiting-overdue",
+        status: "esperando_respuesta",
+        executionDateInput: "",
+        waitingReminderInput: "2026-07-03",
+        waitingSinceInput: "2026-07-01",
+        primaryDateInput: "2026-07-01",
+        contextualDateInput: "2026-07-01",
+      }),
+    ],
+    "2026-07-06"
+  );
+
+  const item = getSingleScheduledItem(model);
+  assert.equal(item.kind, "waiting_reminder");
+  assert.equal(item.isOverdue, true);
+});
+
+test("flow en espera sin recordatorio va al bucket dedicado", () => {
+  const model = buildFlowAgendaModel(
+    [
+      buildRow({
+        id: "workflow-waiting-no-reminder",
+        status: "esperando_respuesta",
+        executionDateInput: "",
+        waitingReminderInput: "",
+        waitingSinceInput: "2026-07-04",
+        primaryDateInput: "2026-07-04",
+        contextualDateInput: "2026-07-04",
+      }),
+    ],
+    "2026-07-06"
+  );
+
+  assert.equal(model.scheduledItems.length, 0);
+  assert.equal(model.unscheduledItems.length, 0);
+  assert.equal(model.waitingWithoutReminderItems.length, 1);
+  assert.equal(model.groups[0]?.waitingWithoutReminderItems[0]?.row.id, "workflow-waiting-no-reminder");
+});
+
+test("la agenda default incluye activos y waiting, pero no cancelados ni finalizados", () => {
+  const model = buildFlowAgendaModel(
+    [
+      buildRow({ id: "workflow-active", status: "en_proceso", executionDateInput: "2026-07-06" }),
+      buildRow({
+        id: "workflow-waiting",
+        status: "esperando_respuesta",
+        executionDateInput: "",
+        waitingReminderInput: "2026-07-07",
+        primaryDateInput: "2026-07-05",
+        contextualDateInput: "2026-07-05",
+      }),
+      buildRow({ id: "workflow-cancelled", status: "cancelado", executionDateInput: "2026-07-08" }),
+      buildRow({ id: "workflow-finalized", status: "finalizado", executionDateInput: "2026-07-09" }),
+    ],
+    "2026-07-06"
+  );
+
+  assert.equal(model.filter, "all");
+  assert.deepEqual(
+    model.items.map((item) => item.row.id),
+    ["workflow-active", "workflow-waiting"]
+  );
 });
 
 test("agrupa por proyecto principal y preserva el indicador de proyectos extra", () => {

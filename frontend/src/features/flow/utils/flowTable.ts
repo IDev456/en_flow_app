@@ -55,6 +55,7 @@ export type FlowGridRow = {
   dateContext: WorkflowDetail["contexto_fecha_actual"];
   primaryDateInput: string;
   executionDateInput: string;
+  waitingReminderInput: string;
   waitingSinceInput: string;
   completedAtInput: string;
   executionAt: number;
@@ -411,6 +412,8 @@ export function buildFlowRows(items: FlowRowSource[], today: string = getTodayLo
     if (isWorkflowListItemSource(item)) {
       const primaryDateInput = resolvePrimaryDateInputFromListItem(item);
       const executionDateInput = toCalendarDateInputValue(item.fecha_ejecucion_actual);
+      const waitingReminderInput =
+        item.estado_visible === "esperando_respuesta" ? toCalendarDateInputValue(item.fecha_recordatorio_actual) : "";
       const waitingSinceInput = item.estado_visible === "esperando_respuesta" ? toCalendarDateInputValue(item.fecha_espera_desde) : "";
       const completedAtInput = toCalendarDateInputValue(item.fecha_fin);
       const movementAtValue = getDateValue(item.latest_movement_at);
@@ -440,6 +443,7 @@ export function buildFlowRows(items: FlowRowSource[], today: string = getTodayLo
         dateContext: item.contexto_fecha_actual,
         primaryDateInput,
         executionDateInput,
+        waitingReminderInput,
         waitingSinceInput,
         completedAtInput,
         executionAt: executionDateInput ? toDateSortValue(executionDateInput) : Number.MAX_SAFE_INTEGER,
@@ -472,6 +476,10 @@ export function buildFlowRows(items: FlowRowSource[], today: string = getTodayLo
     const latestMovementAt = item.latestMovementAt ?? getLatestMovementAt(workflow);
     const primaryDateInput = resolvePrimaryDateInput(workflow, step);
     const executionDateInput = toCalendarDateInputValue(workflow.fecha_ejecucion_actual ?? step?.fecha_ejecucion_estimada);
+    const waitingReminderInput =
+      displayStatus === "esperando_respuesta"
+        ? toCalendarDateInputValue(workflow.fecha_recordatorio_actual ?? step?.fecha_recordatorio_espera)
+        : "";
     const waitingSinceInput =
       displayStatus === "esperando_respuesta" ? toCalendarDateInputValue(workflow.fecha_espera_desde ?? step?.fecha_estado_actual) : "";
     const completedAtInput = toCalendarDateInputValue(workflow.fecha_fin);
@@ -508,6 +516,7 @@ export function buildFlowRows(items: FlowRowSource[], today: string = getTodayLo
       dateContext: workflow.contexto_fecha_actual,
       primaryDateInput,
       executionDateInput,
+      waitingReminderInput,
       waitingSinceInput,
       completedAtInput,
       executionAt: executionDateInput ? toDateSortValue(executionDateInput) : Number.MAX_SAFE_INTEGER,

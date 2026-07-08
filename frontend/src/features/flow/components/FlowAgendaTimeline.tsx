@@ -1,4 +1,5 @@
 import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
+import NotificationsNoneRoundedIcon from "@mui/icons-material/NotificationsNoneRounded";
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { alpha, useTheme } from "@mui/material/styles";
 import { Box, ButtonBase, Chip, Stack, Tooltip, Typography } from "@mui/material";
@@ -6,7 +7,7 @@ import { Box, ButtonBase, Chip, Stack, Tooltip, Typography } from "@mui/material
 import { getStatusToken } from "../../../theme";
 import { StatusBadge } from "./StatusBadge";
 import type { FlowAgendaColumn, FlowAgendaItem, FlowAgendaModel } from "../utils/flowAgenda";
-import { formatCalendarDayInput, formatRelativeCalendarDay, getStatusTone, toCalendarDayValue } from "../utils";
+import { formatCalendarDate, formatCalendarDayInput, formatRelativeCalendarDay, getStatusTone, toCalendarDayValue } from "../utils";
 
 type FlowAgendaTimelineProps = {
   model: FlowAgendaModel;
@@ -419,16 +420,163 @@ function TimelinePlaceholder({
   );
 }
 
+function TimelineTextRow({
+  model,
+  label,
+}: {
+  model: FlowAgendaModel;
+  label: string;
+}) {
+  const timelineWidth = model.columns.length * DAY_COLUMN_WIDTH;
+
+  return (
+    <Box
+      data-row-divider="none"
+      sx={{
+        position: "relative",
+        minWidth: timelineWidth,
+        width: timelineWidth,
+        height: FLOW_ROW_HEIGHT,
+        overflow: "hidden",
+      }}
+    >
+      <TimelineBackground columns={model.columns} height={FLOW_ROW_HEIGHT} />
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{
+          position: "absolute",
+          top: "50%",
+          left: 12,
+          transform: "translateY(-50%)",
+          fontWeight: 600,
+        }}
+      >
+        {label}
+      </Typography>
+    </Box>
+  );
+}
+
+function WaitingReminderMarker({
+  item,
+  model,
+  onWorkflowOpen,
+}: {
+  item: FlowAgendaItem;
+  model: FlowAgendaModel;
+  onWorkflowOpen: (workflowId: string) => void;
+}) {
+  const theme = useTheme();
+  const timelineWidth = model.columns.length * DAY_COLUMN_WIDTH;
+
+  if (item.startDay === null || item.startDateInput === null) {
+    return <TimelineTextRow model={model} label="Sin recordatorio" />;
+  }
+
+  const markerCenter = (item.startDay - model.visibleStartDay) * DAY_COLUMN_WIDTH + DAY_COLUMN_WIDTH / 2;
+  const relativeLabel = formatRelativeCalendarDay(item.startDateInput);
+  const markerTone = item.isOverdue ? theme.palette.warning : theme.palette.primary;
+  const tooltipLines = [
+    { label: "Estado", value: "Esperando respuesta" },
+    { label: "Recordatorio", value: formatCalendarDate(item.startDateInput) },
+    item.row.waitingSinceInput ? { label: "Esperando desde", value: formatCalendarDate(item.row.waitingSinceInput) } : null,
+    item.row.movementLabel ? { label: "Último movimiento", value: item.row.movementLabel } : null,
+    item.row.lastRecord ? { label: "Último registro", value: item.row.lastRecord } : null,
+  ].filter((line): line is { label: string; value: string } => Boolean(line));
+
+  return (
+    <Box
+      data-row-divider="none"
+      sx={{
+        position: "relative",
+        minWidth: timelineWidth,
+        width: timelineWidth,
+        height: FLOW_ROW_HEIGHT,
+        overflow: "hidden",
+      }}
+    >
+      <TimelineBackground columns={model.columns} height={FLOW_ROW_HEIGHT} />
+      <Tooltip
+        title={
+          <Stack spacing={0.45} sx={{ py: 0.2 }}>
+            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+              {item.row.taskName}
+            </Typography>
+            {tooltipLines.map((line) => (
+              <Typography key={line.label} variant="caption" sx={{ display: "block" }}>
+                <Box component="span" sx={{ fontWeight: 700 }}>
+                  {line.label}:
+                </Box>{" "}
+                {line.value}
+              </Typography>
+            ))}
+          </Stack>
+        }
+      >
+        <ButtonBase
+          data-testid={`agenda-waiting-reminder-${item.row.id}`}
+          aria-label={`Abrir recordatorio del flow ${item.row.taskName}`}
+          onClick={() => onWorkflowOpen(item.row.id)}
+          sx={{
+            position: "absolute",
+            left: markerCenter,
+            top: "50%",
+            width: 28,
+            height: 28,
+            transform: "translate(-50%, -50%)",
+            borderRadius: "999px",
+            border: "1px solid",
+            borderColor: alpha(markerTone.main, 0.34),
+            bgcolor: alpha(markerTone.main, theme.palette.mode === "dark" ? 0.2 : 0.12),
+            color: markerTone.main,
+            zIndex: 2,
+            "&:hover": {
+              bgcolor: alpha(markerTone.main, theme.palette.mode === "dark" ? 0.28 : 0.18),
+            },
+          }}
+        >
+          <NotificationsNoneRoundedIcon sx={{ fontSize: 18 }} />
+        </ButtonBase>
+      </Tooltip>
+
+      {relativeLabel ? (
+        <Typography
+          variant="caption"
+          sx={{
+            position: "absolute",
+            top: "50%",
+            left: markerCenter + 20,
+            width: Math.max(0, timelineWidth - markerCenter - 28),
+            transform: "translateY(-50%)",
+            fontWeight: 700,
+            color: item.isOverdue ? "warning.dark" : "text.secondary",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            pointerEvents: "none",
+            zIndex: 2,
+          }}
+        >
+          {relativeLabel}
+        </Typography>
+      ) : null}
+    </Box>
+  );
+}
+
 function ProjectHeaderLabel({
   groupLabel,
   flowCount,
   unscheduledCount,
+  waitingWithoutReminderCount,
   expanded,
   onToggle,
 }: {
   groupLabel: string;
   flowCount: number;
   unscheduledCount: number;
+  waitingWithoutReminderCount: number;
   expanded: boolean;
   onToggle: () => void;
 }) {
@@ -474,6 +622,18 @@ function ProjectHeaderLabel({
           </Typography>
           {unscheduledCount > 0 ? (
             <Chip size="small" variant="outlined" color="warning" label={`${unscheduledCount} sin fecha`} />
+          ) : null}
+          {waitingWithoutReminderCount > 0 ? (
+            <Chip
+              size="small"
+              variant="outlined"
+              label={`${waitingWithoutReminderCount} espera sin recordatorio`}
+              sx={{
+                borderColor: alpha(theme.palette.info.main, 0.28),
+                color: "info.dark",
+                bgcolor: alpha(theme.palette.info.main, theme.palette.mode === "dark" ? 0.16 : 0.06),
+              }}
+            />
           ) : null}
         </Stack>
       </Stack>
@@ -587,6 +747,7 @@ function AgendaRowTimeline({
   dragState,
   setDragState,
   onDragFinish,
+  onWorkflowOpen,
   onExecutionDateChange,
 }: {
   item: FlowAgendaItem;
@@ -594,8 +755,13 @@ function AgendaRowTimeline({
   dragState: DragState | null;
   setDragState: Dispatch<SetStateAction<DragState | null>>;
   onDragFinish: (dragState: DragState, commit: boolean) => Promise<void>;
+  onWorkflowOpen: (workflowId: string) => void;
   onExecutionDateChange: (workflowId: string, stepId: string, nextDateInput: string, previousDateInput: string | null) => Promise<void>;
 }) {
+  if (item.kind === "waiting_reminder") {
+    return <WaitingReminderMarker item={item} model={model} onWorkflowOpen={onWorkflowOpen} />;
+  }
+
   if (item.isWithoutDate) {
     return (
       <TimelinePlaceholder
@@ -679,11 +845,68 @@ function UnscheduledGroupTimeline({ model }: { model: FlowAgendaModel }) {
   return <TimelinePlaceholder model={model} label="Sin fecha" />;
 }
 
+function WaitingWithoutReminderGroupLabel({
+  count,
+  expanded,
+  onToggle,
+  contentInset = UNSCHEDULED_GROUP_INDENT,
+}: {
+  count: number;
+  expanded: boolean;
+  onToggle: () => void;
+  contentInset?: number;
+}) {
+  const theme = useTheme();
+
+  return (
+    <ButtonBase
+      data-testid="agenda-waiting-without-reminder-group-row"
+      data-row-divider="none"
+      onClick={onToggle}
+      sx={{
+        minHeight: FLOW_ROW_HEIGHT,
+        height: FLOW_ROW_HEIGHT,
+        justifyContent: "flex-start",
+        textAlign: "left",
+        borderRadius: 0,
+        bgcolor: alpha(theme.palette.info.main, theme.palette.mode === "dark" ? 0.08 : 0.04),
+        px: 1.2,
+        borderRight: "1px solid",
+        borderColor: "divider",
+      }}
+    >
+      <Stack direction="row" spacing={0.8} sx={{ alignItems: "center", pl: `${contentInset}px`, minWidth: 0 }}>
+        <ExpandMoreRoundedIcon
+          sx={{
+            fontSize: 18,
+            color: "text.secondary",
+            transform: expanded ? "rotate(0deg)" : "rotate(-90deg)",
+            transition: theme.transitions.create("transform", {
+              duration: theme.appMotion.short,
+            }),
+          }}
+        />
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+          En espera sin recordatorio
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {count} {count === 1 ? "flow" : "flows"}
+        </Typography>
+      </Stack>
+    </ButtonBase>
+  );
+}
+
+function WaitingWithoutReminderGroupTimeline({ model }: { model: FlowAgendaModel }) {
+  return <TimelineTextRow model={model} label="Sin recordatorio" />;
+}
+
 export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChange }: FlowAgendaTimelineProps) {
   const theme = useTheme();
   const timelineWidth = model.columns.length * DAY_COLUMN_WIDTH;
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [collapsedUnscheduledGroups, setCollapsedUnscheduledGroups] = useState<Record<string, boolean>>({});
+  const [collapsedWaitingWithoutReminderGroups, setCollapsedWaitingWithoutReminderGroups] = useState<Record<string, boolean>>({});
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [horizontalScrollLeft, setHorizontalScrollLeft] = useState(0);
 
@@ -707,6 +930,20 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
       const next = { ...current };
       for (const group of model.groups) {
         if (group.unscheduledItems.length > 0 && !(group.key in next)) {
+          next[group.key] = true;
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [model.groups]);
+
+  useEffect(() => {
+    setCollapsedWaitingWithoutReminderGroups((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const group of model.groups) {
+        if (group.waitingWithoutReminderItems.length > 0 && !(group.key in next)) {
           next[group.key] = true;
           changed = true;
         }
@@ -740,19 +977,28 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
       model.groups.map((group) => {
         const isCollapsed = collapsedGroups[group.key] ?? false;
         const isUnscheduledCollapsed = collapsedUnscheduledGroups[group.key] ?? true;
+        const isWaitingWithoutReminderCollapsed = collapsedWaitingWithoutReminderGroups[group.key] ?? true;
         const showGroupChildren = !isCollapsed;
         const showUnscheduledItems = showGroupChildren && group.unscheduledItems.length > 0 && !isUnscheduledCollapsed;
+        const showWaitingWithoutReminderItems =
+          showGroupChildren && group.waitingWithoutReminderItems.length > 0 && !isWaitingWithoutReminderCollapsed;
 
         return {
           group,
           isCollapsed,
           isUnscheduledCollapsed,
+          isWaitingWithoutReminderCollapsed,
           showGroupChildren,
           showUnscheduledItems,
-          hasVisibleChildren: showGroupChildren && (group.scheduledItems.length > 0 || group.unscheduledItems.length > 0),
+          showWaitingWithoutReminderItems,
+          hasVisibleChildren:
+            showGroupChildren &&
+            (group.scheduledItems.length > 0 ||
+              group.unscheduledItems.length > 0 ||
+              group.waitingWithoutReminderItems.length > 0),
         };
       }),
-    [collapsedGroups, collapsedUnscheduledGroups, model.groups]
+    [collapsedGroups, collapsedUnscheduledGroups, collapsedWaitingWithoutReminderGroups, model.groups]
   );
 
   function handleToggleGroup(groupKey: string) {
@@ -764,6 +1010,13 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
 
   function handleToggleUnscheduledGroup(groupKey: string) {
     setCollapsedUnscheduledGroups((current) => ({
+      ...current,
+      [groupKey]: !current[groupKey],
+    }));
+  }
+
+  function handleToggleWaitingWithoutReminderGroup(groupKey: string) {
+    setCollapsedWaitingWithoutReminderGroups((current) => ({
       ...current,
       [groupKey]: !current[groupKey],
     }));
@@ -828,7 +1081,7 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
           }}
         >
           <Typography variant="caption" color="text.secondary" sx={{ display: "flex", alignItems: "center" }}>
-            Flows activos
+            Flows operativos
           </Typography>
           <Box
             sx={{
@@ -965,7 +1218,17 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
           }}
         >
           <Box sx={{ minWidth: LEFT_COLUMN_WIDTH, bgcolor: "background.paper" }}>
-            {visibleGroups.map(({ group, isCollapsed, isUnscheduledCollapsed, showGroupChildren, showUnscheduledItems, hasVisibleChildren }) => (
+            {visibleGroups.map(
+              ({
+                group,
+                isCollapsed,
+                isUnscheduledCollapsed,
+                isWaitingWithoutReminderCollapsed,
+                showGroupChildren,
+                showUnscheduledItems,
+                showWaitingWithoutReminderItems,
+                hasVisibleChildren,
+              }) => (
               <Box
                 key={group.key}
                 data-testid={`agenda-project-group-${group.key}`}
@@ -991,6 +1254,7 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
                     groupLabel={group.label}
                     flowCount={group.items.length}
                     unscheduledCount={group.unscheduledItems.length}
+                    waitingWithoutReminderCount={group.waitingWithoutReminderItems.length}
                     expanded={!isCollapsed}
                     onToggle={() => handleToggleGroup(group.key)}
                   />
@@ -1026,6 +1290,26 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
                           : null}
                       </>
                     ) : null}
+                    {group.waitingWithoutReminderItems.length > 0 ? (
+                      <>
+                        <WaitingWithoutReminderGroupLabel
+                          count={group.waitingWithoutReminderItems.length}
+                          expanded={!isWaitingWithoutReminderCollapsed}
+                          onToggle={() => handleToggleWaitingWithoutReminderGroup(group.key)}
+                          contentInset={UNSCHEDULED_GROUP_INDENT}
+                        />
+                        {showWaitingWithoutReminderItems
+                          ? group.waitingWithoutReminderItems.map((item) => (
+                              <AgendaRowLabel
+                                key={item.id}
+                                item={item}
+                                onWorkflowOpen={onWorkflowOpen}
+                                contentInset={UNSCHEDULED_ITEM_INDENT}
+                              />
+                            ))
+                          : null}
+                      </>
+                    ) : null}
                   </>
                 ) : null}
               </Box>
@@ -1045,7 +1329,14 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
               }}
             >
               <Box sx={{ width: timelineWidth, minWidth: timelineWidth }}>
-                {visibleGroups.map(({ group, isCollapsed, isUnscheduledCollapsed, showGroupChildren, showUnscheduledItems, hasVisibleChildren }) => (
+                {visibleGroups.map(
+                  ({
+                    group,
+                    showGroupChildren,
+                    showUnscheduledItems,
+                    showWaitingWithoutReminderItems,
+                    hasVisibleChildren,
+                  }) => (
                   <Box
                     key={group.key}
                 sx={{
@@ -1080,6 +1371,7 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
                             dragState={dragState}
                             setDragState={setDragState}
                             onDragFinish={handleBarPointerFinish}
+                            onWorkflowOpen={onWorkflowOpen}
                             onExecutionDateChange={onExecutionDateChange}
                           />
                         ))}
@@ -1095,6 +1387,26 @@ export function FlowAgendaTimeline({ model, onWorkflowOpen, onExecutionDateChang
                                     dragState={dragState}
                                     setDragState={setDragState}
                                     onDragFinish={handleBarPointerFinish}
+                                    onWorkflowOpen={onWorkflowOpen}
+                                    onExecutionDateChange={onExecutionDateChange}
+                                  />
+                                ))
+                              : null}
+                          </>
+                        ) : null}
+                        {group.waitingWithoutReminderItems.length > 0 ? (
+                          <>
+                            <WaitingWithoutReminderGroupTimeline model={model} />
+                            {showWaitingWithoutReminderItems
+                              ? group.waitingWithoutReminderItems.map((item) => (
+                                  <AgendaRowTimeline
+                                    key={item.id}
+                                    item={item}
+                                    model={model}
+                                    dragState={dragState}
+                                    setDragState={setDragState}
+                                    onDragFinish={handleBarPointerFinish}
+                                    onWorkflowOpen={onWorkflowOpen}
                                     onExecutionDateChange={onExecutionDateChange}
                                   />
                                 ))

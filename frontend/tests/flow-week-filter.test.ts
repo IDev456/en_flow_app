@@ -15,6 +15,7 @@ function buildRow(dateInput: string): FlowGridRow {
     dateContext: "activa",
     primaryDateInput: dateInput,
     executionDateInput: dateInput,
+    waitingReminderInput: "",
     waitingSinceInput: "",
     completedAtInput: "",
     executionAt: 0,

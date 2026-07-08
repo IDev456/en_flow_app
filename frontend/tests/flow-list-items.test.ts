@@ -48,6 +48,7 @@ function buildRow(overrides: Partial<FlowGridRow> = {}): FlowGridRow {
     dateContext: overrides.dateContext ?? "activa",
     primaryDateInput: overrides.primaryDateInput ?? "",
     executionDateInput: overrides.executionDateInput ?? "",
+    waitingReminderInput: overrides.waitingReminderInput ?? "",
     waitingSinceInput: overrides.waitingSinceInput ?? "",
     completedAtInput: overrides.completedAtInput ?? "",
     executionAt: overrides.executionAt ?? 0,

@@ -19,6 +19,7 @@ function buildRow(overrides: Partial<FlowGridRow> = {}): FlowGridRow {
     dateContext: "activa",
     primaryDateInput: overrides.primaryDateInput ?? overrides.executionDateInput ?? "",
     executionDateInput: overrides.executionDateInput ?? "",
+    waitingReminderInput: overrides.waitingReminderInput ?? "",
     waitingSinceInput: "",
     completedAtInput: "",
     executionAt: 0,
@@ -93,4 +94,57 @@ test("renderiza un único bloque por proyecto y alinea los flows con fecha como 
   assert.match(html, />Sin fecha de ejecución</);
   assert.doesNotMatch(html, /data-row-divider="line"/);
   assert.doesNotMatch(html, /Flow sin fecha oculto/);
+});
+
+test("renderiza campanas para waits con recordatorio y subgrupo propio para waits sin recordatorio", () => {
+  const model = buildFlowAgendaModel(
+    [
+      buildRow({
+        id: "workflow-active",
+        taskName: "Flow activo",
+        status: "en_proceso",
+        executionDateInput: "2026-07-08",
+      }),
+      buildRow({
+        id: "workflow-waiting",
+        taskName: "Flow esperando respuesta",
+        status: "esperando_respuesta",
+        executionDateInput: "",
+        waitingReminderInput: "2026-07-09",
+        waitingSinceInput: "2026-07-05",
+        primaryDateInput: "2026-07-05",
+        contextualDateInput: "2026-07-05",
+      }),
+      buildRow({
+        id: "workflow-waiting-no-reminder",
+        taskName: "Flow esperando sin recordatorio",
+        status: "esperando_respuesta",
+        executionDateInput: "",
+        waitingReminderInput: "",
+        waitingSinceInput: "2026-07-04",
+        primaryDateInput: "2026-07-04",
+        contextualDateInput: "2026-07-04",
+      }),
+    ],
+    "2026-07-06",
+    {
+      visibleStartDateInput: "2026-07-01",
+      visibleDays: 10,
+    }
+  );
+
+  const html = renderToStaticMarkup(
+    <ThemeProvider theme={createAppTheme("warmLight")}>
+      <FlowAgendaTimeline
+        model={model}
+        onWorkflowOpen={() => {}}
+        onExecutionDateChange={async () => {}}
+      />
+    </ThemeProvider>
+  );
+
+  assert.match(html, /data-testid="agenda-waiting-reminder-workflow-waiting"/);
+  assert.doesNotMatch(html, /Mover fecha del flow Flow esperando respuesta/);
+  assert.match(html, />En espera sin recordatorio</);
+  assert.match(html, /1 espera sin recordatorio/);
 });
